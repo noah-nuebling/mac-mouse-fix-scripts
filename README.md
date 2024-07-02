@@ -28,18 +28,18 @@ GH Submodule resources:
 
 1. Add mac-mouse-fix-scripts as a submodule to a host repo use this command:
 
-    git submodule add https://github.com/noah-nuebling/mac-mouse-fix-scripts
+       git submodule add https://github.com/noah-nuebling/mac-mouse-fix-scripts
 
 2. To clone the host repo along with submodules, use:
 
-    1. git clone --recurse-submodules
-    
-    or
-    
-    2. git clone
-    3. git submodule init
+       git clone --recurse-submodules
 
-3. git config stuff:
+   or
+    
+       git clone
+       git submodule init
+
+4. git config stuff:
 
     Enable warnings if you forget to `git push` changes inside the submodule (I recommend)
 
@@ -61,27 +61,32 @@ GH Submodule resources:
 
 1. Add an ./.env file at your repo root with this content:
 
-    PYTHONPATH=mac-mouse-fix-scripts/Shared/
+       PYTHONPATH=mac-mouse-fix-scripts/Shared/
 
 2. Add a `./run` bash script at your repo root with this content:
 
-    #!/bin/bash
-    python3 mac-mouse-fix-scripts/run.py "$@";
+
+       #!/bin/bash
+       python3 mac-mouse-fix-scripts/run.py "$@";
+
+   Then make it executable using
+
+       chmod +x ./run
 
 ## Workflow
 
 **Custom**
 
-1. You can now run the scripts from mac-mouse-fix-scripts using 
+1. You can now run the scripts from mac-mouse-fix-scripts using
 
-    ./run <subcommand> <args>       (The ./run bash script (See ^^^) enables this)
+       ./run <subcommand> <args>       (The ./run bash script (See ^^^) enables this)
 
 2. You can also run the scripts using the VSCode debugger and also linting should work properly.        (The ./.env file (See ^^^) is enables this.)
 
 **Git Submodules**
 
 To `push` submodule changes in host repo A:
-
+    
     `cd` into the submodule, make a new commit, and push it.
 
 To `pull` submodule changes in host repo B:
@@ -92,7 +97,7 @@ To `push` host repo changes *along* with submodule:
 
     - Make a new commit inside the submodule
     - Make a new commit inside the host repo (it will point to the new submodule commit)
-    - git push --recurse-submodules=on-demand
+    - git push --recurse-submodules=on-demandf
 
 To `pull` host repo changes *along* with submodule:
 
