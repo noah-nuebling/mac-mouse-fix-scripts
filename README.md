@@ -93,6 +93,10 @@ To `pull` submodule changes in host repo B:
 
     git submodule update --remote --merge
 
+or 
+    
+    `cd` into the submodule and pull
+
 To `push` host repo changes *along* with submodule:
 
     - Make a new commit inside the submodule
