@@ -45,7 +45,7 @@ import mfgithub
 # Constants
 #
 
-custom_xcstrings_files = ['Markdown.xcstrings'] # These .xcstrings files are created and managed by MMF instead of Xcode, so we need to treat them differently
+website_repo = './../mac-mouse-fix-website'
 
 #
 # Define main
@@ -55,6 +55,14 @@ def main():
     
     # Inital free line to make stuff look nicer
     print("")
+    
+    # Get repo name
+    repo_path = os.getcwd()
+    repo_name = os.path.basename(repo_path)
+    
+    # Validate
+    assert repo_name == 'mac-mouse-fix' and repo_name != 'mac-mouse-fix-website', 'This script should be ran in the mac-mouse-fix repo'
+    assert os.path.isdir(website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {website_repo} relative to the mac-mouse-fix repo.'
     
     # Parse args
     parser = argparse.ArgumentParser()
@@ -70,64 +78,163 @@ def main():
         parser.print_help()
         exit(1)
     
-    # Get locales for this project
-    print(f"Extracting locales from .xcodeproject ...")
+    # Store stuff
+    #   (To validate locales between repos)
     
-    development_locale, translation_locales = mflocales.find_mmf_project_locales('Mouse\ Fix.xcodeproj')
+    previous_xcodeproj_path = None
+    previous_repo_locales = None
     
-    # Load all .xcstrings files
-    print(f"Loading all .xcstring files ...\n")
-    xcstring_objects = []
-    xcstring_filenames = glob.glob("**/*.xcstrings", recursive=True)
-    for f in xcstring_filenames:
-        with open(f, 'r') as content:
-            xcstring_objects.append(json.load(content))
-    print(f".xcstring file paths: { json.dumps(xcstring_filenames, indent=2) }\n")
+    # Store more stuff
+    #   (To get localization progress)
+    xcstring_objects_all_repos = []
+    localization_progess_all_repos = None
+    translation_locales_all_repos = None
     
-    # Get localization progress
-    localization_progress = mflocales.get_localization_progress(xcstring_objects, translation_locales)
+    # Create temp_dir
+    temp_dir = tempfile.gettempdir() + '/mmf-uploadstrings'
+    if os.path.isdir(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.mkdir(temp_dir)
     
-    # Get a temp dir to store exported .xcloc files to
-    temp_dir = tempfile.gettempdir()
-    xcloc_dir = os.path.join(temp_dir, 'mmf-xcloc-export')
-    shutil.rmtree(xcloc_dir)
-    os.mkdir(xcloc_dir)
+    # Iterate repos
     
-    # Export .xcloc file for each locale
-    print(f"Exporting .xcloc files for locales (might take a while) ... \n")
-    locale_args = ' '.join([ '-exportLanguage ' + l for l in translation_locales ])
-    mfutils.runCLT(f'xcodebuild -exportLocalizations -localizationPath "{ xcloc_dir }" { locale_args }')
-    print(f"Exported .xcloc files to {xcloc_dir}\n")
+    repo_data = {
+        'mac-mouse-fix': {
+            'path': './',
+            'xcloc_dir': None, # This will hold the result of the loop iteration
+            'progress': None
+        },
+        'mac-mouse-fix-website': {
+            'path': website_repo,
+            'xcloc_dir': None,
+            'progress': None,
+        }
+    }
+    
+    for i, (repo_name, repo_info) in enumerate(repo_data.items()):
+        
+        # Extract
+        repo_path = repo_info['path']
+        
+        # Find xcodeproj path
+        xcodeproj_subpath = mflocales.path_to_xcodeproj[repo_name]
+        xcodeproj_path = os.path.join(repo_path, xcodeproj_subpath)
+        
+        # Get locales for this project
+        development_locale, translation_locales = mflocales.find_xcode_project_locales(xcodeproj_path)
+        repo_locales = [development_locale] + translation_locales
+        
+        # Log
+        print(f"Extracted locales from .xcodeproject at {xcodeproj_path}: {repo_locales}\n")
+        
+        # Validate locales
+        # We want all repos of the mmf project to have the same locales
+        
+        if i > 0:
+                
+            missing_locales = set(previous_repo_locales).difference(set(repo_locales))
+            additional_locales = set(repo_locales).difference(set(previous_repo_locales))
+            
+            def _debug_names(locales):
+                return list(map(lambda l: f'{ mflocales.language_tag_to_language_name(l) } ({l})', locales))
+            assert len(missing_locales) == 0, f'There are missing locales in the xcode project {xcodeproj_path} compared to the locales in {previous_xcodeproj_path}:\nmissing_locales: {_debug_names(missing_locales)}\nAdd these locales to the former xcodeproj or remove them from latter xcodeproj to resolve this error.'
+            assert len(additional_locales) == 0, f'There are additional locales in the xcode project {xcodeproj_path}, compared to the locales in {previous_xcodeproj_path}:\nadditional_locales: {_debug_names(additional_locales)}\nRemove these locales from the former xcodeproj or add them to latter xcodeproj to resolve this error.'
+        
+        previous_xcodeproj_path = xcodeproj_path
+        previous_repo_locales = repo_locales
+        
+        # Log
+        print(f"Loading all .xcstring files ...\n")
+        
+        # Load all .xcstrings files
+        xcstring_objects = []
+        glob_pattern = './' + os.path.normpath(f'{repo_path}/**/*.xcstrings') # Not sure normpath is necessary
+        xcstring_filenames = glob.glob(glob_pattern, recursive=True)
+        for f in xcstring_filenames:
+            with open(f, 'r') as content:
+                xcstring_objects.append(json.load(content))
+        
+        # Store stuff for localization_progress
+        xcstring_objects_all_repos += xcstring_objects
+        translation_locales_all_repos = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
+        
+        # Log
+        print(f".xcstring file paths: { json.dumps(xcstring_filenames, indent=2) }\n")
+        
+        # Get localization progress
+        repo_data[repo_name]['progress'] = mflocales.get_localization_progress(xcstring_objects, translation_locales)
+        
+        # Create a folder to store .xcloc files to
+        xcloc_dir = os.path.join(temp_dir, f'{repo_name}-xcloc-export')
+        if os.path.isdir(xcloc_dir):
+            shutil.rmtree(xcloc_dir) # Delete if theres already something there (I think this is impossible since we freshly create the temp_dir)
+        os.mkdir(xcloc_dir)
+        
+        # Log
+        print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while) ... \n")
+        
+        # Export .xcloc file for each locale
+        locale_args = [ arg for l in translation_locales for arg in ['-exportLanguage', l]] # This python syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
+        mfutils.runclt(['xcodebuild', '-exportLocalizations', '-localizationPath', f'{xcloc_dir}', *locale_args], cwd=repo_path)
+        
+        # Log
+        print(f"Exported .xcloc files to {xcloc_dir}\n")
+        
+        # Store result
+        repo_data[repo_name]['xcloc_dir'] = xcloc_dir
+    
+    # Get combine localization_progress
+    localization_progess_all_repos = mflocales.get_localization_progress(xcstring_objects_all_repos, translation_locales_all_repos)
     
     # Rename .xcloc files and put them in subfolders
-    folder_name_format = "Mac Mouse Fix Translations ({})"
-    zip_file_format = "MacMouseFixTranslations.{}.zip" # GitHub Releases assets seemingly can't have spaces, that's why we're using this separate format
+    #   With one subfolder per locale
     
+    xcloc_file_names = {
+        'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
+        'mac-mouse-fix-website': 'Mac Mouse Fix Website.xcloc',
+    }
+    folder_name_format = "Mac Mouse Fix Translations ({})"
+    
+    locale_export_dirs = []
     for l in translation_locales:
+        
         language_name = mflocales.language_tag_to_language_name(l)
-        current_path = os.path.join(xcloc_dir, f'{l}.xcloc')
-        target_folder = os.path.join(xcloc_dir, folder_name_format.format(language_name))
-        target_path = os.path.join(target_folder, 'Mac Mouse Fix.xcloc')
-        mfutils.runCLT(f'mkdir -p "{target_folder}"') # -p creates any intermediate parent folders
-        mfutils.runCLT(f'mv "{current_path}" "{target_path}"')
+        target_folder = os.path.join(temp_dir, folder_name_format.format(language_name))
+        
+        for repo_name, repo_info in repo_data.items():
+            
+            current_path = os.path.join(repo_info['xcloc_dir'], f'{l}.xcloc')
+            
+            target_path = os.path.join(target_folder, xcloc_file_names[repo_name])
+            mfutils.runclt(['mkdir', '-p', target_folder]) # -p creates any intermediate parent folders
+            mfutils.runclt(['mv', current_path, target_path])
+            
+
+        locale_export_dirs.append(target_folder)
+    
+    # Log
+    print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
     # Zipping up folders containing .xcloc files 
     print(f"Zipping up .xcloc files ...\n")
+    
+    zip_file_format = "MacMouseFixTranslations.{}.zip" # GitHub Releases assets seemingly can't have spaces, that's why we're using this separate format
+    
     zip_files = {}
-    for l in translation_locales:
+    for l, l_dir in zip(translation_locales, locale_export_dirs):
         
-        language_name = mflocales.language_tag_to_language_name(l)
-        folder_name = folder_name_format.format(language_name)
-        target_folder = os.path.join(xcloc_dir, folder_name)
+        base_dir = temp_dir
+        zippable_dir_path = l_dir
+        zippable_dir_name = os.path.basename(os.path.normpath(zippable_dir_path))
         zip_file_name = zip_file_format.format(l)
-        zip_file_path = os.path.join(xcloc_dir, zip_file_name)
+        zip_file_path = os.path.join(base_dir, zip_file_name)
         
         if os.path.exists(zip_file_path):
-            rm_result = mfutils.runCLT(f'rm -R "{zip_file_path}"') # We first remove any existing zip_file, because otherwise the `zip` CLT will combine the existing archive with the new data we're archiving which is weird. (If I understand the `zip` man correctly`)
+            rm_result = mfutils.runclt(['rm', '-R', zip_file_path]) # We first remove any existing zip_file, because otherwise the `zip` CLT will combine the existing archive with the new data we're archiving which is weird. (If I understand the `zip` man correctly`)
             print(f'Zip file of same name already existed. Calling rm on the zip_file returned: { mfutils.clt_result_description(rm_result) }')
             
-        zip_result = mfutils.runCLT(f'zip -r "{zip_file_name}" "{folder_name}"', cwd=xcloc_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why.
-        print(f'zip clt returned: { mfutils.clt_result_description(zip_result) }')
+        zip_result = mfutils.runclt(['zip', '-r', zip_file_name, zippable_dir_name], cwd=base_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why.
+        # print(f'zip clt returned: { zip_result }')
         
         with open(zip_file_path, 'rb') as zip_file:
             # Load the zip data
@@ -138,7 +245,7 @@ def main():
                 'content': zip_file_content,
             }
             
-    print(f"Finished zipping up .xcloc files.\n")
+    print(f"Finished zipping up .xcloc files at {temp_dir}\n")
     
     print(f"Uploading to GitHub ...\n")
     
@@ -408,7 +515,7 @@ Thank you so much for your help in bringing Mac Mouse Fix to people around the w
 
     for locale in sorted(translation_locales, key=lambda l: mflocales.language_tag_to_language_name(l)): # Sort the locales by language name (Alphabetically)
         
-        progress = localization_progress[locale]
+        progress = localization_progess_all_repos[locale]
         progress_percentage = int(100 * progress['percentage'])
         download_name = 'Download'
         download_url = download_urls[locale]

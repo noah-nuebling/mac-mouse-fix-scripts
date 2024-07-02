@@ -30,7 +30,7 @@ language_name_override_map = {
     }
 }
 
-project_locales = ['en', 'de', 'zh-HK', 'zh-Hans', 'zh-Hant', 'vi', 'ko']   # This is used to check if the locales of the website and the main app are in-sync
+# project_locales = ['en', 'de', 'zh-HK', 'zh-Hans', 'zh-Hant', 'vi', 'ko']   # This is used to check if the locales of the website and the main app are in-sync. Update: Now validating locales inside uploadstrings.py instead.
 
 
 path_to_xcodeproj = {
@@ -289,16 +289,6 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     
     # Filter out development_locale
     translation_locales = [l for l in locales if l != development_locale]
-    
-    # Validate
-    missing_locales = set(project_locales).difference(set(locales))
-    additional_locales = set(locales).difference(set(project_locales))
-    
-    # Help sync locales between mmf and mmf-website repos.
-    def debug_locale_names(locales):
-        return list(map(lambda l: f'{ language_tag_to_language_name(l) } ({l})', locales))
-    assert len(missing_locales) == 0, f'There are missing locales in the xcode project {path_to_xcodeproj} compared to the locales in mflocales.py:\nmissing_locales: {debug_locale_names(missing_locales)}\nAdd these locales to the xcodeproject or remove them from mflocales.py to resolve this error.\nThis error is to help keep the locales of the mmf and mmf-website repos in sync.'
-    assert len(additional_locales) == 0, f'There are additional locales in the xcode project {path_to_xcodeproj}, compared to the locales in mflocales.py:\nadditional_locales: {debug_locale_names(additional_locales)}\nRemove these locales from the xcodeproject or add them to mflocales.py to resolve this error.\nThis error is to help keep the locales of the mmf and mmf-website repos in sync.'
     
     # Validate
     assert(development_locale != None and locales != None and len(locales) >= 1)
