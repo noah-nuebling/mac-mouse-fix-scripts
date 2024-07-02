@@ -4,19 +4,39 @@ Collection of Python scripts which we want to share between the mac-mouse-fix an
 
 The reason for creating this is that we want to share the localization logic between mac-mouse-fix and mac-mouse-fix-website.
 
-We plan to embed this repo as a 'subtree' in both the mac-mouse-fix and mac-mouse-fix-website repos. This enables syncing the repo between both hosting repos.
+We plan to embed this repo as a submodule in both the mac-mouse-fix and mac-mouse-fix-website repos. This enables syncing the repo between both hosting repos.
+
+(We also tried subtrees but pushing was extremely slow)
 
 ## How to set up
 
-1. Add this repo as a subtree using this command:
+1. Add this repo as a submodule using this command:
 
-    git subtree add --prefix mac-mouse-fix-scripts git@github.com:noah-nuebling/mac-mouse-fix-scripts.git main --squash
+    git submodule add https://github.com/noah-nuebling/mac-mouse-fix-scripts
 
-2. Add a .env file at your repo root with this content:
+2. git config stuff:
+
+    Make commands such as `git pull` apply to submodules
+
+        git config --global submodule.recurse true
+
+    Enable warnings if you forget to `git push` changes to the submodule
+
+        git config push.recurseSubmodules check
+
+    Make `git diff` include the submodule
+   
+        git config --global diff.submodule log
+
+    Show submodule changes in `git st`
+
+        git config status.submodulesummary 1
+
+3. Add an .env file at your repo root with this content:
 
     PYTHONPATH=mac-mouse-fix-scripts/Shared/
 
-3. Add a bash script at your repo root with this content:
+4. Add a bash script at your repo root with this content:
 
     #!/bin/bash
     python3 mac-mouse-fix-scripts/run.py "$@";
@@ -28,9 +48,8 @@ We plan to embed this repo as a 'subtree' in both the mac-mouse-fix and mac-mous
 
 To push:
 
-    ./run sync-scripts push
+    git push --recurseSubmodules
 
 To pull:
 
-    ./run sync-scripts pull
-
+    git pull (make sure submodule.recurse option is enabled)
