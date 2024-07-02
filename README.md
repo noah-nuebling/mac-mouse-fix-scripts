@@ -91,7 +91,7 @@ To `push` submodule changes in host repo A:
 
 To `pull` submodule changes in host repo B:
 
-    git submodule update --remote
+    git submodule update --remote --merge
 
 To `push` host repo changes *along* with submodule:
 
@@ -106,4 +106,4 @@ To `pull` host repo changes *along* with submodule:
     Note: 
         `git pull --recurse-submodules` will pull the latest commit of the host repo 
         along with the commit of the submodule that the latest host-repo-commit points to (this doesn't have to
-        be the latest commit of the submodule, to get that, use `git submodule update --remote`)
+        be the latest commit of the submodule, to get that, use `git submodule update --remote [--merge]`)
