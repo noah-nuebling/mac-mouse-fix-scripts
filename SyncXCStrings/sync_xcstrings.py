@@ -47,6 +47,10 @@ def main():
     # Extract source_files -> .stringsdata file
     if repo_name == 'mac-mouse-fix-website':
         
+        # Log
+        print(f"syncstrings.py: Syncing {website_repo['quotes_xcstrings_path']} ...")
+        print("")
+        
         # Extract strings from quotes
         # Note: 
         #   I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
@@ -68,6 +72,15 @@ def main():
         quotes_xcstrings_path = os.path.join(target_repo, website_repo['quotes_xcstrings_path'])
         update_xcstrings(quotes_xcstrings_path, extracted_strings)
         
+        # Log
+        print(f"syncstrings.py: Not syncing {website_repo['main_xcstrings_path']}, since that's not implemented, yet.")
+        print("")
+        
+        # Notes:
+        # - Syncing Localizable.strings would require us use a NSLocalizableString-like macro throughout our .vue files.
+        #   (So we can extract the strings from the source code with a regex)
+        #   This would require big refactor and is not worth it right now, I think.
+        
         # Extract strings from .vue files
         # ...
         
@@ -75,6 +88,11 @@ def main():
         # ...
         
     elif repo_name == 'mac-mouse-fix':
+        
+        # Log
+        print(f"syncstrings.py: Syncing { main_repo['xcstrings_path'] } ...")
+        print("(Other .xcstrings file are automatically synced by Xcode when building the project)")
+        print("")
         
         # Extract strings from source_files
         extracted_strings = []
