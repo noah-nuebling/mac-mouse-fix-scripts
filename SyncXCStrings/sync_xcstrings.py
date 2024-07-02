@@ -40,11 +40,8 @@ website_repo = {
 #
 def main():
     
-    # Parse args
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--target_repo', required=True, help='The repo that this script should work on. Should be passed automaticlally by run.py')
-    args = parser.parse_args()
-    target_repo = args.target_repo
+    # Get repo name
+    target_repo = os.getcwd()
     repo_name = os.path.basename(os.path.normpath(target_repo))
     
     # Extract source_files -> .stringsdata file

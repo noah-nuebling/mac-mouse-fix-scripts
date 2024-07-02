@@ -220,30 +220,12 @@ def load_dotenv():
 
 def main():
     
-    # Make sure we're running in the mac-mouse-fix project folder
-    assert os.path.basename(os.getcwd()) == 'mac-mouse-fix'
-
-    # Extract --target_repo arg
-    #
-    #   For this script to run properly, the cwd has to point to the mac-mouse-fix repo. 
-    #   When this script is supposed to work on another repo then we can set the --target_repo arg. 
-    #
-    #   This is intended to be used by the run.py script inside the mac-mouse-fix-website repo.
-    
-    target_repo = None
-    
-    repo_arg_index = None
-    for i, arg in enumerate(sys.argv):
-        if arg == '--target_repo':
-            repo_arg_index = i
-    
-    if repo_arg_index != None:
-        target_repo = sys.argv[repo_arg_index+1]
-    else:
-        target_repo = os.getcwd()
+    # Make sure we're running in the mac-mouse-fix project folder (We don't really need to be asserting this)
+    cwd_name = os.path.basename(os.getcwd())
+    assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website'
     
     # Log
-    print(f"Invoking run.py with cwd: {os.getcwd()}, target_repo: {target_repo}")
+    print(f"Invoking run.py with cwd: {os.getcwd()}")
     
     # Handle missing subcommand
     if len(sys.argv) < 2:
@@ -286,9 +268,6 @@ def main():
     assert len(script_paths) == 1
     requiremements_path = requiremements_paths[0] if len(requiremements_paths) > 0 else None
     script_path = script_paths[0]
-    
-    # Add scripts_dir to args
-    subcommand_args += ['--scripts_dir', scripts_dir]
     
     # Handle requirements
     
@@ -336,7 +315,7 @@ def main():
     
     # Validate
     if len(overlapping_env_var_keys) > 0:
-        print(f"\nrun.py: WARN: .env defines vars that are already in the environment:\n.env: {json.dumps(dotenv_overlap, indent=2)}\nos: {json.dumps(dict(os_overlap), indent=2)}")
+        print(f"\nrun.py: WARN: .env defines vars that are already in the environment -.env will override - \nenv: {json.dumps(dotenv_overlap, indent=2)}\nos: {json.dumps(dict(os_overlap), indent=2)}")
     
     # Combine env_vars
     env_vars = os.environ | dotenv_vars
@@ -347,7 +326,6 @@ def main():
     # Run script
     #   Notes:
     #   - We're passing env= here. If we don't do that, os.environ is automatically passed to the subprocess.
-    
     script_result = subprocess.run([python_interpreter, script_path, *subcommand_args], env=env_vars)
     
     # Log 

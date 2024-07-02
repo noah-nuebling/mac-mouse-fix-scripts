@@ -1,4 +1,6 @@
 
+
+
 #
 # Imports
 #
@@ -19,6 +21,8 @@ scripts_repo_branch = 'main'
 #
 
 def main():
+    
+    assert False, f'This script was made to automate syncing using git subtrees but we\'re using git submodules instead. See Readme for instructions on using submodules.'
     
     parser = argparse.ArgumentParser()
     parser.add_argument('action', help='`push` or `pull` the subtree')

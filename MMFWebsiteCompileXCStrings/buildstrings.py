@@ -17,31 +17,28 @@ import mfutils
 # Constants
 #
 
+quotes_xcstrings_path   = "./locales/Quotes.xcstrings"
+main_xcstrings_path     = "./locales/Localizable.xcstrings"
+output_path             = "./locales/Localizable.js"
+
 #
 # Main
 #
 def main():
     
-    # Parse args
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--target_repo', required=True, help='This arg should be automatically provided by run.py and point to the mmf-website-repo')
-    parser.add_argument('--output_path', required=True, help='This is the relative path from the mmf-website-repo to output file')
-    args = parser.parse_args()
-    target_repo = args.target_repo
-    output_subpath = args.output_path
-    
-    # Compile args
-    output_path = os.path.join(target_repo, output_subpath)
-    
-    # Log
-    print(f'compile_website_strings: Invoked with args: {args}')
+    # Get repo name
+    target_repo = os.getcwd()
+    repo_name = os.path.basename(os.path.normpath(target_repo))
     
     # Validate
-    output_path_ext = os.path.splitext(output_path)[1]
-    assert output_path_ext == '.js', f'Path extension of output path should be ".js". Is "{output_path_ext}".'
+    assert repo_name == 'mac-mouse-fix-website', f'This script is made for the mac-mouse-fix-website repo. The MarkdownGenerator sort of does string-building for the main repo'
+    
+    # Log
+    print(f'compile_website_strings: Begin')
     
     # Find mmf-project locales
-    source_locale, translation_locales = mflocales.find_mmf_project_locales()
+    xcodeproj_path = mflocales.path_to_xcodeproj[repo_name]
+    source_locale, translation_locales = mflocales.find_xcode_project_locales(xcodeproj_path)
     locales = [source_locale] + translation_locales
     
     # Log
@@ -50,19 +47,6 @@ def main():
     # Sort 
     #   We sort the locales - this way that vue will display the languages in a nice order
     locales = mflocales.sorted_locales(locales, source_locale)
-    
-    # Find .xcstrings files in mmf-website-repo
-    #   Note: I don't think we're treating the quotes.xcstrings in a special way, so not sure this code is necessary, we could just iterate through the .xcstrings files
-    xcstrings_paths = glob.glob(os.path.join(target_repo, '**/*.xcstrings'))
-    assert(len(xcstrings_paths) == 2)
-    main_xcstrings_path = None
-    quotes_xcstrings_path = None
-    if os.path.basename(xcstrings_paths[0]) == 'Quotes.xcstrings':
-        quotes_xcstrings_path, main_xcstrings_path = xcstrings_paths
-    elif os.path.basename(xcstrings_paths[1]) == 'Quotes.xcstrings':
-        main_xcstrings_path, quotes_xcstrings_path = xcstrings_paths
-    else:
-        assert False
     
     # Load xcstrings files
     main_xcstrings = json.loads(mfutils.read_file(main_xcstrings_path))
@@ -106,8 +90,6 @@ def main():
                 assert value != None # Since we enabled fallbacks, there should be a value for every string
                 vuestrings[locale][key] = value
             
-
-    
     # Render the compiled data to a .js file
     #   We could also render it to json, but json doesn't allow comments, which we want to add.
     vuestrings_json = json.dumps(vuestrings, indent=4)
