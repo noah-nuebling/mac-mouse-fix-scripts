@@ -124,7 +124,7 @@ def main():
         xcstrings = json.load(file)
     
     # Find locales
-    development_locale, translation_locales = mflocales.find_mmf_project_locales('Mouse\ Fix.xcodeproj')
+    development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
     
     # Get translation progress
     translation_progress = mflocales.get_localization_progress([xcstrings], translation_locales)
@@ -135,7 +135,7 @@ def main():
     
     # Sort locales
     #   Don't sort these while iterating - will lead to bugs
-    iterated_locales = mflocales.sorted_locales(iterated_locales)
+    iterated_locales = mflocales.sorted_locales(iterated_locales, development_locale)
     
     # Iterate locales
     for locale in iterated_locales:

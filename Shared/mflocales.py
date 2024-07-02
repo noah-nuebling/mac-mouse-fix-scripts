@@ -273,8 +273,7 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     """
     
     # Load xcodeproj json
-    path_to_xcodeproj_escaped = path_to_xcodeproj.replace(' ', r'\ ')
-    pbxproject_json = json.loads(mfutils.runclt(f"plutil -convert json -r -o - {path_to_xcodeproj_escaped}/project.pbxproj")) # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
+    pbxproject_json = json.loads(mfutils.runclt(['plutil', '-convert', 'json', '-r', '-o', '-', f'{path_to_xcodeproj}/project.pbxproj']))    # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
     
     # Find locales in xcodeproj
     development_locale = None
@@ -285,6 +284,12 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
             development_locale = obj['developmentRegion']
             break
     
+    # Filter out 'Base' locale
+    locales = [l for l in locales if l != 'Base']
+    
+    # Filter out development_locale
+    translation_locales = [l for l in locales if l != development_locale]
+    
     # Validate
     missing_locales = set(project_locales).difference(set(locales))
     additional_locales = set(locales).difference(set(project_locales))
@@ -294,9 +299,6 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
         return list(map(lambda l: f'{ language_tag_to_language_name(l) } ({l})', locales))
     assert len(missing_locales) == 0, f'There are missing locales in the xcode project {path_to_xcodeproj} compared to the locales in mflocales.py:\nmissing_locales: {debug_locale_names(missing_locales)}\nAdd these locales to the xcodeproject or remove them from mflocales.py to resolve this error.\nThis error is to help keep the locales of the mmf and mmf-website repos in sync.'
     assert len(additional_locales) == 0, f'There are additional locales in the xcode project {path_to_xcodeproj}, compared to the locales in mflocales.py:\nadditional_locales: {debug_locale_names(additional_locales)}\nRemove these locales from the xcodeproject or add them to mflocales.py to resolve this error.\nThis error is to help keep the locales of the mmf and mmf-website repos in sync.'
-    
-    # Filter out development_locale and base_locale
-    translation_locales = [l for l in locales if l != development_locale and l != 'Base']
     
     # Validate
     assert(development_locale != None and locales != None and len(locales) >= 1)
