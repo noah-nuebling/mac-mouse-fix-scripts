@@ -102,12 +102,10 @@ def main():
         'mac-mouse-fix': {
             'path': './',
             'xcloc_dir': None, # This will hold the result of the loop iteration
-            'progress': None
         },
         'mac-mouse-fix-website': {
             'path': website_repo,
             'xcloc_dir': None,
-            'progress': None,
         }
     }
     
@@ -161,9 +159,6 @@ def main():
         # Log
         print(f".xcstring file paths: { json.dumps(xcstring_filenames, indent=2) }\n")
         
-        # Get localization progress
-        repo_data[repo_name]['progress'] = mflocales.get_localization_progress(xcstring_objects, translation_locales)
-        
         # Create a folder to store .xcloc files to
         xcloc_dir = os.path.join(temp_dir, f'{repo_name}-xcloc-export')
         if os.path.isdir(xcloc_dir):
@@ -174,11 +169,12 @@ def main():
         print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while) ... \n")
         
         # Export .xcloc file for each locale
-        locale_args = [ arg for l in translation_locales for arg in ['-exportLanguage', l]] # This python syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
-        mfutils.runclt(['xcodebuild', '-exportLocalizations', '-localizationPath', f'{xcloc_dir}', *locale_args], cwd=repo_path)
+        locale_args = [ arg for l in translation_locales for arg in ['-exportLanguage', l, '-includeScreenshots']] # This python syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
+        export_localizations_command = ['xcrun', 'xcodebuild', '-exportLocalizations', '-project', mflocales.path_to_xcodeproj[repo_name], '-localizationPath', f'{xcloc_dir}', *locale_args, '-verbose']
+        mfutils.runclt(export_localizations_command, cwd=repo_path)
         
         # Log
-        print(f"Exported .xcloc files to {xcloc_dir}\n")
+        print(f"Exported .xcloc files using command: {export_localizations_command}\n")
         
         # Store result
         repo_data[repo_name]['xcloc_dir'] = xcloc_dir
