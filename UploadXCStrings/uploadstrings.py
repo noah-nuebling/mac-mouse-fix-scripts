@@ -67,16 +67,28 @@ def main():
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_key', required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
+    parser.add_argument('--dry_run', required=False, action='store_true', help="Prevent uploads/mutations on github. (You can still pass an API key to let the script *download* stuff from github.)")
     args = parser.parse_args()
     
     # Check api_key
+    is_dry_run = args.dry_run
     no_api_key = args.api_key == None or len(args.api_key) == 0
-    if not no_api_key:
-        print(f"Working with api_key: ")
-    else:
-        print("No api key provided\n")
-        parser.print_help()
-        exit(1)
+    
+    if is_dry_run:
+        print(f"Dry run: Running dry - not uploading to github.\n")
+        
+        if not no_api_key:
+            print(f"Dry run: Working with api_key: <>. Will use it to download but not upload/mutate from github.\n")
+        else:
+            print("Dry run: No api key provided. Will not interact with github at all.\n")
+        
+    else:        
+        if not no_api_key:
+            print(f"Working with api_key: <>\n")
+        else:
+            print("No api key provided Use --dry_run if this is intended.\n")
+            parser.print_help()
+            exit(1)
     
     # Store stuff
     #   (To validate locales between repos)
@@ -165,12 +177,17 @@ def main():
             shutil.rmtree(xcloc_dir) # Delete if theres already something there (I think this is impossible since we freshly create the temp_dir)
         os.mkdir(xcloc_dir)
         
-        # Log
-        print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while) ... \n")
+
         
-        # Export .xcloc file for each locale
+        # Build -exportLocalizations command
         locale_args = [ arg for l in translation_locales for arg in ['-exportLanguage', l, '-includeScreenshots']] # This python syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
         export_localizations_command = ['xcrun', 'xcodebuild', '-exportLocalizations', '-project', mflocales.path_to_xcodeproj[repo_name], '-localizationPath', f'{xcloc_dir}', *locale_args, '-verbose']
+        
+        # Log
+                # Log
+        print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while since Xcode will build the whole project) ... \nRunning command: {export_localizations_command}\n")
+        
+        # Export .xcloc file for each locale
         mfutils.runclt(export_localizations_command, cwd=repo_path)
         
         # Log
@@ -243,17 +260,31 @@ def main():
             
     print(f"Finished zipping up .xcloc files at {temp_dir}\n")
     
+
+    if no_api_key:
+        print(f"No API key provided, can't interact with GitHub. Stopping the script here")
+    else:
+        do_github_stuff(args.api_key, is_dry_run, zip_files, translation_locales, localization_progess_all_repos)
+    
+    
+
+#
+# Split up main
+#
+
+def do_github_stuff(gh_api_key, is_dry_run, zip_files, translation_locales, localization_progess_all_repos):
+    
     print(f"Uploading to GitHub ...\n")
     
     # Find GitHub Release
-    response = mfgithub.github_releases_get_release_with_tag(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
+    response = mfgithub.github_releases_get_release_with_tag(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
     release = response.json()
     print(f"Found release { release['name'] }, received response: { mfgithub.response_description(response) }")
     
     # Delete all Assets 
     #   from GitHub Release
     for asset in release['assets']:
-        response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+        response = mfgithub.github_releases_delete_asset(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], is_dry_run)
         print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
     
     # Upload new Assets
@@ -265,7 +296,7 @@ def main():
         zip_file_name = value['name']
         zip_file_content = value['content']
         
-        response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content)        
+        response = mfgithub.github_releases_upload_asset(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content, is_dry_run)        
         download_urls[zip_file_locale] = response.json()['browser_download_url']
         
         print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
@@ -528,45 +559,29 @@ Thank you so much for your help in bringing Mac Mouse Fix to people around the w
     
     # Escape markdown
     new_discussion_body = mfgithub.escape_for_upload(new_discussion_body)
-
-
     
-    if no_api_key:
-        
-        print(f"No API key provided, can't upload result to GitHub")
-    
-    else:
-    
-        # Find discussion #1022
-        find_discussion_result = mfgithub.github_graphql_request(args.api_key, """      
-                                                                                           
-query {
-  repository(owner: "noah-nuebling", name: "mac-mouse-fix") {
-    discussion(number: 1022) {
-      id
-      url
-    }
+    # Find discussion #1022
+    find_discussion_result = mfgithub.github_graphql_request_query(gh_api_key, """                                                                                      
+repository(owner: "noah-nuebling", name: "mac-mouse-fix") {
+  discussion(number: 1022) {
+    id
+    url
   }
 }
 """)
-        discussion_id = find_discussion_result['data']['repository']['discussion']['id']
-        discussion_url = find_discussion_result['data']['repository']['discussion']['url']
-    
-        # Mutate the discussion body
-        mutate_discussion_result = mfgithub.github_graphql_request(args.api_key, f"""
-                                  
-mutation {{
-    updateDiscussion(input: {{discussionId: "{discussion_id}", body: "{new_discussion_body}"}}) {{
-        clientMutationId
-    }}
+    discussion_id = find_discussion_result['data']['repository']['discussion']['id']
+    discussion_url = find_discussion_result['data']['repository']['discussion']['url']
+
+    # Mutate the discussion body
+    mutate_discussion_result = mfgithub.github_graphql_request_mutation(gh_api_key, is_dry_run, f"""                    
+updateDiscussion(input: {{discussionId: "{discussion_id}", body: "{new_discussion_body}"}}) {{
+    clientMutationId
 }}
 """)
     
-        # Check for success
-        print(f" Mutate discussion result:\n{json.dumps(mutate_discussion_result, indent=2)}")
-        print(f" Discussion available at: { discussion_url }")
-    
-    
+    # Check for success
+    print(f" Mutate discussion result:\n{json.dumps(mutate_discussion_result, indent=2)}")
+    print(f" Discussion available at: { discussion_url }")
     
     
 #

@@ -64,25 +64,48 @@ def github_releases_list_assets_for_release(api_key, owner_and_repo, release_id)
     response = requests.get(f'https://api.github.com/repos/{owner_and_repo}/releases/{release_id}/assets', headers=github_rest_api_headers(api_key))
     return response
 
-def github_releases_delete_asset(api_key, owner_and_repo, asset_id):
-    response = requests.delete(f'https://api.github.com/repos/{owner_and_repo}/releases/assets/{asset_id}', headers=github_rest_api_headers(api_key))
-    assert 200 <= response.status_code < 300, f'GitHub Release asset deletion failed. Code: { response.status_code }, JSON: { response.json() }'
-    return response
+def github_releases_delete_asset(api_key, owner_and_repo, asset_id, is_dry_run):
+    
+    if is_dry_run:
+        print(f"Dry run: Not deleting github releases asset.")
+        return None
+    else:
+        response = requests.delete(f'https://api.github.com/repos/{owner_and_repo}/releases/assets/{asset_id}', headers=github_rest_api_headers(api_key))
+        assert 200 <= response.status_code < 300, f'GitHub Release asset deletion failed. Code: { response.status_code }, JSON: { response.json() }'
+        return response
 
-def github_releases_upload_asset(api_key, owner_and_repo, release_id, asset_name, asset_binary_data):
-    headers = github_rest_api_headers(api_key, for_uploading_binary=True)
-    response = requests.post(f'https://uploads.github.com/repos/{owner_and_repo}/releases/{release_id}/assets?name={asset_name}', headers=headers, data=asset_binary_data)
-    assert 200 <= response.status_code < 300, f'GitHub Release asset upload failed. Code: { response.status_code }, JSON: { response.json() }'
-    return response
+def github_releases_upload_asset(api_key, owner_and_repo, release_id, asset_name, asset_binary_data, is_dry_run):
+    
+    if is_dry_run:
+        print(f"Dry run: Not uploading github releases asset.")
+        return None
+    else:
+        headers = github_rest_api_headers(api_key, for_uploading_binary=True)
+        response = requests.post(f'https://uploads.github.com/repos/{owner_and_repo}/releases/{release_id}/assets?name={asset_name}', headers=headers, data=asset_binary_data)
+        assert 200 <= response.status_code < 300, f'GitHub Release asset upload failed. Code: { response.status_code }, JSON: { response.json() }'
+        return response
 
 def github_gists_request(api_key, data):
     
     # Notes:
     # - We intended to upload our .xcloc files to gists, but that seems impossible. Trying to use gh releases for filehosting instead
-    
+    assert False
     pass
 
-def github_graphql_request(api_key, query):
+def github_graphql_request_mutation(api_key, is_dry_run, mutation):
+    
+    request = f"mutation {{ {mutation} }}"
+    if is_dry_run:
+        print(f"Dry run: Not sending github graphql mutation request.")
+        return None
+    else:
+        return __github_graphql_request(api_key, request)
+       
+def github_graphql_request_query(api_key, query):
+    request = f"query {{ {query} }}"
+    return __github_graphql_request(api_key, request)
+
+def __github_graphql_request(api_key, request):
 
     # Notes:
     # - Use GitHub GraphQL Explorer to create queries (https://docs.github.com/en/graphql/overview/explorer)
@@ -94,7 +117,7 @@ def github_graphql_request(api_key, query):
     }
 
     # Make request
-    response = requests.post('https://api.github.com/graphql', json={'query': query}, headers=headers)
+    response = requests.post('https://api.github.com/graphql', json={ 'query': request }, headers=headers)
 
     # Parse the response
     result = response.json()
