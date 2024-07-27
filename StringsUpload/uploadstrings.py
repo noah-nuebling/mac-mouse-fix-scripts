@@ -40,7 +40,7 @@ import mfgithub
 # if code_dir not in sys.path:
 #     sys.path.append(code_dir)
 # from Shared import shared
-    
+
 #    
 # Constants
 #
@@ -74,12 +74,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_key', required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
     parser.add_argument('--dry_run', required=False, action='store_true', help="Prevent uploads/mutations on github. (You can still pass an API key to let the script *download* stuff from github.)")
+    parser.add_argument('--dev_language_screenshots', required=False, action='store_true', help="Only take screenshots in the development language instead of taking separate screenshots for every translation of the app.")
     args = parser.parse_args()
     
-    # Check api_key
-    is_dry_run = args.dry_run
+    dev_language_screenshots = args.dev_language_screenshots
+    is_dry_run = args.dry_run    
     no_api_key = args.api_key == None or len(args.api_key) == 0
     
+    # Parse args pt 2
     if is_dry_run:
         print(f"Dry run: Running dry - not uploading to github.\n")
         
@@ -257,9 +259,73 @@ def main():
         repo_path = repo_info['path']
         repo_xcloc_dir = repo_info['xcloc_dir']
         
-        # Iter locales
-        for i, locale in enumerate(translation_locales):
+        # Define helper function
+        def write_localization_screenshots(repo_path, locale, dev_language_screenshots, output_dir):
             
+            # Get shorthand for this function
+            f = write_localization_screenshots
+            
+            # Get or initialize the global variable (function attribute)
+            if not hasattr(f, 'output_dir_cache'):
+                f.output_dir_cache = dict()
+            output_dir_cache = f.output_dir_cache
+            
+            # Preprocess locale
+            screenshot_locale = development_locale if dev_language_screenshots else locale
+            
+            # Preprocess output_dir 
+            #   (Not sure if necessary)
+            output_dir = os.path.abspath(output_dir)
+            
+            # Get cached screenshots
+            #       for the screenshot locale
+            cached_output_dir = output_dir_cache.get(screenshot_locale, None)
+            
+            if cached_output_dir != None:
+                
+                # Copy cached screenshots over to output dir
+                shutil.copytree(src=cached_output_dir, dst=output_dir, dirs_exist_ok=True)
+                
+                # Log
+                print(f"Copied cached screenshots from {cached_output_dir} to {output_dir} (Instead of running another xcuitest to take the screenshots.)\n")
+                
+                # Return
+                return
+            
+            else: # (Taking fresh screenshots )
+                
+                # Get global flag
+                if not hasattr(f, 'did_build_for_testing'):
+                    f.did_build_for_testing = False
+                did_build_for_testing = f.did_build_for_testing
+                
+                # Build xcuitest runner command
+                #   Notes:
+                #   `test-without-building` Speeds things up a lot, but if we don't build at least once the user experience can be confusing for me, since we always need to remember to build the runner in Xcode first before running this script. 
+                #       Maybe it would be ideal to always build the runner but not always build the MMF app? But I don't know how we could separate the two.
+                action = 'test' if not did_build_for_testing else 'test-without-building'
+                test_runner_invocation = f"xcrun xcodebuild {action} -scheme '{xcode_screenshot_taker_build_scheme}' -testLanguage {screenshot_locale}"
+                        
+                # Log
+                print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\n")
+                        
+                # Set output path for test runner
+                os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = output_dir
+                    
+                # Run the screenshot-taker test runner
+                mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
+                
+                # Fill cache
+                output_dir_cache[screenshot_locale] = output_dir
+                
+                # Update global flag
+                f.did_build_for_testing = True
+        
+        # Iter locales
+        for locale in translation_locales:
+            
+            # Get xcloc_dir
+            #   ...which was created through xcodebuild in the previous step
             xcloc_dir = os.path.join(repo_xcloc_dir, f'{locale}.xcloc') # We just know xcodebuild put em here
             
             # Create screenshots path inside .xcloc file
@@ -268,22 +334,9 @@ def main():
                 shutil.rmtree(xcloc_screenshots_dir) # Delete if theres already something there (Not sure this is possible)
             mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
             
-            # Build test-runner invocation
-            #   Notes:
-            #   `test-without-building` Speeds things up a lot. Might lead to problems if we don't have the built app in Xcode's derived data folder already. 
-            #       Or if the built app is outdated because we forgot to build the app before exporting screenshots? This probably won't be an issue. But we could perhaps check how long ago the build we're screenshotting has been built to.
-            
-            action = 'test-without-building' # 'test'
-            test_runner_invocation = f"xcrun xcodebuild {action} -scheme '{xcode_screenshot_taker_build_scheme}' -testLanguage {locale}"
-            
-            # Log
-            print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\n")
-            
-            # Set output path for test runner
-            os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = os.path.abspath(xcloc_screenshots_dir)
-        
-            # Run the screenshot-taker
-            mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
+            # Put the screenshots
+            #   Using our local helper function
+            write_localization_screenshots(repo_path, locale, dev_language_screenshots, xcloc_screenshots_dir)
             
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
@@ -351,6 +404,8 @@ def main():
         print(f"No API key provided, can't interact with GitHub. Stopping the script here")
     else:
         do_github_stuff(args.api_key, is_dry_run, zip_files, translation_locales, localization_progess_all_repos)
+
+
     
     
 
