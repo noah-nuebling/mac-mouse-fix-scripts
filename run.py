@@ -10,6 +10,7 @@ import glob
 import subprocess
 import re
 import json
+import shlex
 
 #
 # Constants
@@ -20,18 +21,17 @@ dotenv_path = ".env"
 
 # Command map
 
-custom_command_compile_markdown = "compile-markdown"
 subcommand_map = {
     
-    'sync-scripts': f"./SyncScripts",
+    "upload-strings": f"./StringsUpload",
+    "build-markdown":  [lambda args: f"python3 {__file__} __internal_sync-strings",                 # We invoke this script again with different subcommands. 
+                        lambda args: f"python3 {__file__} __internal_build-markdown {args}"],       # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but breaks the VSCode debugger for some reason.
     
-    "upload-strings": f"./UploadXCStrings",
-    custom_command_compile_markdown: "", # Custom logic which can't be described by a single path
+    "mmf-website_build-strings": f"./MMFWebsite-StringsBuild",
     
-    "sync-strings-internal": f"./SyncXCStrings",
-    "markdown-generator-internal": f"./MarkdownGenerator",
-    
-    "mmf-website-compile-strings": f"./MMFWebsiteCompileXCStrings",
+    "__internal_export-strings": f"./StringsExport",
+    "__internal_sync-strings": f"./StringsSync",
+    "__internal_build-markdown": f"./MarkdownBuild",
 }
 
 help_string = """
@@ -82,7 +82,6 @@ If you are not using ./run you can still run things like this:
 
     Command line:
 
-
         Create venv:
         
             python3 -m venv env
@@ -128,7 +127,6 @@ If you are not using ./run you can still run things like this:
         -> You could use ./run to easily create the venv and install your packages and then run the scripts in VSCode for debugging.
             
         
-
 - If you're not using ./run, you can use the ./.env file from the command line using `dotenv run ...`.
   
     Example:
@@ -244,17 +242,16 @@ def main():
     if not (subcommand in subcommand_map.keys()):
         print_help_and_exit(subcommand)
     
-    # Implement special subcommand
-    if subcommand == custom_command_compile_markdown:
+    # Implement special subcommands 
+    #   that contain custom command-line-tool-invocations
+
+    if subcommand_map[subcommand] is list:
         
-        # We invoke this script again with different subcommands.
-        #   Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but breaks the VSCode debugger for some reason.
-        
-        print('\nrun.py: Running sync-strings-internal ...\n')
-        subprocess.run(['python3', __file__, 'sync-strings-internal'])
-        
-        print('\nrun.py: Running markdown-generator-internal ...\n')
-        subprocess.run(['python3', __file__, 'markdown-generator-internal', *subcommand_args])
+        for commandline_string_maker in subcommand_map[subcommand]:
+            commandline_string = commandline_string_maker(shlex.join(subcommand_args))
+            print(f'\nrun.py: Running clt {commandline_string} ...\n')
+            commandline_list = shlex.split(commandline_string) # shlex allows you to escape whitespace inside a single arg with \ or "with quotes". Just like the shell!
+            subprocess.run(commandline_list)
         
         exit(0)        
     

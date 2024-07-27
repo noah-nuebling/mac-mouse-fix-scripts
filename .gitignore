@@ -8,6 +8,7 @@
 
 # vscode
 #   Don't leak API keys in launch.json
+#   Update: We need to do this in the main mmf repo. Not sure doing it here helps.
 .vscode
 
 # Python stuff

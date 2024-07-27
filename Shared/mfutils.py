@@ -2,7 +2,7 @@
 
 utlis.py holds various utility functions 
     of categories that are too small to put into a separate file
-
+    
 """
 
 #
@@ -18,58 +18,127 @@ import os
 import textwrap
 import json
 import random
-            
+import shlex
+import platform
+import re
 
 #
 # Command line tools
 #
 
-def clt_result_description(completed_process: subprocess.CompletedProcess) -> str:
+def clt_result_description(returncode, stdout, stderr) -> str:
     
     result = f"""\
         
-code: {completed_process.returncode}
+code: {returncode}
 
 stdout:
-{add_indent(completed_process.stdout, 2)}
+{add_indent(stdout, 2)}
 [[endstdout]]
 
 stderr:
-{add_indent(completed_process.stderr, 2)}
+{add_indent(stderr, 2)}
 [[endstderr]]
 
 """
     
     return result
     
-def runclt(command, cwd=None):
+def runclt(command_arg, cwd=None, print_live_output=False, prefer_arm64=True):
     
     """
-    Secure variant of the runclt_insecure method.
-    - shell=False makes this secure
+    
+    Notes on args that we're passing to subprocess.run():
+        - `shell=False`: Invoking the clt directly instead of calling it through a shell.
+            -> When using `shell=True`, it allows you to pass the clt and args in a single string and also to use several commands using ; or use shell features like | pipes.
+            -> However, using `shell=True` is a SECURITY PROBLEM if we pass in any user-generated strings. -> Never use that without considering security.
+            -> We're using shlex to process the input string so that we can pass in the command and args as a single string as you would use it on the command line but without having to enable `shell=True`
+        - `text=True`: Return stdout and stderr as string instead of bits
+        - `cwd=cwd`: Sets the working directory for the subprocess. 
+        - `executable=exec`: Replaces the program to execute.
+            -> We used to have this set for some reason, I think to replace the shell, but I don't think we should set this.
+    
     """
+    
     # Preprocess `command`
-    #   -> So that it works similar to as if shell=True (we can pass in the args as a single string) but yet we can keep shell=False
-    #   -> If one of your args contains spaces, escape it like this: 
-    #       .replace(' ', '\ ')
+    #   -> So that it works similar to as if shell=True (we can pass in the args as a single string, like on the command-line) but yet we can keep shell=False (because that's a security problem)
+    #   -> If one of your args contains spaces, you can escape with "with quotes" or with\ backslashes - just like a normal shell (Implemented by shlex)
     
     commands = None
-    if type(command) is str:
-        commands = command.split(' ')
-    elif type(command) is list:
-        commands = command
+    if type(command_arg) is list:
+        commands = command_arg
+    elif type(command_arg) is str:
+        commands = shlex.split(command_arg)
     
-    # Code from runclt_insecure
+    command_name = commands[0]
+    
+    # Handle non-standard return codes
     success_codes=[0]
     if commands[0] == 'git' and commands[1] == 'diff': 
         success_codes.append(1) # Git diff returns 1 if there's a difference
     
-    clt_result = subprocess.run(commands, cwd=cwd, shell=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert clt_result.stderr == '' and clt_result.returncode in success_codes, f"Command \"{command}\" was run in cwd \"{cwd}\" and failed with result:\n{ clt_result_description(clt_result) }"
+    # Launch the arm64 version of the clt
+    #   Background: On my M1 mac all the clts are normally launched as x86_64 for some reason. This causes xcodebuild to fail with weird errors about provisioning profiles. 
+    #   Explanation: `arch -arm64 -x86_64 <clt> <args>` will launch the -arm64 version of clt, if available, otherwise it should fall back to available archs.
+    if prefer_arm64:
+        commands = ['arch', '-arm64', '-x86_64'] + commands
     
-    clt_result.stdout = clt_result.stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
+    # Run process and collect output
     
-    return clt_result.stdout
+    stdout = ""
+    stderr = ""
+    returncode = None
+    with subprocess.Popen(commands, cwd=cwd, shell=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+        
+        while True:
+            
+            # Print
+            if print_live_output:
+                print(f"{command_name}: stdout {{", end='\n')
+            
+            # Read stdout
+            while True:
+                
+                stdout_line = proc.stdout.readline()
+                if stdout_line == None or len(stdout_line) == 0:
+                    break                
+                else:
+                    stdout += f"\n{stdout_line}"
+                    if print_live_output:
+                        print(f"  > {stdout_line}", end='')
+            
+            # Print
+            if print_live_output:
+                print(f"}} endstdout: {command_name}", end='\n')
+                print(f"{command_name}: stderr {{", end='\n')
+
+            # Read stderr
+            while True:
+                
+                stderr_line = proc.stderr.readline()
+                if stderr_line == None or len(stderr_line) == 0:
+                    break                
+                else:
+                    stderr += f"\n{stderr_line}"
+                    if print_live_output:
+                        print(f"  > {stderr_line}", end='')
+                
+            # Print    
+            if print_live_output:
+                print(f"}} endstderr: {command_name}", end='\n')
+            
+            # Check if subproc has finished
+            returncode = proc.poll()
+            if returncode != None:
+                break
+
+    if not print_live_output:
+        assert stderr == '' and returncode in success_codes, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+        stdout = stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
+        return stdout
+    else:
+        assert returncode in success_codes, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result: { returncode }"  # Note that we allow stderr to be non-empty with print_live_output. It's ok since it's printed to the console, so we consider it 'handled' I guess.
+        return None
 
 def runclt_insecure(command, cwd=None, exec=None): 
     
@@ -81,17 +150,7 @@ def runclt_insecure(command, cwd=None, exec=None):
         (If you don't pass in user generated strings, this is ok to use)
     -> We replaced this with runclt(), renamed this func to runclt_insecure() and added these notes about security in the commit after b052473ad4a5efd9128f2934daf15bdbd0daf8a7
     
-    Args that we're passing to subprocess.run():
-    - `shell=True`: Pass the args through a shell instead of invoking the clt directly. 
-        -> This allows you to pass the clt and args in a single string and also use several commands using ; or use shell features like | pipes.
-        -> If you turn this off, you have to pass the clt and args as a list of strings, which is annoying.
-        -> However, this is a SECURITY PROBLEM if we pass in any user-generated strings. -> Never use this without considering security
-    - `text=True`: Return stdout and stderr as string instead of bits
-    - `cwd=cwd`: Set the current working directory, which is passed to the CLT
-    - `executable=exec`: Replaces the program to execute. 
-        -> If shell=True, then this replaces the shell I think. Otherwise, I'm not sure.
-        -> We used to have this set to exec='/bin/bash'
-        -> I don't think we should set this
+
         
     """
     
@@ -262,4 +321,17 @@ def xcode_project_uuid():
     
     return result
     
+
+def find_xcode_project_build_schemes(repo_path, project_path):
+
+    # Credit: ChatGPT
     
+    # Run xcodebuild -list to get the list of schemes
+    result = runclt(f'xcodebuild -list -project "{project_path}"', cwd=repo_path)
+    
+    # Extract schemes using regex
+    schemes_string = result.split('Schemes:')[1]
+    result = re.findall(r'^\s+(\S+)\s*$', schemes_string, flags=re.MULTILINE)
+    
+    # Return
+    return result

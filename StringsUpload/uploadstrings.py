@@ -46,6 +46,12 @@ import mfgithub
 #
 
 website_repo = './../mac-mouse-fix-website'
+xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
+
+# Screenshots
+xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
+xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
+xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
 #
 # Define main
@@ -108,17 +114,23 @@ def main():
         shutil.rmtree(temp_dir)
     os.mkdir(temp_dir)
     
+    # Create persistent temp_dir
+    #   This temp_dir is intended as a cache that will persist between launches of the script to speed things up.
+    temp_dir_persistent = tempfile.gettempdir() + '/mmf-uploadstrings-persistent'
+    if not os.path.isdir(temp_dir_persistent):
+        os.mkdir(temp_dir_persistent)
+    
     # Iterate repos
     
     repo_data = {
+        'mac-mouse-fix-website': {
+            'path': website_repo,
+            'xcloc_dir': None,
+        },
         'mac-mouse-fix': {
             'path': './',
             'xcloc_dir': None, # This will hold the result of the loop iteration
         },
-        'mac-mouse-fix-website': {
-            'path': website_repo,
-            'xcloc_dir': None,
-        }
     }
     
     for i, (repo_name, repo_info) in enumerate(repo_data.items()):
@@ -177,18 +189,51 @@ def main():
             shutil.rmtree(xcloc_dir) # Delete if theres already something there (I think this is impossible since we freshly create the temp_dir)
         os.mkdir(xcloc_dir)
         
-
-        
         # Build -exportLocalizations command
-        locale_args = [ arg for l in translation_locales for arg in ['-exportLanguage', l, '-includeScreenshots']] # This python syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
-        export_localizations_command = ['xcrun', 'xcodebuild', '-exportLocalizations', '-project', mflocales.path_to_xcodeproj[repo_name], '-localizationPath', f'{xcloc_dir}', *locale_args, '-verbose']
+        # Notes:
+        #   - This python list comprehension syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
+        #   - We used to use the '-includeScreenshots' option here, but that doesn't seem to work, so now we have a custom XCUITest-runner that takes localization screenshots below
+        #   
+        #   Problem: This is slow
+        #       `xcodebuild -exportLocalizations` builds the whole project from scratch, ignoring build-cache, .apps it produces are broken. Also, deletes build cache for subsequent normal builds.
+        #       So when we run the XCUITest-Runner down below, we need to build the whole project from scratch again. 
+        #
+        #   Solution:
+        #       Set a separate -derivedDataPath for -exportLocalizations, where it can build its broken products without deleting the cache for other builds.
+        #       
+        #   Notes:
+        #       - Exporting localizations doesn't seem to be as slow when using the Xcode GUI. Not sure why.
+        #       - I tried every xcodebuild option under the sun to speed things up, including: -sdk macosx15.0 -dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipUnavailableActions -destination 'name=My Mac,arch=arm64' -arch arm64 -configuration Debug -scheme "App" -project "Mouse Fix.xcodeproj"
+        #           ... but none of these seemed to help.
+        
+        # Get any scheme
+        #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But Xcode still demands a -scheme when using -derivedDataPath. 
+        #           So we're just using the first scheme we find for the project.
+        
+        project_path = mflocales.path_to_xcodeproj[repo_name]
+        build_schemes = mfutils.find_xcode_project_build_schemes(repo_path, project_path)
+        any_build_scheme = build_schemes[0]
+        
+        # Get derived data path
+        derived_data_path = os.path.join(temp_dir_persistent, xcloc_export_derived_data_temp_dir_subpath, repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
+        
+        # Assemble command
+        export_localizations_command = [f"xcrun xcodebuild -exportLocalizations",
+                                        f"-scheme '{any_build_scheme}'",
+                                        f"-derivedDataPath '{derived_data_path}'",
+                                        f"-project '{project_path}'",
+                                        f"-localizationPath '{xcloc_dir}'"]
+    
+        for l in translation_locales:
+              export_localizations_command.append(f"-exportLanguage {l}")
+        
+        export_localizations_command = " ".join(export_localizations_command)
         
         # Log
-                # Log
         print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while since Xcode will build the whole project) ... \nRunning command: {export_localizations_command}\n")
         
-        # Export .xcloc file for each locale
-        mfutils.runclt(export_localizations_command, cwd=repo_path)
+        # Run command
+        mfutils.runclt(export_localizations_command, cwd=repo_path, print_live_output=True)
         
         # Log
         print(f"Exported .xcloc files using command: {export_localizations_command}\n")
@@ -196,9 +241,50 @@ def main():
         # Store result
         repo_data[repo_name]['xcloc_dir'] = xcloc_dir
     
-    # Get combine localization_progress
+    # Get combined localization_progress
     localization_progess_all_repos = mflocales.get_localization_progress(xcstring_objects_all_repos, translation_locales_all_repos)
     
+    # Log
+    print(f"Taking localization screenshots and storing them into the .xcloc file for every locale...\n")
+    
+    # Run the screenshot-taker XCUI tests
+    for repo_name, repo_info in repo_data.items():
+        
+        # Skip
+        if repo_name == 'mac-mouse-fix-website': continue
+        
+        # Extract
+        repo_path = repo_info['path']
+        repo_xcloc_dir = repo_info['xcloc_dir']
+        
+        # Iter locales
+        for i, locale in enumerate(translation_locales):
+            
+            xcloc_dir = os.path.join(repo_xcloc_dir, f'{locale}.xcloc') # We just know xcodebuild put em here
+            
+            # Create screenshots path inside .xcloc file
+            xcloc_screenshots_dir = os.path.join(xcloc_dir, xcloc_screenshots_subdir)
+            if os.path.isdir(xcloc_screenshots_dir):
+                shutil.rmtree(xcloc_screenshots_dir) # Delete if theres already something there (Not sure this is possible)
+            mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
+            
+            # Build test-runner invocation
+            #   Notes:
+            #   `test-without-building` Speeds things up a lot. Might lead to problems if we don't have the built app in Xcode's derived data folder already. 
+            #       Or if the built app is outdated because we forgot to build the app before exporting screenshots? This probably won't be an issue. But we could perhaps check how long ago the build we're screenshotting has been built to.
+            
+            action = 'test-without-building' # 'test'
+            test_runner_invocation = f"xcrun xcodebuild {action} -scheme '{xcode_screenshot_taker_build_scheme}' -testLanguage {locale}"
+            
+            # Log
+            print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\n")
+            
+            # Set output path for test runner
+            os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = os.path.abspath(xcloc_screenshots_dir)
+        
+            # Run the screenshot-taker
+            mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
+            
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
     

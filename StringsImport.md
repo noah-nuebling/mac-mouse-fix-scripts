@@ -1,4 +1,4 @@
-# ImportStrings.md
+# StringsImport.md
 
 To publish .xcloc files, we can use our custom script:
 

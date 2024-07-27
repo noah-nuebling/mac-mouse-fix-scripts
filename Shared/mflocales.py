@@ -45,7 +45,7 @@ def sorted_locales(locales, source_locale):
     
     """
     - Sorts all the locales alphabetically by their display name, but puts the development aka source_locale (en) as the first language.
-    - We plan to use this sorting whenever there's a language picker. (On the website and in the language pickers)
+    - We plan to use this sorting whenever there's a language picker. (On the website and in the markdown language pickers)
     """
     smallest_char = "\u0000"
     result = sorted(locales, key=lambda l: smallest_char if l == source_locale else language_tag_to_language_name(l, l, False))
@@ -79,7 +79,7 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
                 
                 localization_state_overview[locale][s] += 1
     
-    localization_state_overview = json.loads(json.dumps(localization_state_overview)) # Convert nested defaultdict to normal dict - which prints in a pretty way
+    localization_state_overview = json.loads(json.dumps(localization_state_overview)) # Convert nested defaultdict to normal dict - which prints in a pretty way (Update: Why do we need it to print pretty?)
     
     # Get translation progress for each language
     #   Notes: 
@@ -107,9 +107,9 @@ def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_
         - This logic is implemented by babel.negotiate_locale, and I'm not sure how exactly it behaves.
 
     Notes: 
-    - The xcstrings dict is the content of an .xcstrings file which has been loaded using json.load()
-    - The fall_back_to_next_best_language option makes sense when you're rendering content - as we do when using this for markdown-template-compilation
-        The option doesn't make sense when we're converting one strings format to another - as we do when using this for the mmf-website - since in that case we want to convert the data, without changing the content.
+    - The `xcstrings` dict argument is expected to be the content of an .xcstrings file which has been loaded using json.load()
+    - The fall_back_to_next_best_language option might not make sense to use, if you have a string-retrieval system at runtime that implements a fallback. 
+        I thought that nuxt-i18n had this? But I think we still decided to use the fall_back_to_next_best_language option for that. Not sure why anymore.
     """
     
     assert xcstrings['version'] == '1.0' # Maybe we should also assert this in other places where we parse .xcstrings files
@@ -131,7 +131,7 @@ def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_
         # assert len(translation) != 0 # Not asserting this since sometimes translations can be empty strings
     else:
         translation_locale = preferred_locale
-        translation = localizations.get(translation_locale, {}).get('stringUnit', {}).get('value', '')
+        translation = localizations.get(translation_locale, {}).get('stringUnit', {}).get('value', '') # Why are we returning emptystring instead of None?
     
     return translation, translation_locale
         
