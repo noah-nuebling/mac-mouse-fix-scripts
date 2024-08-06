@@ -1,6 +1,6 @@
 
 """
-For .swift and .c source code, Xcode automatically upldates the .xcstrings files to the source code when building the project. However we also want to use .xcstrings files for other file types (.md and .vue files). That's what this script is for.
+For .swift and .c source code, Xcode automatically updates the .xcstrings files to the source code when building the project. However we also want to use .xcstrings files for other file types (.md and .vue files). That's what this script is for.
 
 We plan to automatically execute this script, when source files (.md and .vue) are compiled.
 """

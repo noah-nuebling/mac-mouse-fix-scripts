@@ -198,7 +198,7 @@ def main():
         #   
         #   Problem: This is slow
         #       `xcodebuild -exportLocalizations` builds the whole project from scratch, ignoring build-cache, .apps it produces are broken. Also, deletes build cache for subsequent normal builds.
-        #       So when we run the XCUITest-Runner down below, we need to build the whole project from scratch again. 
+        #       So when we run the XCUITest-Runner down below, we need to build the whole project from scratch again. (Tested this on Xcode 16 Beta 3)
         #
         #   Solution:
         #       Set a separate -derivedDataPath for -exportLocalizations, where it can build its broken products without deleting the cache for other builds.
@@ -209,7 +209,7 @@ def main():
         #           ... but none of these seemed to help.
         
         # Get any scheme
-        #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But Xcode still demands a -scheme when using -derivedDataPath. 
+        #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But xcodebuild still demands a -scheme when using -derivedDataPath.
         #           So we're just using the first scheme we find for the project.
         
         project_path = mflocales.path_to_xcodeproj[repo_name]
@@ -310,6 +310,7 @@ def main():
                 print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\n")
                         
                 # Set output path for test runner
+                #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
                 os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = output_dir
                     
                 # Run the screenshot-taker test runner

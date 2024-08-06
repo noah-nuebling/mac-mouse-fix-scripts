@@ -44,7 +44,7 @@ stderr:
     
     return result
     
-def runclt(command_arg, cwd=None, print_live_output=False, prefer_arm64=True):
+def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, prefer_arm64: bool = True) -> str | None:
     
     """
     
@@ -137,6 +137,7 @@ def runclt(command_arg, cwd=None, print_live_output=False, prefer_arm64=True):
         stdout = stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
         return stdout
     else:
+        print('')
         assert returncode in success_codes, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result: { returncode }"  # Note that we allow stderr to be non-empty with print_live_output. It's ok since it's printed to the console, so we consider it 'handled' I guess.
         return None
 
@@ -326,8 +327,14 @@ def find_xcode_project_build_schemes(repo_path, project_path):
 
     # Credit: ChatGPT
     
+    # Define extra options
+    #   Hopefull these prevent xcodebuild from resolving packages and doing weird stuff.
+    #   ...If I do this, CocoaLumberJack will be deleted and added by Xcode in an infinite loop or sth ->  "-dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution"
+    #   Update:  The cocoalumberjack issues were bc I drag-and-dropped a copy of the framework into a project folder inside Xcode, so maybe we could try this again.
+    extra_options = "" 
+    
     # Run xcodebuild -list to get the list of schemes
-    result = runclt(f'xcodebuild -list -project "{project_path}"', cwd=repo_path)
+    result = runclt(f'xcodebuild -list -project "{project_path}" {extra_options}', cwd=repo_path)
     
     # Extract schemes using regex
     schemes_string = result.split('Schemes:')[1]
