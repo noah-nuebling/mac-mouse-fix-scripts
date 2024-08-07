@@ -24,7 +24,7 @@ Explanation:
     Note that the system font of macOS does not have the ability to display SF Symbols. Only the SF fonts downloaded from Apple's website have this ability.
 
 Why 'regular' variant of the font?:
-    We're currently only exporting regular-weight-regular-width-sf-text (as opposed to -sf-display) symbols (from "SF-Pro-Text-Regular.otf"). 
+    We're currently only exporting regular-weight-regular-width-sf-text (as opposed to -sf-display) symbols (by subsetting "SF-Pro-Text-Regular.otf"). 
     We could also export all variants of the symbols by using "SF-Pro.ttf" instead of "SF-Pro-Text-Regular.otf".
     However, SF-Pro-Text-Regular should be enough, since we only need to use this in tooltips, where we cannot control the stringAttributes and have to work with plainText
     displayed in the standard style and weight for system text on macOS. (Which uses weight 'regular'. See Apple human-interface-guidelines/typography)
@@ -32,7 +32,7 @@ Why 'regular' variant of the font?:
     into our text through an NSImage, instead of using our custom font - which seems to be the standard approach supported by Apple.
     
     Note:
-        Maybe use `Medium` font variant instead since it might look closer to how we render the SF Symbols in our NSImages inside `keyStringWithSymbol:`? (There we use NSFontWeight 0.3 for lightMode and 0.4 for darkmode.)
+        Maybe use `Medium` font variant instead of 'Regular' since it might look closer to how we render the SF Symbols in our NSImages inside `keyStringWithSymbol:` in MMF? (There we use NSFontWeight 0.3 for lightMode and 0.4 for darkmode.)
         
 For More info see CoolSFSymbolsFont.m in the Mac Mouse Fix repo.
 
@@ -161,7 +161,7 @@ def main():
     symbols_print = '  '.join(symbols) + '  '
     names_print = ', '.join(['(' + r.toStr() + ')' for r in ttFont["name"].names])
     cff_print = 'cffFontNames: ' + str(cf_set.fontNames) + 'cffTopDicts: ' + ', '.join(['(' + str(topDict.rawDict) + ')' for topDict in ttFont["CFF "].cff])
-    print(f"Exported symbols [{unicodes_print}] ({symbols_print}) from San Francisco font at {sf_file_path} to new font file:\n\n{output_file_path}\n\nUpdated font nameTable with new name_table: [{names_print}]. Updated cff table: {cff_print}")
+    print(f"Exported symbols [{unicodes_print}] ({symbols_print}) from San Francisco font at {sf_file_path}\nto new font file:\n\n{output_file_path}\n\n    (^^^Include this file in the MMF Xcode project)\n\nUpdated font's name_table: [{names_print}].\nUpdated font's cff_table: {cff_print}")
     
     
 if __name__ == '__main__':
