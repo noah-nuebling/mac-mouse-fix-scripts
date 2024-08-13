@@ -35,7 +35,7 @@ def main():
     repo_name = os.path.basename(os.path.normpath(target_repo))
     
     # Validate
-    assert repo_name == 'mac-mouse-fix-website', f'This script is made for the mac-mouse-fix-website repo. The MarkdownGenerator sort of does string-building for the main repo'
+    assert repo_name == 'mac-mouse-fix-website', f'This script is made for the mac-mouse-fix-website repo. The MarkdownBuild script does string-building for the main repo'
     
     # Log
     print(f'compile_website_strings: Begin')

@@ -25,14 +25,18 @@ subcommand_map = {
     
     "create-sfsymbols": f"./SFSymbolsFontCreate",
     "upload-strings": f"./StringsUpload",
-    "build-markdown":  [lambda args: f"python3 {__file__} __internal_sync-strings",                 # We invoke this script again with different subcommands. 
-                        lambda args: f"python3 {__file__} __internal_build-markdown {args}"],       # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but breaks the VSCode debugger for some reason.
-    
-    "mmf-website_build-strings": f"./MMFWebsite-StringsBuild",
-    
-    "__internal_export-strings": f"./StringsExport",
-    "__internal_sync-strings": f"./StringsSync",
+    "build-markdown":  [
+        lambda args: f"python3 {__file__} sync-strings",                            # We invoke this script again with different subcommands. 
+        lambda args: f"python3 {__file__} __internal_build-markdown {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but breaks the VSCode debugger for some reason.
+    ],       
+    "mmf-website_build-strings": [
+        lambda args: f"python3 {__file__} sync-strings",
+        lambda args: f"python3 {__file__} __internal_mmf-website_build-strings {args}"
+    ],
+        
+    "sync-strings": f"./StringsSync",                                               # This can be called from the website repo or the main repo
     "__internal_build-markdown": f"./MarkdownBuild",
+    "__internal_mmf-website_build-strings": f"./MMFWebsite-StringsBuild",
 }
 
 help_string = """
