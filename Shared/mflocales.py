@@ -473,6 +473,12 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
             assert r'{{' not in str # Protect against ? - this is also weird
         # TODO: Maybe somehow protect against over matching on block syntax, too
         
+        # Stript results
+        #   The comment sometimes contained whitespace, I'm not sure if the key can contain whitespace with the way the regex is set up.
+        #   Stripping the value is not good since we want to preserve the indent
+        key = key.strip()
+        comment = comment.strip() 
+        
         # Store
         result.append((key, value, comment, full_match))
     

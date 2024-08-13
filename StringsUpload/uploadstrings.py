@@ -292,7 +292,7 @@ def main():
                 # Return
                 return
             
-            else: # (Taking fresh screenshots )
+            else: # (Taking fresh screenshots)
                 
                 # Get global flag
                 if not hasattr(f, 'did_build_for_testing'):

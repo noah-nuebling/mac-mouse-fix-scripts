@@ -246,7 +246,7 @@ def main():
     # Implement special subcommands 
     #   that contain custom command-line-tool-invocations
 
-    if subcommand_map[subcommand] is list:
+    if isinstance(subcommand_map[subcommand], list):
         
         for commandline_string_maker in subcommand_map[subcommand]:
             commandline_string = commandline_string_maker(shlex.join(subcommand_args))

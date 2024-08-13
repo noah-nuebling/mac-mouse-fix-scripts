@@ -277,7 +277,7 @@ def read_file(file_path, encoding='utf-8'):
         result = temp_file.read()
     
     return result
-    
+
 
 def read_tempfile(temp_file_path, remove=True):
     
@@ -291,6 +291,21 @@ def read_tempfile(temp_file_path, remove=True):
 def write_file(file_path, content, encoding='utf-8'):
     with open(file_path, 'w', encoding=encoding) as file:
         file.write(content)
+
+def read_xcstrings_file(xcstrings_path: str) -> dict:
+    return json.loads(read_file(xcstrings_path))
+
+def write_xcstrings_file(xcstrings_path: str, xcstrings_obj: dict):
+    
+    # TODO: Make sure we adopt this everywhere.
+    
+    #   We set all these args so that the output will exactly follow the Xcode format. If we don't do this, 
+    #   Xcode will convert the file formatting once we edit it in Xcode, which leads to changes in the git history.
+    #
+    #   1. ensure_ascii=False --> Makes the output utf-8 instead of ascii. (Otherwise emojis will be ascii encoded and stuff)
+    #   2. separators=(',', ' : ') --> Changes the separators used in the resulting json file to look exactly like Xcode formats them.
+    
+    write_file(xcstrings_path, json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : ')))
 
 def convert_utf16_file_to_utf8(file_path):
     

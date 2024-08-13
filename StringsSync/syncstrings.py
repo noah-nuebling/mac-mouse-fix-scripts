@@ -184,14 +184,15 @@ def update_xcstrings(xcstrings_path, extracted_strings):
     # Set the 'extractedState' for all strings to 'manual'
     #   Otherwise Xcode won't export them and also delete all of them or give them the 'Stale' state
     #   (We leave strings 'stale' which this analysis determined to be stale)
-    xcstrings_obj = json.loads(mfutils.read_file(xcstrings_path))
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
     for key, info in xcstrings_obj['strings'].items():
         if info['extractionState'] == 'stale':
             pass
         else:
             info['extractionState'] = 'manual'
 
-    mfutils.write_file(xcstrings_path, json.dumps(xcstrings_obj, indent=2))
+    # Write modified .xcstrings file
+    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)
     print(f"syncstrings.py: Set the extractionState of all strings to 'manual'")
 
 #
