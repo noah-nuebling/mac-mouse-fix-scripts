@@ -183,7 +183,7 @@ def main():
         translation_locales_all_repos = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
         
         # Log
-        print(f".xcstring file paths: { json.dumps(xcstring_filenames, indent=2) }\n")
+        print(f".xcstring file paths: { json.dumps(xcstring_filenames, ensure_ascii=False, indent=2) }\n")
         
         # Create a folder to store .xcloc files to
         xcloc_dir = os.path.join(temp_dir, f'{repo_name}-xcloc-export')
@@ -443,7 +443,7 @@ def do_github_stuff(gh_api_key, is_dry_run, zip_files, translation_locales, loca
         
         print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
         
-    print(f"Finshed Uploading to GitHub. Download urls: { json.dumps(download_urls, indent=2) }")
+    print(f"Finshed Uploading to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
     
     # Create markdown
     new_discussion_body = """\
@@ -722,7 +722,7 @@ updateDiscussion(input: {{discussionId: "{discussion_id}", body: "{new_discussio
 """)
     
     # Check for success
-    print(f" Mutate discussion result:\n{json.dumps(mutate_discussion_result, indent=2)}")
+    print(f" Mutate discussion result:\n{json.dumps(mutate_discussion_result, ensure_ascii=False, indent=2)}")
     print(f" Discussion available at: { discussion_url }")
     
     

@@ -317,7 +317,7 @@ def main():
     
     # Validate
     if len(overlapping_env_var_keys) > 0:
-        print(f"\nrun.py: WARN: .env defines vars that are already in the environment -.env will override - \nenv: {json.dumps(dotenv_overlap, indent=2)}\nos: {json.dumps(dict(os_overlap), indent=2)}")
+        print(f"\nrun.py: WARN: .env defines vars that are already in the environment -.env will override - \nenv: {json.dumps(dotenv_overlap, ensure_ascii=False, indent=2)}\nos: {json.dumps(dict(os_overlap), ensure_ascii=False, indent=2)}")
     
     # Combine env_vars
     env_vars = os.environ | dotenv_vars

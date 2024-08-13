@@ -161,7 +161,7 @@ def update_xcstrings(xcstrings_path, extracted_strings):
     #       instead which will prevent xcstringstool from updating them to the new value from the source file.
     #   -> All this is necessary so that xcstringstool updates everything (I think)
     
-    xcstrings_obj = json.loads(mfutils.read_file(xcstrings_path))
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
     source_language = xcstrings_obj['sourceLanguage']
     assert source_language == 'en'
     for key, info in xcstrings_obj['strings'].items():
@@ -171,8 +171,8 @@ def update_xcstrings(xcstrings_path, extracted_strings):
         else:
             pass
             # assert False
-        
-    mfutils.write_file(xcstrings_path, json.dumps(xcstrings_obj, indent=2))
+     
+    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)   
     print(f"syncstrings.py: Set the extractionState of all strings to 'extracted_with_value'")
         
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata

@@ -33,7 +33,7 @@ def response_description(response: requests.Response) -> str:
         'body': body,
     }
     
-    return json.dumps(return_data, indent=2)
+    return json.dumps(return_data, ensure_ascii=False, indent=2)
 
 def github_rest_api_headers(api_key, for_uploading_binary=False): # Found these values in the github docs
     

@@ -339,7 +339,6 @@ def insert_acknowledgements(template, language_id, gumroad_api_key, cache_file, 
         # Log
         
         print('Filtering sales...')
-        # print(json.dumps(sales, indent=2))
         
         # Filter people who don't want to be displayed
         

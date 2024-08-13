@@ -101,7 +101,7 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
                     missing_keys[locale].append(key)
                     
     
-    localization_state_counts = json.loads(json.dumps(localization_state_counts)) # Convert nested defaultdict to normal dict - which prints in a pretty way (Update: Why do we need it to print pretty?)
+    localization_state_counts = json.loads(json.dumps(localization_state_counts, ensure_ascii=False)) # Convert nested defaultdict to normal dict - which prints in a pretty way (Update: Why do we need it to print pretty? Update2: Should we use ensure_ascii?)
     
     # Get translation progress for each language
     #   Notes: 
@@ -245,7 +245,7 @@ def make_custom_xcstrings_visible_to_xcodebuild(path_to_xcodeproj: str, custom_x
             
     # Write json back to file
     with open(pbxproj_path, 'w') as file:
-        file.write(json.dumps(pbxproject_json, indent=4))
+        file.write(json.dumps(pbxproject_json, ensure_ascii=True, indent=4)) # Not sure about ensure_ascii
     
     # Create 'undo payload'
     #   Pass this to the undo function to undo the changes that this function made
@@ -282,7 +282,7 @@ def undo_make_custom_xcstrings_visible_to_xcodebuild(undo_payload):
     
     # Write to file
     with open(pbxproj_path, 'w') as file:
-        file.write(json.dumps(pbxproject_json, indent=4))
+        file.write(json.dumps(pbxproject_json, ensure_ascii=True, indent=4)) # Not sure about ensure_ascii
     
     # Return
     return
