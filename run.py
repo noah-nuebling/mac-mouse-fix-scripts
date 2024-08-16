@@ -276,24 +276,29 @@ def main():
     python_interpreter = None
     if requiremements_path != None:
         
-        # Log
-        print(f"\nrun.py: Creating venv at ./{venv_path} ...")
+        # Check if the virtual environment exists
+        #   Not recreating the venv every time speeds things up a lot.
+        venv_exists = os.path.exists(os.path.join(venv_path, 'pyvenv.cfg'))
         
-        # Create venv
-        # Notes: 
-        # - subprocess.check_call throws an error if the command returns non-zero. Otherwise returns 0
-        # - text=True makes it so we can input the commmand as a single string of text instead of a list of args
-        # - shell=True I don't quite understand. Apparently it runs the commans in a 'spawned a shell process' and enables shells features such as pipes and wildcards.
-        #   - It apparently also poses a security risk, since e.g. if you pass 'rm -rf /*' then it can delete your entire computer or something
-        #   - To create and fill our venv shell=True seems to be necessary.
-    
-        subprocess.check_call(f"python3 -m venv {venv_path}", text=True, shell=True)
-        
+        if not venv_exists:
+            
+            # Log
+            print(f"\nrun.py: Creating venv at ./{venv_path} ...")
+            
+            # Create venv
+            # Notes: 
+            # - subprocess.check_call throws an error if the command returns non-zero. Otherwise returns 0
+            # - text=True makes it so we can input the commmand as a single string of text instead of a list of args
+            subprocess.check_call(f"python3 -m venv {venv_path}", text=True, shell=True)
+        else:
+            # Log
+            print(f"\nrun.py: Reusing existing venv at ./{venv_path}. (If there are problems try deleting the venv.)")        
+
         # Get python path for the venv
         venv_python_path = os.path.join(venv_path, 'bin/python')
             
         # Log
-        print(f"\n Installing requirements from ./{requiremements_path} ...")
+        print(f"\nrun.py: Installing requirements from ./{requiremements_path} ...")
         
         # Install requirements    
         subprocess.check_call(f'./{venv_python_path} -m pip install -r "{requiremements_path}"', text=True, shell=True)

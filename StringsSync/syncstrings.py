@@ -1,8 +1,8 @@
 
 """
-For .swift and .c source code, Xcode automatically updates the .xcstrings files to the source code when building the project. However we also want to use .xcstrings files for other file types (.md and .vue files). That's what this script is for.
+For [.swift, .c, .m, .nib, ...] source files, Xcode automatically updates the .xcstrings files to the source files when building the project. However we also want to use .xcstrings files for other file types (.md, .vue and .js files). That's what this script is for.
 
-We plan to automatically execute this script, when source files (.md and .vue) are compiled.
+We plan to automatically execute this script when source files (.md, .vue, .js) are compiled.
 """
 
 
@@ -49,10 +49,9 @@ def main():
         print(f"syncstrings.py: Syncing {website_repo['quotes_xcstrings_path']} ...")
         print("")
         
-        # Extract strings from quotes
+        # Extract strings from quotes.js
         # Note: 
         #   I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
-        
         quotes = json.loads(mfutils.runclt(['node', website_repo['quotes_tool_path']], cwd=target_repo))
         extracted_strings = []
         for quote in quotes:
