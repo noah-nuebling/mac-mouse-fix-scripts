@@ -1,24 +1,73 @@
 
+#
+# Discussion
+#
+
+# On `Language IDs` | `language tags` | `locales`.
+#   The terminology is confusing because Apple, Vue and Babel all use different terminology for basically same thing.
+#   
+#   Apple -> Uses the term `languageID`
+#   Babel -> Uses the term `raw locale string`
+#   Vue I18n -> Uses the term `locale`
+#   BCP 47 -> Uses the term `language tag`
+#
+#   -> These are all almost the same thing.
+#
+#   What is it? 
+#   So all of these things are based on the BCP 47 `language tag` standard. A BCP `language tag` is string that specifies a language. 
+#   most of the time, the tag follows the format:
+#
+#       de
+#
+#   Or the format:
+#
+#       de-AT
+#
+#   - Where `de` is an ISO alpha-2 (meaning it has 2 characters) language code. 
+#   - Where `AT` is an ISO alpha-2 country code.
+#   - There are some BCP 47 language tags that follow different formats for example. `es-419` stands for Spanish as spoken in Latin America and the Carribean. Or `sr-Latn` stands for Serbian written with Latin characters instead of Cyrillic ones.
+#   - Sometimes, instead of `-`, we use `_` as a separator. Babel uses `_` by default (So it would be `de_AT` instead of `de-AT`). (But you can tell Babel it what separators to use.)
+#
+#   - Apples "Language ID"s, implement a subset of the BCP 47 specification if I understand correctly.
+#   - Babel also follows the BCP 47 specification. So they should be compatible with the "Language ID"s used in Xcode.
+#       -> Babel references a really old, outdated version of the BCP 47 spec, but chatGPT said it should still be compatible with the Apple language IDs, 
+#   - I haven't found a direct reference that vue/nuxt I18n uses BCP 47 spec, but it has been perfectly compatible so I'm fairly sure it also follows the standard.
+#
+#   In our python scripts, we've used different terms for these `language tags` but from now on (26.08.2024) we'll try to use `locale` or `locale_str` consistently. 
+#
+#   References:
+#       - ISO alpha-2 language codes: https://www.loc.gov/standards/iso639-2/php/code_list.php
+#       - ISO alpha-2 country codes: https://www.iso.org/obp/ui/#search
+#       - Apple language ID docs: https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPInternational/LanguageandLocaleIDs/LanguageandLocaleIDs.html
+#       - Babel language tag docs: https://babel.pocoo.org/en/latest/api/core.html
+#       - BCP 47 specification that babel docs reference: https://datatracker.ietf.org/doc/html/rfc3066.html
+#       - BCP 47 latest specification at time of writing: https://datatracker.ietf.org/doc/html/rfc5646
+
 # pip imports
 import babel
 
-# stdlib&local imports
+# stdlib & local imports
 import json
 from collections import defaultdict
 import re
 import os
+
+import babel.languages
+import babel.lists
 import mfutils
 
 #
 # Constants
 #
 
-language_flag_fallback_map = { 
+language_code_to_emoji_flag_map = { 
                               
-    # When a translation's languageID doesn't contain a country, fallback to these flags
+    # When a translation's localeID doesn't contain a country, fallback to these flags
     #   Country code reference: https://www.iso.org/obp/ui/#home
     #   Language code reference: https://www.loc.gov/standards/iso639-2/php/code_list.php
-    
+    #   
+    #   Perhaps I could use babel.languages.get_official_languages() or related function instead of this hard-coding approach.
+
     'en': '🇬🇧',     # english -> uk
     'af': '🇿🇦',     # afrikaans -> south africa
     'de': '🇩🇪',     # german -> germany
@@ -87,7 +136,7 @@ def sorted_locales(locales, source_locale):
     - We plan to use this sorting whenever there's a language picker. (On the website and in the markdown language pickers)
     """
     smallest_char = "\u0000"
-    result = sorted(locales, key=lambda l: smallest_char if l == source_locale else language_tag_to_language_name(l, l, False))
+    result = sorted(locales, key=lambda l: smallest_char if l == source_locale else locale_to_language_name(l, l, False))
     return result
 
 def get_localization_progress(xcstring_objects: list[dict], translation_locales: list[str]) -> dict:
@@ -356,45 +405,17 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     
     # Return
     return development_locale, translation_locales
-    
-def country_code_to_continent_name(country_code: str, destination_language_id='en'):
-    
-    # Credits: Claude
-    
-    assert False # Untested so far
-    
-    # Declare result
-    continent_name = None
-    
-    try:
-        # Get the territory data
-        territory = babel.core.get_global('territory_territories')[country_code.upper()]
-        
-        # Get the continent code
-        continent_code = territory.split('-')[0]
-        
-        # Create a Locale object for the destination language
-        destination_locale_obj = babel.Locale(destination_language_id)
-        
-        # Get the localized continent name
-        continent_name = destination_locale_obj.territories.get(continent_code)
-        
-    except KeyError:
-        pass
-    
-    # Return
-    return continent_name
 
-def language_tag_to_language_name(language_id: str, destination_language_id: str = 'en', include_flag = False):
+def locale_to_language_name(locale_str: str, destination_locale_str: str = 'en', include_flag = False):
     
     # Query override map
-    language_name = language_name_override_map.get(destination_language_id, {}).get(language_id)
+    language_name = language_name_override_map.get(destination_locale_str, {}).get(locale_str)
     
     if language_name == None:
         
         # Query babel        
-        locale_obj = babel.Locale.parse(language_id, sep='-')
-        destination_locale_obj = babel.Locale.parse(destination_language_id, sep='-')
+        locale_obj = babel.Locale.parse(locale_str, sep='-')
+        destination_locale_obj = babel.Locale.parse(destination_locale_str, sep='-')
         
         language_name = locale_obj.get_display_name(destination_locale_obj) # .display_name is the native name, .english_name is the english name
     
@@ -403,13 +424,32 @@ def language_tag_to_language_name(language_id: str, destination_language_id: str
     
     # Add flag emoji
     if include_flag:
-        language_name = f"{language_tag_to_flag_emoji(language_id)} {language_name}"
-    
-    # TEST
-    # language_name += f" [{language_id}]"
+        flag_emoji = locale_to_flag_emoji(locale_str)
+        language_name = f"{flag_emoji} {language_name}"
     
     # Return
     return language_name
+
+
+def locale_to_country_code(locale: str) -> str:
+    
+    # Get locale obj
+    locale_obj = babel.Locale.parse(locale, sep='-')
+
+    # Get country code directly from locale
+    country_code = locale_obj.territory
+    if country_code != None: 
+        return country_code
+
+    # Get country code from emoji flag
+    language_code = locale_obj.language
+    emoji_flag = language_code_to_emoji_flag_map.get(language_code, None)
+    if emoji_flag == None: return None
+
+    country_code = flag_to_country_code(emoji_flag)
+
+    # Return
+    return country_code
 
 def country_code_to_flag(country_code):
     return ''.join(chr(ord(c) + 127397) for c in country_code.upper())
@@ -417,22 +457,65 @@ def country_code_to_flag(country_code):
 def flag_to_country_code(emoji_flag):
     return ''.join(chr(ord(c) - 127397) for c in emoji_flag)
 
-def language_tag_to_flag_emoji(language_id):
+def locale_to_flag_emoji(locale_str: str):
     
-    # Parse language tag
-    locale = babel.Locale.parse(language_id, sep='-')
+    # Parse locale_str
+    locale = babel.Locale.parse(locale_str, sep='-')
     
     # Get flag from country code
     if locale.territory:
         return country_code_to_flag(locale.territory)
     
     # Fallback
-    flag = language_flag_fallback_map.get(locale.language, None)
+    flag = language_code_to_emoji_flag_map.get(locale.language, None)
     if flag:
         return flag
     
     # Fallback to Unicode 'Replacement Character' (Missing emoji symbol/questionmark-in-rectangle symbol)
     return "�" 
+
+#
+# Continent stuff
+#
+
+def all_continent_codes():
+
+    # Unused
+    #   We thought about grouping languages by continent to make the LocalePicker UI nicer,.
+    #   but all of our languages are from Europe or Asia, (with the sole exception of Brazilian Portugese), so that doesn't make sense.
+    #   (We wanted to add some African Languages like Swahili and Amharic, but since macOS itself is not translated into those languages it doesn't really make sense.)
+    #   (^ Last updated: 26.08.2024)
+
+    assert False
+
+    # List of continent codes as per ISO 3166-1
+    continent_codes = ['001', '002', '019', '142', '150', '009']
+    return continent_codes
+
+def continent_code_to_continent_name(continent_code: str, destination_locale_str='en') -> str:
+
+    assert False # Unused
+
+    # Declare result
+    _name = None
+
+    # Create a Locale object for the destination language
+    destination_locale_obj = babel.Locale.parse(destination_locale_str, sep='-')
+        
+    # Get the localized continent name
+    continent_name = destination_locale_obj.territories.get(continent_code)
+
+    # Return
+    return continent_name
+
+def country_code_to_continent_code(country_code: str) -> str:
+
+    assert False # Unused
+
+    continent_code = None # pycountry_convert.country_alpha2_to_continent_code(country_code)
+
+    return continent_code
+
 
 #
 # Markdown parsing (Localizable strings)

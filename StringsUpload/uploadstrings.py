@@ -160,7 +160,7 @@ def main():
             additional_locales = set(repo_locales).difference(set(previous_repo_locales))
             
             def _debug_names(locales):
-                return list(map(lambda l: f'{ mflocales.language_tag_to_language_name(l) } ({l})', locales))
+                return list(map(lambda l: f'{ mflocales.locale_to_language_name(l) } ({l})', locales))
             assert len(missing_locales) == 0, f'There are missing locales in the xcode project {xcodeproj_path} compared to the locales in {previous_xcodeproj_path}:\nmissing_locales: {_debug_names(missing_locales)}\nAdd these locales to the former xcodeproj or remove them from latter xcodeproj to resolve this error.'
             assert len(additional_locales) == 0, f'There are additional locales in the xcode project {xcodeproj_path}, compared to the locales in {previous_xcodeproj_path}:\nadditional_locales: {_debug_names(additional_locales)}\nRemove these locales from the former xcodeproj or add them to latter xcodeproj to resolve this error.'
         
@@ -351,7 +351,7 @@ def main():
     locale_export_dirs = []
     for l in translation_locales:
         
-        language_name = mflocales.language_tag_to_language_name(l)
+        language_name = mflocales.locale_to_language_name(l)
         target_folder = os.path.join(temp_dir, folder_name_format.format(language_name))
         
         for repo_name, repo_info in repo_data.items():
@@ -682,15 +682,15 @@ Thank you so much for your help in bringing Mac Mouse Fix to people around the w
 |:--- |:---:| ---:|
 """
 
-    for locale in sorted(translation_locales, key=lambda l: mflocales.language_tag_to_language_name(l)): # Sort the locales by language name (Alphabetically)
+    for locale in sorted(translation_locales, key=lambda l: mflocales.locale_to_language_name(l)): # Sort the locales by language name (Alphabetically)
         
         progress = localization_progess_all_repos[locale]
         progress_percentage = int(100 * progress['percentage'])
         download_name = 'Download'
         download_url = download_urls[locale]
         
-        emoji_flag = mflocales.language_tag_to_flag_emoji(locale)
-        language_name = mflocales.language_tag_to_language_name(locale)
+        emoji_flag = mflocales.locale_to_flag_emoji(locale)
+        language_name = mflocales.locale_to_language_name(locale)
         
         entry = f"""\
 | {emoji_flag} {language_name} ({locale}) | [{download_name}]({download_url}) | ![Static Badge](https://img.shields.io/badge/{progress_percentage}%25-Translated-gray?style=flat&labelColor={'%23aaaaaa' if progress_percentage < 100 else 'brightgreen'}) |

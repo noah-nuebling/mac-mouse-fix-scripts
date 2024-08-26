@@ -69,17 +69,17 @@ def main():
     vuelangs = []
     
     for locale in locales:
-        
+
         # Get progress string 
         #   For this locale
         progress_display = str(int(100*progress[locale]["percentage"])) + '%' if locale != source_locale else ''
-            
+
         # Compile list-of-languages dict
-        #   (These are parsed as nuxt i18n `LocaleObject`s, but we add the 'progressDisplay' field for our custom logic.)
+        #   (These are parsed as nuxt i18n `LocaleObject`s, (`code` and `name` fields) but we add other fields for our custom logic.)
         vuelangs.append({
             'code': locale,
-            'name': mflocales.language_tag_to_language_name(locale, locale, include_flag=True),
-            'progressDisplay': progress_display
+            'name': mflocales.locale_to_language_name(locale, locale, include_flag=True),
+            'progressDisplay': progress_display,
         })
         
         # Compile new vuestrings dict

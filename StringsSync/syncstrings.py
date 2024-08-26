@@ -59,7 +59,7 @@ def main():
             value = quote['englishQuote']
             comment = ' ' # Setting it to ' ' deletes any comments that have been set in the Xcode .xcstrings GUI
             if quote['originalLanguage'] != 'en':
-                original_language   = mflocales.language_tag_to_language_name(quote['originalLanguage'], 'en', False)
+                original_language   = mflocales.locale_to_language_name(quote['originalLanguage'], 'en', False)
                 original_quote      = quote['originalQuote']
                 comment = f'The original language of this quote is {original_language} - {original_quote}'
             

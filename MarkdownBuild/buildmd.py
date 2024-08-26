@@ -32,8 +32,6 @@ import mflocales
 #
 # (We expect this script to be run from the root directory of the repo)
 
-fallback_language_iddd = "en-US" # REMOVE
-
 development_locale_destination_root = ""                        # Compiled documents in 'development language' will be put into repo_root/development_locale_destination_root/document_subpath
 translation_destination_root = "Markdown/LocalizedDocuments"    # Compiled documents in translated languages will be put into   repo_root/translation_destination_root/locale/document_subpath
 template_root = "Markdown/Templates"                            # Templates are found inside                                    repo_root/template_root/document_subpath
@@ -207,7 +205,7 @@ def main():
             
             fallback_notice = f"""
 <table align="center"><td align="center">
-This document is <code>{progress_percentage}% Translated</code> into the language <code>{mflocales.language_tag_to_language_name(locale, destination_language_id=locale, include_flag=True)}</code>.<br>
+This document is <code>{progress_percentage}% Translated</code> into the language <code>{mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True)}</code>.<br>
 To help translate it, click <a align="center" href="https://github.com/noah-nuebling/mac-mouse-fix/discussions/731">here</a>!
 </td></table>\n\n"""
             template = fallback_notice + template
@@ -236,7 +234,7 @@ To help translate it, click <a align="center" href="https://github.com/noah-nueb
 
 sales_data_cache = None # This cache is used for different language version of the acknowledgements document. Now that we massively sped up getting all the sales through the gumroad_sales_cache.json file, this isn't really necessary anymore. But it doesn't hurt.
 
-def insert_acknowledgements(template, language_id, gumroad_api_key, cache_file, cache_shelf_life, no_api):
+def insert_acknowledgements(template, locale_str, gumroad_api_key, cache_file, cache_shelf_life, no_api):
     
     global sales_data_cache
     
@@ -380,20 +378,6 @@ def insert_acknowledgements(template, language_id, gumroad_api_key, cache_file, 
         
     very_generous_string = ''
     
-    # Notes on babel_language_tag:
-    #   'languageIDs' are used throughout the MMF project and are based on Apples Language IDs, who themselves implement a subset of the BCP 47 specification if I understand correctly. BCP 47 calls it 'language tags'. It seems the terms are interchangable.
-    #   Babel works with so called 'language tags' which also follow the BCP 47 specification. So they seem to be the same thing as Apples language IDs. 
-    #       However, for some reason babel replaces `-` (which is used in the BCP 47 spec that it refers to and by Apple) with `_`. Not sure why. Also, the babel references a really old, outdated version of the BCP 47 spec, but chatGPT said it should still be compatible with the Apple language IDs, 
-    #       so we'll just auto-translate between apple language id and babel language tag by replacing `-` with `_`.
-    
-    #   References:
-    #       - Apple language ID docs: https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPInternational/LanguageandLocaleIDs/LanguageandLocaleIDs.html
-    #       - Babel language tag docs: https://babel.pocoo.org/en/latest/api/core.html
-    #       - BCP 47 specification that babel docs reference: https://datatracker.ietf.org/doc/html/rfc3066.html
-    #       - BCP 47 latest specification at time of writing: https://datatracker.ietf.org/doc/html/rfc5646
-    
-    babel_language_tag = language_id.replace('-', '_') 
-    
     last_month = None
     first_iteration = True
     
@@ -411,7 +395,9 @@ def insert_acknowledgements(template, language_id, gumroad_api_key, cache_file, 
             if not first_iteration:
                 very_generous_string += '\n\n'
             first_iteration = False
-            very_generous_string += '**{}**\n'.format(babel.dates.format_datetime(datetime=date, format='LLLL yyyy', locale=babel_language_tag)) # See https://babel.pocoo.org/en/latest/dates.html and https://babel.pocoo.org/en/latest/api/dates.html#babel.dates.format_datetime.
+            
+            locale = babel.Locale.parse(locale_str, sep='-')
+            very_generous_string += '**{}**\n'.format(babel.dates.format_datetime(datetime=date, format='LLLL yyyy', locale=locale)) # See https://babel.pocoo.org/en/latest/dates.html and https://babel.pocoo.org/en/latest/api/dates.html#babel.dates.format_datetime.
         
         name = display_name(sale)
         message = user_message(sale, name)
@@ -440,7 +426,7 @@ def insert_language_picker(template: str, document_key: str, locale: str, develo
     
     # Process locale
         
-    language_name = f'{mflocales.language_tag_to_language_name(locale, locale, True)}'
+    language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
     
     # Generate language list ui string
     
@@ -449,7 +435,7 @@ def insert_language_picker(template: str, document_key: str, locale: str, develo
         
         is_last = i == len(locales) - 1
         
-        language_name2 = f'{mflocales.language_tag_to_language_name(locale2, locale2, True)}'
+        language_name2 = f'{mflocales.locale_to_language_name(locale2, locale2, True)}'
         
         # Create relative path from the location of the `language_dict` document to the `language_dict2` document. This relative path works as a link. See https://github.blog/2013-01-31-relative-links-in-markup-files/
         path = get_destination_path(document_key, locale, development_locale)
