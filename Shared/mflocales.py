@@ -13,12 +13,51 @@ import mfutils
 # Constants
 #
 
-language_flag_fallback_map = { # When a translation's languageID doesn't contain a country, fallback to these flags
-    'zh': '🇨🇳',       # Chinese maps to China
-    'ko': '🇰🇷',       # Korean maps to South Korea
-    'de': '🇩🇪',       # German maps to Germany
-    'vi': '🇻🇳',       # Vietnamese maps to Vietnam
-    'en': '🇬🇧',       # English maps to UK
+language_flag_fallback_map = { 
+                              
+    # When a translation's languageID doesn't contain a country, fallback to these flags
+    #   Country code reference: https://www.iso.org/obp/ui/#home
+    #   Language code reference: https://www.loc.gov/standards/iso639-2/php/code_list.php
+    
+    'en': '🇬🇧',     # english -> uk
+    'af': '🇿🇦',     # afrikaans -> south africa
+    'de': '🇩🇪',     # german -> germany
+    'ha': '🇳🇬',     # hausa -> nigeria (Hausa is spoken in different countries. The hausa ethnic group has its own flag, but not available as an emoji.)
+    'id': '🇮🇩',     # indonesian -> indonesia
+    'sw': '🇹🇿',     # swahili -> tanzania (Swahili is spoken in different countries. Official language in Kenya and Tanzania. Tanzania has the largest swahili-speaking population.)
+    'nl': '🇳🇱',     # dutch -> netherlands
+    'vi': '🇻🇳',     # vietnamese -> vietnam
+    'tr': '🇹🇷',     # turkish -> turkey
+    'ca': '🇦🇩',     # catalan -> andorra (There's no emoji flag for Catalonia. Catalonia is in Spain. Andorra has Catalan as official language but tiny population.)
+    'da': '🇩🇰',     # danish -> denmark
+    'es': '🇪🇸',     # spanish -> spain
+    'fr': '🇫🇷',     # french -> france
+    'it': '🇮🇹',     # italian -> italy
+    'hu': '🇭🇺',     # hungarian -> hungary
+    'nb': '🇳🇴',     # norwegian bokmål -> norway
+    'pl': '🇵🇱',     # polish -> poland
+    'pt': '🇵🇹',     # portugese -> portugal (This should be unused since we only use the pt-BR and pt-PT locales which include country codes)
+    'ro': '🇷🇴',     # romanian -> romania
+    'sr': '🇷🇸',     # serbian -> serbia
+    'fi': '🇫🇮',     # finnish -> finland
+    'sv': '🇸🇪',     # swedish -> sweden
+    'cs': '🇨🇿',     # czech -> czechia
+    'el': '🇬🇷',     # modern greek -> greece
+    'ru': '🇷🇺',     # russian -> russia
+    'uk': '🇺🇦',     # ukrainian -> ukraine
+    'he': '🇮🇱',     # hebrew -> israel
+    'ar': '🇸🇦',     # arabic -> saudi arabia (Arabic is spoken in many countries. Such as Egypt, Quatar, and United Arab Emirates. ChatGPT says that Saudi Arabia is the birthplace of the language and most iconic representation.)
+    'fa': '🇮🇷',     # persian/farsi -> iran (Interesting fact: Persia renamed itself to Iran in the 1930s)
+    'ne': '🇳🇵',     # nepali -> nepal
+    'hi': '🇮🇳',     # hindi -> india
+    'bn': '🇧🇩',     # bangla -> bangladesh
+    'th': '🇹🇭',     # thai -> thailand
+    'my': '🇲🇲',     # burmese -> myanmar (formerly known as Burma)
+    'am': '🇪🇹',     # amharic -> ethiopia (Amharic is the official language of Ethiopia, and isn't spoken much outside.)
+    'km': '🇰🇭',     # khmer -> cambodia
+    'zh': '🇨🇳',     # chinese -> china
+    'ja': '🇯🇵',     # japanese -> japan    
+    'ko': '🇰🇷',     # korean -> south korea    
 }
 
 language_name_override_map = {
@@ -318,35 +357,74 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     # Return
     return development_locale, translation_locales
     
+def country_code_to_continent_name(country_code: str, destination_language_id='en'):
+    
+    # Credits: Claude
+    
+    assert False # Untested so far
+    
+    # Declare result
+    continent_name = None
+    
+    try:
+        # Get the territory data
+        territory = babel.core.get_global('territory_territories')[country_code.upper()]
+        
+        # Get the continent code
+        continent_code = territory.split('-')[0]
+        
+        # Create a Locale object for the destination language
+        destination_locale_obj = babel.Locale(destination_language_id)
+        
+        # Get the localized continent name
+        continent_name = destination_locale_obj.territories.get(continent_code)
+        
+    except KeyError:
+        pass
+    
+    # Return
+    return continent_name
 
 def language_tag_to_language_name(language_id: str, destination_language_id: str = 'en', include_flag = False):
     
+    # Query override map
     language_name = language_name_override_map.get(destination_language_id, {}).get(language_id)
     
     if language_name == None:
-            
+        
+        # Query babel        
         locale_obj = babel.Locale.parse(language_id, sep='-')
         destination_locale_obj = babel.Locale.parse(destination_language_id, sep='-')
         
         language_name = locale_obj.get_display_name(destination_locale_obj) # .display_name is the native name, .english_name is the english name
     
+    # Capitalize
+    language_name = language_name[0].upper() + language_name[1:]
+    
+    # Add flag emoji
     if include_flag:
         language_name = f"{language_tag_to_flag_emoji(language_id)} {language_name}"
     
+    # TEST
+    # language_name += f" [{language_id}]"
+    
+    # Return
     return language_name
 
+def country_code_to_flag(country_code):
+    return ''.join(chr(ord(c) + 127397) for c in country_code.upper())
+
+def flag_to_country_code(emoji_flag):
+    return ''.join(chr(ord(c) - 127397) for c in emoji_flag)
+
 def language_tag_to_flag_emoji(language_id):
-    
-    # Define helper
-    def get_flag(country_code):
-        return ''.join(chr(ord(c) + 127397) for c in country_code.upper())
     
     # Parse language tag
     locale = babel.Locale.parse(language_id, sep='-')
     
     # Get flag from country code
     if locale.territory:
-        return get_flag(locale.territory)
+        return country_code_to_flag(locale.territory)
     
     # Fallback
     flag = language_flag_fallback_map.get(locale.language, None)
@@ -354,7 +432,7 @@ def language_tag_to_flag_emoji(language_id):
         return flag
     
     # Fallback to Unicode 'Replacement Character' (Missing emoji symbol/questionmark-in-rectangle symbol)
-    return "&#xFFFD;" 
+    return "�" 
 
 #
 # Markdown parsing (Localizable strings)
