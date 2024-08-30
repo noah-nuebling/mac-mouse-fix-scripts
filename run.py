@@ -25,9 +25,10 @@ subcommand_map = {
     
     "create-sfsymbols": f"./SFSymbolsFontCreate",
     "upload-strings": f"./StringsUpload",
+    
     "build-markdown":  [
         lambda args: f"python3 {__file__} sync-strings",                            # We invoke this script again with different subcommands. 
-        lambda args: f"python3 {__file__} __internal_build-markdown {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but breaks the VSCode debugger for some reason.
+        lambda args: f"python3 {__file__} __internal_build-markdown {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
     ],       
     "mmf-website_build-strings": [
         lambda args: f"python3 {__file__} sync-strings",
@@ -274,40 +275,58 @@ def main():
     # Handle requirements
     
     python_interpreter = None
-    if requiremements_path != None:
+    if requiremements_path == None:
+        python_interpreter = 'python3'
+    else:
         
-        # Check if the virtual environment exists
-        #   Not recreating the venv every time speeds things up a lot.
-        venv_exists = os.path.exists(os.path.join(venv_path, 'pyvenv.cfg'))
-        
-        if not venv_exists:
-            
-            # Log
-            print(f"\nrun.py: Creating venv at ./{venv_path} ...")
-            
-            # Create venv
-            # Notes: 
-            # - subprocess.check_call throws an error if the command returns non-zero. Otherwise returns 0
-            # - text=True makes it so we can input the commmand as a single string of text instead of a list of args
-            subprocess.check_call(f"python3 -m venv {venv_path}", text=True, shell=True)
-        else:
-            # Log
-            print(f"\nrun.py: Reusing existing venv at ./{venv_path}. (If there are problems try deleting the venv.)")        
-
         # Get python path for the venv
         venv_python_path = os.path.join(venv_path, 'bin/python')
+
+        # Define helper
+        def create_venv(reuse_existing = True):
+
+            # Check if the virtual environment exists
+            #   Not recreating the venv every time speeds things up a lot.
+            venv_exists = os.path.exists(venv_path)
+            venv_seems_valid = os.path.exists(os.path.join(venv_path, 'pyvenv.cfg')) and os.path.exists(venv_python_path)
             
-        # Log
-        print(f"\nrun.py: Installing requirements from ./{requiremements_path} ...")
+            if (not venv_seems_valid) or (not reuse_existing):
+                
+                
+                if venv_exists:
+                    # Log
+                    print(f"\nrun.py: Deleting existing venv at ./{venv_path} ...")
+                    
+                    # Delete existing venv
+                    subprocess.check_call(f"rm -r ./{venv_path}", text=True, shell=True)
+
+                # Log
+                print(f"\nrun.py: Creating venv at ./{venv_path} ...")
+                
+                # Create venv
+                # Notes: 
+                # - subprocess.check_call throws an error if the command returns non-zero. Otherwise returns 0
+                subprocess.check_call(f"python3 -m venv {venv_path}", text=True, shell=True)
+            else:
+                # Log
+                print(f"\nrun.py: Reusing existing venv at ./{venv_path}. (If there are problems try deleting the venv.)")
         
-        # Install requirements    
-        subprocess.check_call(f'./{venv_python_path} -m pip install -r "{requiremements_path}"', text=True, shell=True)
-        
+        # Define helper
+        def install_requirements():
+            print(f"\nrun.py: Installing requirements from ./{requiremements_path} ...")
+            subprocess.check_call(f'./{venv_python_path} -m pip install -r "{requiremements_path}"', text=True, shell=True)
+
+        # Do stuff
+        create_venv()
+        try:
+            install_requirements()
+        except Exception as e:
+            print(f"\nrun.py: Installing requirements failed with exception:\n{e}\nTrying again without reusing existing venv...")
+            create_venv(reuse_existing=False)
+            install_requirements()
+
         # Tell the WORLD
         python_interpreter = f'./{venv_python_path}'
-    
-    else:
-        python_interpreter = 'python3'
     
     # Log
     print(f"\nrun.py: Loading environ variables from ./{dotenv_path} ...")
@@ -315,7 +334,7 @@ def main():
     # Load environment variables defined in the .env file
     dotenv_vars = load_dotenv()
     
-    # Analyze overlap
+    # Analyze dotenv overlap
     overlapping_env_var_keys = [k for k in dotenv_vars.keys() if k in os.environ.keys()]
     dotenv_overlap = {k: dotenv_vars[k] for k in overlapping_env_var_keys}
     os_overlap = {k: os.environ[k] for k in overlapping_env_var_keys}
@@ -340,6 +359,8 @@ def main():
     #   Update: This doesn't seem to work as I thought it would. stdout and stderr were always None, but the called-scripts' prints were printed to the command line anyways.
     # print(f'\nrun.py: script stderr: {script_result.stderr}', end='\n', file=sys.stderr)
     # print(f'run.py: script stdout: {script_result.stdout}', end='\n', file=sys.stdout)
+
+    # Exit
     exit(script_result.returncode)    
 
 #

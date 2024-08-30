@@ -74,7 +74,7 @@ def main():
         print("")
         
         # Notes:
-        # - Syncing Localizable.strings would require us use a NSLocalizableString-like macro throughout our .vue files.
+        # - Syncing Localizable.strings would require us use a NSLocalizedString-like macro throughout our .vue files.
         #   (So we can extract the strings from the source code with a regex)
         #   This would require big refactor and is not worth it right now, I think.
         
