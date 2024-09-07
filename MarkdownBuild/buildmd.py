@@ -58,6 +58,8 @@ def get_template_path(document_key: str) -> str:
 
 # !! Amend custom_field_labels if you change the UI strings on Gumroad !!
 
+show_locale_threshold = 0.5 # If the translation progress of a locale is greater than this, we show it in the locale picker. (E.g. 0.6 means: Only show locales that are more than 60% complete)
+
 sales_count_rounder = 100 # Round sales counts to multiple of this number. This is to prevent the acknowledgements file from changing on every sale, which clogs up commit history a bit.
 
 gumroad_sales_cache_file = "Markdown/gumroad_sales_cache.json"  # DONT leak this. If you move/rename this, make sure it's covered by .gitignore. It's inside the Markdown folder to be a bit more hidden.
@@ -186,11 +188,11 @@ def main():
         if document_key == "readme":
             template = insert_root_paths(template, document_root, document_subpath)
             template = template.replace('{locale_code}', locale)
-            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales)
+            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales, translation_progress)
         elif document_key == "acknowledgements":
             template = insert_root_paths(template, document_root, document_subpath) # This is not currently necessary here since we don't use the {root_path} placeholder in the acknowledgements templates
             template = template.replace('{locale_code}', locale) # Haven't checked if this is necessary
-            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales)
+            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales, translation_progress)
             template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
         else:
             assert False # Should never happen because we check document_key for validity above.
@@ -425,12 +427,15 @@ def insert_acknowledgements(template, locale_str, gumroad_api_key, cache_file, c
     # Return
     return template
     
-def insert_language_picker(template: str, document_key: str, locale: str, development_locale: str, locales: list[str]):
+def insert_language_picker(template: str, document_key: str, locale: str, development_locale: str, locales: list[str], translation_progress: dict):
     
-    # Process locale
-        
+    # Process `locale`
     language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
     
+    # Filter locales
+    #   Note: We filter out locales whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See MMF Website source code for discussion.
+    locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
+
     # Generate language list ui string
     
     ui_language_list = ''

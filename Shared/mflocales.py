@@ -148,7 +148,7 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
             '<locale>': {
                 'translated': <number of translated strings>,
                 'to_translate': <number of strings that should be translated overall>,
-                'percentage': <percentage of strings that should be translated, which actually have been translated>,
+                'percentage': <fraction of strings that should be translated, which actually have been translated (as a float between 0.0 and 1.0)>,
                 'missing_keys': <list of localizationKeys that should be translated but aren't translated.>
         }
         
