@@ -283,6 +283,14 @@ class JSONEncoder(json.JSONEncoder):
 #   Created and documented here: https://regex101.com/r/mntroB
 mdlink_regex = r'\[[^\]]+?\]\(([^\)]+?)\)'
 
+def int_to_letter(n: int):
+    # Maps 1 -> a, 2 -> b, 3 -> c, ...
+    return chr(96 + n)
+
+def int_to_LETTER(n: int):
+    # Maps 1 -> A, 2 -> B, 3 -> C, ...
+    return chr(64 + n)
+
 def replace_markdown_urls_with_format_specifiers(md_string: str):
 
     # Replace the urls of the [markdown](links) inside `md_string` with url<X> format specifiers (Such as '{url1}', '{url2}', etc)
@@ -317,10 +325,11 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
         nonlocal url_ctr
         url_ctr += 1
         
-        if url_count == 1:
-            replacement = match.group(0).replace(match.group(1), r'{url}')    
-        else:
-            replacement = match.group(0).replace(match.group(1), f'{{url_{url_ctr}}}')    
+        placeholder = r'{url}'
+        if url_count != 1:
+            placeholder = f'{{url_{url_ctr}}}'
+
+        replacement = match.group(0).replace(match.group(1), placeholder)
 
         return replacement
 
@@ -344,15 +353,20 @@ def replace_format_specifiers_with_markdown_urls(md_string: str, urls: list[str]
     #       Output: 
     #           "Some [cool](https://google.com) stuff"
 
+    # Get info
+    url_count = len(urls)
+
     # Format
     result = md_string
-    
-    url_count = len(urls)
-    if url_count == 1:
-        result = result.replace(r'{url}', urls[0])
-    else:
-        for url_ctr, url in enumerate(urls, 1):
-            result = result.replace(f'{{url_{url_ctr}}}', url)
+    for url_ctr, url in enumerate(urls, 1):
+
+        placeholder = r'{url}'
+        if url_count != 1:
+            placeholder = f'{{url_{url_ctr}}}'
+
+        assert placeholder in result, f'mfutils: URL placeholder "{placeholder}" not found while trying to insert urls into markdown string:\n{md_string}'
+
+        result = result.replace(placeholder, url)
 
     # Return result
     return result
