@@ -16,6 +16,8 @@ import argparse
 import mfutils
 import mflocales
 
+from dataclasses import dataclass
+
 #
 # Constants
 #
@@ -25,13 +27,24 @@ main_repo = {
         'Markdown/Templates/Acknowledgements.md',
         'Markdown/Templates/Readme.md',
     ],
-    'xcstrings_path': "Markdown/Markdown.xcstrings" # The .xcstrings file we want to update with the strings from the .md files.
+    'xcstrings_path': "Markdown/Markdown.xcstrings", # The .xcstrings file we want to update with the strings from the .md files.
 }
 website_repo = {
     'quotes_tool_path': "./utils/quotesTool.mjs",
     'quotes_xcstrings_path': "./locales/Quotes.xcstrings",
     'main_xcstrings_path': "./locales/Localizable.xcstrings",
 }
+
+#
+# Types
+# 
+
+
+@dataclass
+class ExtractedString:
+    comment: str
+    key: str
+    value: str
 
 #
 # Main
@@ -53,7 +66,7 @@ def main():
         # Note: 
         #   I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
         quotes = json.loads(mfutils.runclt(['node', website_repo['quotes_tool_path']], cwd=target_repo))
-        extracted_strings = []
+        extracted_strings: list[ExtractedString] = []
         for quote in quotes:
             key = quote['quoteKey']
             value = quote['englishQuote']
@@ -63,7 +76,7 @@ def main():
                 original_quote      = quote['originalQuote']
                 comment = f'The original language of this quote is {original_language} - {original_quote}'
             
-            extracted_strings.append({'comment': comment, 'key': key, 'value': value})
+            extracted_strings.append(ExtractedString(comment, key, value))
         
         # Call subfunc
         quotes_xcstrings_path = os.path.join(target_repo, website_repo['quotes_xcstrings_path'])
@@ -92,7 +105,7 @@ def main():
         print("")
         
         # Extract strings from source_files
-        extracted_strings = []
+        extracted_strings: list[ExtractedString] = []
         for source_file in main_repo['source_paths']:
             
             # Load content
@@ -115,12 +128,18 @@ def main():
                 
                 if old_indent_level != new_indent_level:
                     print(f'syncstrings.py: [Changed {key} indentation from {old_indent_level}*"{old_indent_char}" -> {new_indent_level}*"{new_indent_char}"]\n')
-                
+
+                # Remove all mdlink urls from extracted strings
+                #       And replace with {url1}, {url2}, etc.
+                #   Discussion: We do this so there's less margin for error for localizers. 
+                ui_string = mfutils.replace_markdown_urls_with_format_specifiers(ui_string).md_string
+
                 # Store result
                 #   In .stringsdata format
-                extracted_strings.append({'comment': comment, 'key': key, 'value': ui_string})
+                extracted_strings.append(ExtractedString(comment, key, ui_string))
+            
 
-        # Call subfunc
+        # Call subfuncs
         update_xcstrings(main_repo['xcstrings_path'], extracted_strings)
     
     else:
@@ -129,8 +148,8 @@ def main():
 # Helper
 #
 
-def update_xcstrings(xcstrings_path, extracted_strings):
-    
+def update_xcstrings(xcstrings_path: str, extracted_strings: list[ExtractedString]):
+
     # Create .stringsdata file
     #   Notes on stringsTable name: 
     #       Each .xcstrings file represents one stringsTable (and should be (has to be?) named after it). 
@@ -148,7 +167,7 @@ def update_xcstrings(xcstrings_path, extracted_strings):
     stringsdata_path = None
     with tempfile.NamedTemporaryFile(delete=False, suffix=".stringsdata", mode='w') as file: # Not sure what the 'delete' option does
         # write data
-        json.dump(stringsdata_content, file, indent=2)
+        json.dump(stringsdata_content, file, indent=2, cls=mfutils.JSONEncoder)
         # Store file path
         stringsdata_path = file.name
     

@@ -85,7 +85,7 @@ language_code_to_emoji_flag_map = {
     'hu': '🇭🇺',     # hungarian -> hungary
     'nb': '🇳🇴',     # norwegian bokmål -> norway
     'pl': '🇵🇱',     # polish -> poland
-    'pt': '🇵🇹',     # portugese -> portugal (This should be unused since we only use the pt-BR and pt-PT locales which include country codes)
+    'pt': '🇵🇹',     # portugese -> portugal (This should be unused since we only use the pt-BR and pt-PT locales which include country codes, and our code will figure out the flag from that.)
     'ro': '🇷🇴',     # romanian -> romania
     'sr': '🇷🇸',     # serbian -> serbia
     'fi': '🇫🇮',     # finnish -> finland
@@ -111,10 +111,10 @@ language_code_to_emoji_flag_map = {
 
 language_name_override_map = {
     'en': {
-        'zh-HK': 'Chinese (Honk Kong)', # The native Babel name for this locale is way too long. This is name used by Apple.
+        'zh-HK': 'Chinese (Honk Kong)', # I think this is unused?
     },
     'zh-HK': {
-        'zh-HK': '中文（香港)',
+        'zh-HK': '中文（香港)', # The native Babel name for this locale is way too long. This is name used by Apple.
     }
 }
 

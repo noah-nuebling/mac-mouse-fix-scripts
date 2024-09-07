@@ -22,6 +22,8 @@ import shlex
 import platform
 import re
 
+from dataclasses import dataclass
+
 #
 # Command line tools
 #
@@ -254,8 +256,107 @@ def set_indent(string: str, indent_level: int, indent_character: chr) -> str:
     
     # Return
     return string
+
+#
+# JSON
+#
+
+import dataclasses, json
+
+class JSONEncoder(json.JSONEncoder):
+        
+    # JSON encoder that can encode `@dataclass`es
+    #   Usage example:
+    #       json.dumps(foo, cls=mfutils.JSONEncoder)
+
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        return super().default(o)
+
+#
+# Markdown
+#  
+
+# Define mdlink regex
+#   Matches markdown links. [The](url) is captured in the first group.
+#   Created and documented here: https://regex101.com/r/mntroB
+mdlink_regex = r'\[[^\]]+?\]\(([^\)]+?)\)'
+
+def replace_markdown_urls_with_format_specifiers(md_string: str):
+
+    # Replace the urls of the [markdown](links) inside `md_string` with url<X> format specifiers (Such as '{url1}', '{url2}', etc)
+    #       Also returns a list of the removed urls.
+    #   Note: We thought about using c-style/IEEE-style format specifiers (e.g. '%2$s') since those are highlighed by Xcode when editing .xcstrings files, and localizers should be used to them from localizing the main app, but python-style specifiers are easier to implement for now. If localizers struggle with this, we could change it.
+    #   
+    #   Example:
+    #       Input: 
+    #           "Some [cool](https://google.com) stuff"
+    #       Output: 
+    #           md_string = "Some [cool]({url1}) stuff"
+    #           removed_urls = ["https://google.com"]
+
+    # Declare result type
+    @dataclass
+    class Result:
+        md_string: str
+        removed_urls: list[str]
+
+    # Declare vars
+    result_md_string = None
+    removed_urls = []
+    url_ctr = 0
+    url_count = -1
+
+    # Declare helper function
+    #   For re.sub()
+    def get_replacement(match: re.Match) -> str:
+
+        removed_urls.append(match.group(1))
+
+        nonlocal url_ctr
+        url_ctr += 1
+        
+        if url_count == 1:
+            replacement = match.group(0).replace(match.group(1), r'{url}')    
+        else:
+            replacement = match.group(0).replace(match.group(1), f'{{url_{url_ctr}}}')    
+
+        return replacement
+
+    # Get url_count
+    url_count = len(re.findall(mdlink_regex, md_string, 0))
+
+    # Call re.sub()
+    result_md_string = re.sub(mdlink_regex, get_replacement, md_string, 0, 0)
+
+    # Return
+    return Result(result_md_string, removed_urls)
+
+def replace_format_specifiers_with_markdown_urls(md_string: str, urls: list[str]) -> str:
+
+    # Replace url<X> format specifiers (such as '{url1}', '{url2}', etc) inside `md_string` with the urls from `urls`
+    #
+    # Example:
+    #       Input: 
+    #           md_string = "Some [cool]({url1}) stuff"
+    #           urls = ["https://google.com/"]
+    #       Output: 
+    #           "Some [cool](https://google.com) stuff"
+
+    # Format
+    result = md_string
     
-    
+    url_count = len(urls)
+    if url_count == 1:
+        result = result.replace(r'{url}', urls[0])
+    else:
+        for url_ctr, url in enumerate(urls, 1):
+            result = result.replace(f'{{url_{url_ctr}}}', url)
+
+    # Return result
+    return result
+
 #
 # Files
 #

@@ -167,6 +167,10 @@ def main():
             if best_locale != locale:
                 print(f"Couldn't find translation for {key} in locale {locale}. Fell back to {best_locale} ")
             
+            # Insert urls from the template
+            urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(full_match).removed_urls
+            translation = mfutils.replace_format_specifiers_with_markdown_urls(translation, urls_from_template)
+
             # Apply the original indentation to the translated value
             indent_level, indent_char = mfutils.get_indent(value)
             assert indent_char == ' ' or indent_char == None
@@ -181,9 +185,11 @@ def main():
         # Insert into template
         if document_key == "readme":
             template = insert_root_paths(template, document_root, document_subpath)
+            template = template.replace('{locale_code}', locale)
             template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales)
         elif document_key == "acknowledgements":
             template = insert_root_paths(template, document_root, document_subpath) # This is not currently necessary here since we don't use the {root_path} placeholder in the acknowledgements templates
+            template = template.replace('{locale_code}', locale) # Haven't checked if this is necessary
             template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales)
             template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
         else:
@@ -224,9 +230,6 @@ To help translate it, click <a align="center" href="https://github.com/noah-nueb
         
         # Log
         print('Wrote result to {}'.format(destination_path))
-    
-
-
 
 # 
 # Template inserters 
@@ -480,7 +483,7 @@ def insert_root_paths(template, document_root, document_subpath):
     language_root = os.path.join(repo_root, document_root, '')
     
     template = template.replace('{repo_root}', repo_root)
-    template = template.replace('{language_root}', language_root)
+    template = template.replace('{language_root}', language_root) # Maybe rename to 'locale_root'? We try to use 'locale' consistently in the python scripts now (as of 07.09.2024, see mflocales.py discussion)
     
     return template
 
