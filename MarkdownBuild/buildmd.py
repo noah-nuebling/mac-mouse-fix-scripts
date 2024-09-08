@@ -58,7 +58,7 @@ def get_template_path(document_key: str) -> str:
 
 # !! Amend custom_field_labels if you change the UI strings on Gumroad !!
 
-show_locale_threshold = 0.5 # If the translation progress of a locale is greater than this, we show it in the locale picker. (E.g. 0.6 means: Only show locales that are more than 60% complete)
+show_locale_threshold = 0.5 # If the translation progress of a locale is greater than this, we show it in the locale picker. (E.g. 0.6 means: Only show locales that are more than 60% complete) || Note: Keep this in sync with `showLocaleThreshold` on the MMF Website.
 
 sales_count_rounder = 100 # Round sales counts to multiple of this number. This is to prevent the acknowledgements file from changing on every sale, which clogs up commit history a bit.
 
@@ -159,6 +159,9 @@ def main():
         # Log
         print('Inserting translations into template at path {}...'.format(template_path))
         
+        # Decare loop state
+        missing_translations = []
+
         # Translate the template
         for key, value, comment, full_match in mflocales.get_localizable_strings_from_markdown(template):
             
@@ -167,7 +170,7 @@ def main():
             
             # Log
             if best_locale != locale:
-                print(f"Couldn't find translation for {key} in locale {locale}. Fell back to {best_locale} ")
+                missing_translations.append({ "key": key, "best_locale": best_locale })
             
             # Insert urls from the template
             urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(full_match).removed_urls
@@ -181,6 +184,11 @@ def main():
             # Replace with translation
             template = template.replace(full_match, translation)
         
+        # Log missing translations
+        if len(missing_translations) > 0:
+            s = ',\n'.join(list(map(lambda t: f"{t['key']} -> {t['best_locale']}", missing_translations)))
+            print(f"Used fallbacks for some strings since they weren't available in {locale}:\n{s}\n")
+
         # Log
         print(f'Inserting generated strings into template at {template_path}...')
         
@@ -433,7 +441,7 @@ def insert_language_picker(template: str, document_key: str, locale: str, develo
     language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
     
     # Filter locales
-    #   Note: We filter out locales whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See MMF Website source code for discussion.
+    #   Note: We filter out locales whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See usage of `showLocaleThreshold` in the MMF Website.
     locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
 
     # Generate language list ui string

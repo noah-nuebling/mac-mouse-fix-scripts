@@ -116,7 +116,7 @@ def main():
             for key, ui_string, comment, full_match in mflocales.get_localizable_strings_from_markdown(content):
                 
                 # Print
-                print(f"syncstrings.py: k:\n{key}\nv:\n{ui_string}\nc:\n{comment}\n-----------------------\n")
+                print(f"syncstrings.py:\nk:\n{key}\nv:\n{ui_string}\nc:\n{comment}\n-----------------------\n")
                             
                 # Remove indentation from ui_string 
                 #   (Otherwise translators have to manually add indentation to every indented line)
@@ -127,7 +127,7 @@ def main():
                 new_indent_level, new_indent_char = mfutils.get_indent(ui_string)
                 
                 if old_indent_level != new_indent_level:
-                    print(f'syncstrings.py: [Changed {key} indentation from {old_indent_level}*"{old_indent_char}" -> {new_indent_level}*"{new_indent_char}"]\n')
+                    print(f'syncstrings.py: [Changed {key} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
 
                 # Remove all mdlink urls from extracted strings
                 #       And replace with {url1}, {url2}, etc.
