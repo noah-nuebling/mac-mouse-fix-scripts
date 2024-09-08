@@ -157,7 +157,9 @@ def main():
             template = f.read()
 
         # Do conditional rendering
-        #   Explanation: In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` to render the section only in case <some condition> is set to `True` in this dict.
+        #   Explanation: 
+        #   - In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` (we also call these 'jinja-style if-blocks') to render the section only in case <some condition> is set to `True` in the render_condition_dict.
+        #   - Using show_localization_progress, we hide the note about the localization progress in case the locale is 100% translated. This follows the logic we use for showing the localization progress on the MMF Website.
         render_condition_dict = {
             'show_localization_progress': (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0),
         }
@@ -434,7 +436,7 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
     language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
     
     # Filter locales
-    #   Note: We filter out locales whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See usage of `showLocaleThreshold` in the MMF Website.
+    #   Note: We filter out locales from the locale picker whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See usage of `showLocaleThreshold` in the MMF Website.
     locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
 
     # Generate language list ui string
