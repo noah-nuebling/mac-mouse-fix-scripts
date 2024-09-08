@@ -16,7 +16,7 @@ import argparse
 import mfutils
 import mflocales
 
-from dataclasses import dataclass
+from dataclasses import dataclass, astuple
 
 #
 # Constants
@@ -113,11 +113,13 @@ def main():
             with open(source_file, 'r') as file:
                 content = file.read()
             
-            for key, ui_string, comment, full_match in mflocales.get_localizable_strings_from_markdown(content):
+            for st in mflocales.get_localizable_strings_from_markdown(content):
                 
+                ui_string = st.value
+
                 # Print
-                print(f"syncstrings.py:\nk:\n{key}\nv:\n{ui_string}\nc:\n{comment}\n-----------------------\n")
-                            
+                print(f"syncstrings.py:\nk:\n{st.key}\nv:\n{ui_string}\nc:\n{st.comment}\n-----------------------\n")
+                  
                 # Remove indentation from ui_string 
                 #   (Otherwise translators have to manually add indentation to every indented line)
                 #   (When we insert the translated strings back into the .md we have to add the indentation back in.)
@@ -127,7 +129,7 @@ def main():
                 new_indent_level, new_indent_char = mfutils.get_indent(ui_string)
                 
                 if old_indent_level != new_indent_level:
-                    print(f'syncstrings.py: [Changed {key} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
+                    print(f'syncstrings.py: [Changed {st.key} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
 
                 # Remove all mdlink urls from extracted strings
                 #       And replace with {url1}, {url2}, etc.
@@ -136,7 +138,7 @@ def main():
 
                 # Store result
                 #   In .stringsdata format
-                extracted_strings.append(ExtractedString(comment, key, ui_string))
+                extracted_strings.append(ExtractedString(st.comment, st.key, ui_string))
             
 
         # Call subfuncs

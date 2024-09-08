@@ -278,6 +278,80 @@ class JSONEncoder(json.JSONEncoder):
 # Markdown
 #  
 
+def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[str, bool]) -> str:
+
+    """
+    
+    Arguments: 
+        `string` that contains jinja-style if-blocks. 
+        `condition_dict` that specifies which jinja-style-if-blocks's content should be included in the output and which should be omitted
+
+    Example 1:
+        Input: 
+            condition_dict: 
+                { 'some_conddd': False }
+            string:
+                blabla
+                {% if some_conddd %}
+                Cool Content
+                {% endif %}
+                blub
+        Output:
+                blabla
+                blub
+    Example 2:
+        Input:
+            condition_dict: 
+                { 'some_conddd': True }
+            string:
+                blabla
+                {% if some_conddd %}
+                Cool Content
+                {% endif %}
+                blub
+        Output:
+            blabla
+            Cool Content
+            blub
+    
+    Notes:
+    - Regex was created and tested here: https://regex101.com/r/9iFynq
+    - Example of using real jinja if-blocks for conditional rendering: https://stackoverflow.com/questions/27786948/conditional-rendering-of-html-segment-using-render-template
+    - If we need more powerful stuff for our md templates, we should probably actually use jinja instead of reimplementing its functionality. 
+    """
+
+    result = string
+
+    regex = r'{%\s*?if\s*(.*?)\s*?%}\n(.*?)\n{%\s*?endif\s*?%}'
+
+    all_conditions_in_string: list[str] = []
+
+    for match in re.finditer(regex, string, re.MULTILINE | re.DOTALL):
+
+        full_match = match.group(0)
+        condition, content = match.groups()
+
+        assert len(full_match) > 0
+        assert len(condition) > 0
+        assert ' ' not in condition
+        assert '\n' not in condition
+        assert condition in condition_dict
+
+        do_render = condition_dict[condition]
+
+        if do_render:
+            result = result.replace(full_match, content)
+        else:
+            result = result.replace(full_match, '')
+        
+        all_conditions_in_string.append(condition)
+    
+    assert all_conditions_in_string == list(condition_dict.keys())
+
+    return result
+
+            
+
 # Define mdlink regex
 #   Matches markdown links. [The](url) is captured in the first group.
 #   Created and documented here: https://regex101.com/r/mntroB

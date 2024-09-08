@@ -56,6 +56,8 @@ import babel.languages
 import babel.lists
 import mfutils
 
+from dataclasses import dataclass
+
 #
 # Constants
 #
@@ -521,21 +523,20 @@ def country_code_to_continent_code(country_code: str) -> str:
 # Markdown parsing (Localizable strings)
 #
 
-def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str, str, str]]:
+def get_localizable_strings_from_markdown(md_string: str):
+
+    # Declare return type
+    @dataclass
+    class LocalizedStringData:
+        condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %})
+        key: str                    # a.key.that identifies the string across different languages
+        value: str                  # The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
+        comment: str | None         # A comment providing context for translators.
+        full_match: str             # The entire substring of the .md file that we extracted the key, value, and comment from. Replace all full_matches with translated strings to localize the .md file.
 
     """
-    Returns a list of localizable strings extracted from the `md_string`.
-    
-    Each tuple in the list has the structure (key, value, comment, full_match)
-        key: 
-            a.key.that identifies the string across different languages
-        value: 
-            The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
-        comment: 
-            A comment providing context for translators.
-        full_match: 
-            The entire substring of the .md file that we extracted the key, value, and comment from. Replace all full_matches with translated strings to localize the .md file.
-    
+    Returns a list of LocalizedStringData instances extracted from the `md_string`.
+        
     The localizable strings inside the .md file can be specified in 2 ways: Using the `inline syntax` or the `block syntax`.
     
     The `inline sytax` follows the pattern:
@@ -553,16 +554,20 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
     The `block syntax` follows the pattern:
 
         ```
+        [if: <condition>]
         key: <key>
         ```
         <value>
         ```
         comment: <comment>
         ```
+
+        The `if: <condition>` line can also be omitted.
         
         Example:
         
             ```
+            if: do_acknowledge
             key: acknowledgements.body
             ```
             Big thanks to everyone using Mac Mouse Fix.
@@ -571,7 +576,6 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
             ```
             comment: This is the intro for the acknowledgements document
             ```
-            
 
     Keep in mind!
     
@@ -598,9 +602,7 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
             
             abcefghijklmnop
             qrstuvwxyz
-            
-            
-            
+
             ```
             comment: <comment>
             ```
@@ -609,9 +611,8 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
             Since, this way, translators will never have to add blank lines above or below their content to make the layout of the .md file work as intended.
             
     Notes:
-    - Use https://regex101.com to design and test regexes like the ones used here.
+    - The block syntax was created in this regex101 project: https://regex101.com/r/IcHuN0
     - To test, you might want to post the whole .md file on regex101. That way you can see any under or overmatching which might not be obvious when testing a smaller example string.
-    
     """
 
     # Extract translatable strings with inline syntax
@@ -621,20 +622,21 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
     
     # Extract translatable strings with block syntax
     
-    block_regex = r"```\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```" 
+    block_regex = r"```(?:\n\s*?if:\s*(.*?)\s*)?\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```"
     block_matches = re.finditer(block_regex, md_string, re.DOTALL | re.MULTILINE)
 
     # Assemble result
 
     all_matches = list(map(lambda m: ('inline', m), inline_matches)) + list(map(lambda m: ('block', m), block_matches))
     
-    result = []
+    result: list[LocalizedStringData] = []
         
     for match in all_matches:
         
         # Get info from match
         
         full_match = match[1].group(0)
+        condition = None
         comment = None
         value = None
         key = None
@@ -642,18 +644,19 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
         if match[0] == 'inline':
             value, key, comment = match[1].groups()
         elif match[0] == 'block':
-            key, value, comment = match[1].groups()    
+            condition, key, value, comment = match[1].groups()    
         else: 
             assert False    
 
         # Validate
+        assert ' ' not in (condition or ''), f'condition contains space: {condition}'
         assert ' ' not in key, f'key contains space: {key}' # I don't think keys are supposed to contain spaces in objc and swift. We're trying to adhere to the standard xcode way of doing things. 
         assert len(key) > 0   # We need a key to do anything useful
         assert len(value) > 0 # English ui strings are defined directly in the markdown file - don't think this should be empty
-        for str in [value, key, comment]:
-            assert r'}}' not in str # Protect against matching past the first occurrence of }}
-            assert r'||' not in str # Protect against ? - this is weird
-            assert r'{{' not in str # Protect against ? - this is also weird
+        for st in [condition or '', value, key, comment]:
+            assert r'}}' not in st # Protect against matching past the first occurrence of }}
+            assert r'||' not in st # Protect against ? - this is weird
+            assert r'{{' not in st # Protect against ? - this is also weird
         # TODO: Maybe somehow protect against over matching on block syntax, too
         
         # Stript results
@@ -663,7 +666,7 @@ def get_localizable_strings_from_markdown(md_string: str) -> list[tuple[str, str
         comment = comment.strip() 
         
         # Store
-        result.append((key, value, comment, full_match))
+        result.append(LocalizedStringData(condition, key, value, comment, full_match))
     
     # Return
     

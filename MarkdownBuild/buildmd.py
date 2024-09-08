@@ -155,52 +155,57 @@ def main():
         template = ""
         with open(template_path, ) as f:
             template = f.read()
-        
+
+        # Do conditional rendering
+        #   Explanation: In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` to render the section only in case <some condition> is set to `True` in this dict.
+        render_condition_dict = {
+            'show_localization_progress': (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0),
+        }
+        template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
+
         # Log
-        print('Inserting translations into template at path {}...'.format(template_path))
-        
+        print('buildmd.py: Inserting translations into template at path {}...'.format(template_path))
+
         # Decare loop state
         missing_translations = []
 
         # Translate the template
-        for key, value, comment, full_match in mflocales.get_localizable_strings_from_markdown(template):
-            
+        for st in mflocales.get_localizable_strings_from_markdown(template):
+
             # Get the translated value
-            translation, best_locale = mflocales.get_translation(xcstrings, key, locale)
-            
+            translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
+
             # Log
             if best_locale != locale:
-                missing_translations.append({ "key": key, "best_locale": best_locale })
+                missing_translations.append({ "key": st.key, "best_locale": best_locale })
             
-            # Insert urls from the template
-            urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(full_match).removed_urls
+            # Insert urls from the template into the translation
+            urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(st.value).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
             translation = mfutils.replace_format_specifiers_with_markdown_urls(translation, urls_from_template)
 
-            # Apply the original indentation to the translated value
-            indent_level, indent_char = mfutils.get_indent(value)
+            # Apply the original indentation to the translation
+            indent_level, indent_char = mfutils.get_indent(st.value)
             assert indent_char == ' ' or indent_char == None
             translation = mfutils.set_indent(translation, indent_level, ' ')
             
-            # Replace with translation
-            template = template.replace(full_match, translation)
+            # Insert translation into template
+            template = template.replace(st.full_match, translation)
         
         # Log missing translations
         if len(missing_translations) > 0:
             s = ',\n'.join(list(map(lambda t: f"{t['key']} -> {t['best_locale']}", missing_translations)))
-            print(f"Used fallbacks for some strings since they weren't available in {locale}:\n{s}\n")
+            print(f"buildmd.py: Used fallbacks for some strings since they weren't available in {locale}:\n{s}\n")
 
         # Log
-        print(f'Inserting generated strings into template at {template_path}...')
+        print(f'buildmd.py: Inserting generated strings into template at {template_path}...')
         
         # Insert into template
         if document_key == "readme":
             template = insert_root_paths(template, document_root, document_subpath)
-            template = template.replace('{locale_code}', locale)
-            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales, translation_progress)
+            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
         elif document_key == "acknowledgements":
             template = insert_root_paths(template, document_root, document_subpath) # This is not currently necessary here since we don't use the {root_path} placeholder in the acknowledgements templates
-            template = template.replace('{locale_code}', locale) # Haven't checked if this is necessary
-            template = insert_language_picker(template, document_key, locale, development_locale, iterated_locales, translation_progress)
+            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
             template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
         else:
             assert False # Should never happen because we check document_key for validity above.
@@ -213,18 +218,6 @@ def main():
         if not is_fully_formatted:
             print(f"Something went wrong. Template at '{template_path}' still has format field(s) after inserting: {template_fields}")
             sys.exit(1)
-        
-        # Insert fallback notice
-        if locale != development_locale and translation_progress[locale]['percentage'] != 1.0:
-            
-            progress_percentage = int(100 * translation_progress[locale]['percentage'])
-            
-            fallback_notice = f"""
-<table align="center"><td align="center">
-This document is <code>{progress_percentage}% Translated</code> into the language <code>{mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True)}</code>.<br>
-To help translate it, click <a align="center" href="https://github.com/noah-nuebling/mac-mouse-fix/discussions/731">here</a>!
-</td></table>\n\n"""
-            template = fallback_notice + template
         
         # Add comment to the top of the document which says that it is autogenerated
         template = "<!-- THIS FILE IS AUTOMATICALLY GENERATED - EDITS WILL BE OVERRIDDEN -->\n" + template
@@ -435,7 +428,7 @@ def insert_acknowledgements(template, locale_str, gumroad_api_key, cache_file, c
     # Return
     return template
     
-def insert_language_picker(template: str, document_key: str, locale: str, development_locale: str, locales: list[str], translation_progress: dict):
+def insert_locale_stuff(template: str, document_key: str, locale: str, development_locale: str, locales: list[str], translation_progress: dict):
     
     # Process `locale`
     language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
@@ -445,7 +438,6 @@ def insert_language_picker(template: str, document_key: str, locale: str, develo
     locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
 
     # Generate language list ui string
-    
     ui_language_list = ''
     for i, locale2 in enumerate(locales):
         
@@ -473,12 +465,19 @@ def insert_language_picker(template: str, document_key: str, locale: str, develo
         
     # Log    
     print(f'\nLanguage picker language list generated for language "{language_name}":\n{ui_language_list}\n')
-    # print('Inserting into template:\n\n{}\n'.format(template))
     
-    # Insert generated strings into template
-    # template = template.format(current_language=language_name, language_list=ui_language_list)
-    template = template.replace('{current_language}', language_name).replace('{language_list}', ui_language_list)
+    # Insert language list
+    #   template = template.format(current_language=language_name, language_list=ui_language_list)
+    template = template.replace('{language_list}', ui_language_list)
     
+    # Gather info
+    localization_progress_str = '100%' if (locale == development_locale) else (str(int(100 * translation_progress[locale]['percentage'])) + '%')
+
+    # Insert other stuff    
+    template = template.replace('{locale_code}', locale)
+    template = template.replace('{localization_progress}', localization_progress_str)
+    template = template.replace('{current_language}', mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True)) # Note: Maybe rename current_language to locale_name?
+
     # Return
     return template
 

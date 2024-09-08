@@ -248,7 +248,7 @@ def main():
     if not (subcommand in subcommand_map.keys()):
         print_help_and_exit(subcommand)
     
-    # Implement special subcommands 
+    # Implement special subcommands in the subcommand_map
     #   that contain custom command-line-tool-invocations
 
     if isinstance(subcommand_map[subcommand], list):
@@ -257,7 +257,10 @@ def main():
             commandline_string = commandline_string_maker(shlex.join(subcommand_args))
             print(f'\nrun.py: Running clt {commandline_string} ...\n')
             commandline_list = shlex.split(commandline_string) # shlex allows you to escape whitespace inside a single arg with \ or "with quotes". Just like the shell!
-            subprocess.run(commandline_list)
+            result = subprocess.run(commandline_list)
+            print(f'\nrun.py: clt returned with code {result.returncode} ({commandline_string})\n')
+            if result.returncode != 0:
+                sys.exit(result.returncode)
         
         exit(0)        
     
