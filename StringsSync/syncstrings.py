@@ -22,12 +22,12 @@ from dataclasses import dataclass, astuple
 # Constants
 #
 
-main_repo = {
+main_repo = { # Maybe we should reuse construct_path() from buildmd.py instead of this stuff, (or maybe just combine those two scripts into one)
     'source_paths': [ # The .md file from which we want to extract strings.
         'Markdown/Templates/Acknowledgements.md',
         'Markdown/Templates/Readme.md',
     ],
-    'xcstrings_path': "Markdown/Markdown.xcstrings", # The .xcstrings file we want to update with the strings from the .md files.
+    'xcstrings_dir': "Markdown/Strings/", # The folder where all the .xcstrings files are, which we want to update with the strings from the .md files.
 }
 website_repo = {
     'quotes_tool_path': "./utils/quotesTool.mjs",
@@ -100,14 +100,23 @@ def main():
     elif repo_name == 'mac-mouse-fix':
         
         # Log
-        print(f"syncstrings.py: Syncing { main_repo['xcstrings_path'] } ...")
-        print("(Other .xcstrings file are automatically synced by Xcode when building the project)")
+        print(f"syncstrings.py: Syncing .xcstrings files inside {repo_name} ...")
+        print("    (Most .xcstrings file are automatically synced by Xcode when building the project, but here we sync the ones not managed by Xcode)")
         print("")
-        
-        # Extract strings from source_files
-        extracted_strings: list[ExtractedString] = []
+
+        # Extract strings from source_files        
         for source_file in main_repo['source_paths']:
             
+            # Declare result
+            extracted_strings: list[ExtractedString] = []
+
+            # Construct path to xcstrings file
+            stem = os.path.splitext(os.path.basename(source_file))[0]
+            xcstrings_path = os.path.join(main_repo['xcstrings_dir'], (stem + '.xcstrings'))
+
+            # Log
+            print(f"syncstrings.py: Syncing {xcstrings_path}")
+
             # Load content
             content = None
             with open(source_file, 'r') as file:
@@ -139,10 +148,9 @@ def main():
                 # Store result
                 #   In .stringsdata format
                 extracted_strings.append(ExtractedString(st.comment, st.key, ui_string))
-            
 
-        # Call subfuncs
-        update_xcstrings(main_repo['xcstrings_path'], extracted_strings)
+            # Call subfuncs
+            update_xcstrings(xcstrings_path, extracted_strings)
     
     else:
         assert False
@@ -151,6 +159,9 @@ def main():
 #
 
 def update_xcstrings(xcstrings_path: str, extracted_strings: list[ExtractedString]):
+
+    # Validate: xcstringsf file exists
+    assert os.path.exists(xcstrings_path), f"Tried to update {xcstrings_path}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused.)"
 
     # Create .stringsdata file
     #   Notes on stringsTable name: 
