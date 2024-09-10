@@ -41,10 +41,11 @@ website_repo = {
 
 
 @dataclass
-class ExtractedString:
+class StringsDataItem: # We convert this to json and then directly insert it into a .stringsdata file
     comment: str
     key: str
     value: str
+    key_with_index_prefix: str|None    # This is not found in normal .stringsdata files, we use it for other stuff inside this script. Maybe it shouldn't be part of this dataclass.
 
 #
 # Main
@@ -66,7 +67,7 @@ def main():
         # Note: 
         #   I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
         quotes = json.loads(mfutils.runclt(['node', website_repo['quotes_tool_path']], cwd=target_repo))
-        extracted_strings: list[ExtractedString] = []
+        extracted_strings: list[StringsDataItem] = []
         for quote in quotes:
             key = quote['quoteKey']
             value = quote['englishQuote']
@@ -76,7 +77,7 @@ def main():
                 original_quote      = quote['originalQuote']
                 comment = f'The original language of this quote is {original_language} - {original_quote}'
             
-            extracted_strings.append(ExtractedString(comment, key, value))
+            extracted_strings.append(StringsDataItem(comment, key, value, None))
         
         # Call subfunc
         quotes_xcstrings_path = os.path.join(target_repo, website_repo['quotes_xcstrings_path'])
@@ -108,7 +109,7 @@ def main():
         for source_file in main_repo['source_paths']:
             
             # Declare result
-            extracted_strings: list[ExtractedString] = []
+            extracted_strings: list[StringsDataItem] = []
 
             # Construct path to xcstrings file
             stem = os.path.splitext(os.path.basename(source_file))[0]
@@ -147,7 +148,7 @@ def main():
 
                 # Store result
                 #   In .stringsdata format
-                extracted_strings.append(ExtractedString(st.comment, st.key, ui_string))
+                extracted_strings.append(StringsDataItem(st.comment, st.key, ui_string, st.key_with_index_prefix))
 
             # Call subfuncs
             update_xcstrings(xcstrings_path, extracted_strings)
@@ -158,10 +159,10 @@ def main():
 # Helper
 #
 
-def update_xcstrings(xcstrings_path: str, extracted_strings: list[ExtractedString]):
+def update_xcstrings(xcstrings_path: str, extracted_strings: list[StringsDataItem]):
 
-    # Validate: xcstringsf file exists
-    assert os.path.exists(xcstrings_path), f"Tried to update {xcstrings_path}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused.)"
+    # Validate: xcstrings file exists
+    assert os.path.exists(xcstrings_path), f"Tried to update {xcstrings_path}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"
 
     # Create .stringsdata file
     #   Notes on stringsTable name: 
@@ -186,15 +187,20 @@ def update_xcstrings(xcstrings_path: str, extracted_strings: list[ExtractedStrin
     
     print(f"syncstrings.py: Created .stringsdata file at: {stringsdata_path}")
     
-    # Set the 'extractedState' for all strings to 'extracted_with_value'
+    # 
+    # Modfiy .xcstrings file: 
+    # 
+
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
+    source_language = xcstrings_obj['sourceLanguage']
+    assert source_language == 'en'
+    
+    # 1. Modification: Set the 'extractedState' for all strings to 'extracted_with_value'
     #   Also set the 'state' of all 'sourceLanguage' ui strings to 'new'
     #   -> If we have accidentally changed them, their state will be 'translated' 
     #       instead which will prevent xcstringstool from updating them to the new value from the source file.
     #   -> All this is necessary so that xcstringstool updates everything (I think)
     
-    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
-    source_language = xcstrings_obj['sourceLanguage']
-    assert source_language == 'en'
     for key, info in xcstrings_obj['strings'].items():
         info['extractionState'] = 'extracted_with_value'
         if 'localizations' in info.keys() and source_language in info['localizations'].keys():
@@ -203,24 +209,57 @@ def update_xcstrings(xcstrings_path: str, extracted_strings: list[ExtractedStrin
             pass
             # assert False
      
-    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)   
     print(f"syncstrings.py: Set the extractionState of all strings to 'extracted_with_value'")
-        
+    
+    # 2. Modification: Remove indexes from keys (e.g. 003:some.key -> some.key)
+    #   Explanation: We have to first remove all the prefixes from the .xcstrings file before calling xcstringstool to synchronize.
+    #       Otherwise I think the syncing would break if we ever change the order that the keys appear in the template.
+    for key in list(xcstrings_obj['strings'].keys()):
+        key: str = key
+
+        # Get new, index-less key
+        key_without_index = mflocales.remove_index_prefix_from_key(key)
+
+        # Guard
+        if key == key_without_index:
+            continue
+
+        # Move content from key -> new_key
+        xcstrings_obj['strings'][key_without_index] = xcstrings_obj['strings'][key]
+        del xcstrings_obj['strings'][key]
+
+    # Write modified .xcstrings file
+    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)   
+
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata
     developer_dir = mfutils.runclt("xcode-select --print-path")
     stringstool_path = os.path.join(developer_dir, 'usr/bin/xcstringstool')
     result = mfutils.runclt(f"{stringstool_path} sync {xcstrings_path} --stringsdata {stringsdata_path}")
     print(f"syncstrings.py: ran xcstringstool to update {xcstrings_path} Result: {result}")
     
-    # Set the 'extractedState' for all strings to 'manual'
+    #
+    # Modify .xcstrings file
+    # 
+
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
+
+    # 1. Modification: Set the 'extractedState' for all strings to 'manual'
     #   Otherwise Xcode won't export them and also delete all of them or give them the 'Stale' state
     #   (We leave strings 'stale' which this analysis determined to be stale)
-    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
     for key, info in xcstrings_obj['strings'].items():
         if info['extractionState'] == 'stale':
             pass
         else:
             info['extractionState'] = 'manual'
+
+    # 2. Modification: Add indexes back to keys (e.g. some.key -> 003:some.key)
+    xcstrings_obj_keys = set(xcstrings_obj['strings'].keys())
+    extracted_from_template_keys = set(map(lambda item: item.key, extracted_strings))
+    assert xcstrings_obj_keys == extracted_from_template_keys, f"Something went wrong.\nxcstrings_obj_keys:\n{xcstrings_obj_keys}\n\nextracted_from_template_keys:\n{extracted_from_template_keys}\n\nsymmetric difference:\n{xcstrings_obj_keys.symmetric_difference(extracted_from_template_keys)}"
+    for item in extracted_strings:
+        # Move content from key -> key_with_index_prefix
+        xcstrings_obj['strings'][item.key_with_index_prefix] = xcstrings_obj['strings'][item.key]
+        del xcstrings_obj['strings'][item.key]
 
     # Write modified .xcstrings file
     mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)

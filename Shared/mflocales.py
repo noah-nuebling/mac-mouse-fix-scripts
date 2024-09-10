@@ -523,6 +523,55 @@ def country_code_to_continent_code(country_code: str) -> str:
 # Markdown parsing (Localizable strings)
 #
 
+def add_index_prefix_to_key(key: str, key_index: int, max_index: int) -> str:
+
+    """
+    'index_prefix' explanation:
+        When we extract localized strings from the SomeDoc.md template, we then prepend an 'index_prefix' to the localized string keys, before storing the keys inside SomeDoc.xcstrings. 
+        That way, the order of localizable strings inside SomeDoc.xcstrings is the same as in SomeDoc.md. (That is, when sorting SomeDoc.xcstrings file alphanumerically by key, which is the default in the Xcode editor)
+        This should make it easier for localizers to understand and navigate SomeDoc.xcstrings or the .xcloc file derived from it.
+        
+        To implement this, we need to add/remove the index_prefixes at various points inside our syncstrings and buildmd scripts. (as of 09.09.2024)
+
+        Examples:                               (Last updated on 10.09.2024)
+            Example 1:
+                Input:
+                    key:        some.key
+                    key_index:  0               (-> this key is the 1st one that appears in the template)
+                    max_index:  50
+                Output:
+                    01:some.key                 (Note that we have 0-based indexes in the input, and 1-based indexes in the output, since I think 1-based indices look friendlier to localizers.)
+
+            Example 2:
+                Input:
+                    key:        some.other.key
+                    key_index:  3               (-> this key is the 4th one that appears in the template)
+                    max_index:  150
+                Output:
+                    004:some.other.key          (Note that we're padding the key_index with zeros up to the width of the max_index. Otherwise you'd have have problems with where e.g. '12' < '2' under alphanumeric sorting. [Whereas '02' < '12' which is what we want.])
+    """
+
+    key_index += 1 # Make index 1-based instead of 0-based
+    max_index += 1 # Also make max_index 1-based.
+
+    max_index_width = len(str(max_index))
+    padded_index = str(key_index).zfill(max_index_width)
+    result = padded_index + ':' + key
+
+    return result
+
+def remove_index_prefix_from_key(key: str) -> str:
+    
+    result = None
+    
+    if ':' in key:
+        index_prefix, result = key.split(':')
+        assert index_prefix.isdigit(), f"The prefix {index_prefix} before ':' in key {key} contains non-digit characters. This shouldn't happen. The characters before the first ':' are reserved for the index prefix."
+    else:
+        result = key
+
+    return result
+
 def get_localizable_strings_from_markdown(md_string: str):
 
     # Declare return type
@@ -530,6 +579,7 @@ def get_localizable_strings_from_markdown(md_string: str):
     class LocalizedStringData:
         condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %})
         key: str                    # a.key.that identifies the string across different languages
+        key_with_index_prefix: str  # Key that looks like 001:some.key or 002:some.other.key, etc. Where we call '002:' the 'index_prefix'. The index tells us the order that the keys appear in the template.
         value: str                  # The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
         comment: str | None         # A comment providing context for translators.
         full_match: str             # The entire substring of the .md file that we extracted the key, value, and comment from. Replace all full_matches with translated strings to localize the .md file.
@@ -613,6 +663,7 @@ def get_localizable_strings_from_markdown(md_string: str):
     Notes:
     - The block syntax was created in this regex101 project: https://regex101.com/r/IcHuN0
     - To test, you might want to post the whole .md file on regex101. That way you can see any under or overmatching which might not be obvious when testing a smaller example string.
+
     """
 
     # Extract translatable strings with inline syntax
@@ -631,7 +682,7 @@ def get_localizable_strings_from_markdown(md_string: str):
     
     result: list[LocalizedStringData] = []
         
-    for match in all_matches:
+    for i, match in enumerate(all_matches):
         
         # Get info from match
         
@@ -640,6 +691,7 @@ def get_localizable_strings_from_markdown(md_string: str):
         comment = None
         value = None
         key = None
+        key_with_index_prefix = None
         
         if match[0] == 'inline':
             value, key, comment = match[1].groups()
@@ -659,14 +711,17 @@ def get_localizable_strings_from_markdown(md_string: str):
             assert r'{{' not in st # Protect against ? - this is also weird
         # TODO: Maybe somehow protect against over matching on block syntax, too
         
-        # Stript results
+        # Strip results
         #   The comment sometimes contained whitespace, I'm not sure if the key can contain whitespace with the way the regex is set up.
         #   Stripping the value is not good since we want to preserve the indent
         key = key.strip()
         comment = comment.strip() 
+
+        # Get key_with_index_prefix
+        key_with_index_prefix = add_index_prefix_to_key(key, i, len(all_matches) - 1)
         
         # Store
-        result.append(LocalizedStringData(condition, key, value, comment, full_match))
+        result.append(LocalizedStringData(condition, key, key_with_index_prefix, value, comment, full_match))
     
     # Return
     

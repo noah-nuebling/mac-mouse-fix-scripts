@@ -222,6 +222,14 @@ def main():
     with open(xcstrings_path, 'r') as file:
         xcstrings = json.load(file)
     
+    # Remove index-prefixes from keys inside xcstrings obj (e.g. 003:some.key -> some.key)
+    for key in list(xcstrings['strings'].keys()):
+
+        key_without_index = mflocales.remove_index_prefix_from_key(key)
+
+        xcstrings['strings'][key_without_index] = xcstrings['strings'][key]
+        del xcstrings['strings'][key]
+
     # Find locales
     development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
     
@@ -273,7 +281,7 @@ def main():
 
         # Translate the template
         for st in mflocales.get_localizable_strings_from_markdown(template):
-
+            
             # Get the translated value
             translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
 
