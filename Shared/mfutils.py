@@ -199,6 +199,10 @@ def get_indent(string: str) -> tuple[int, chr]:
     
     # NOTE: We could possibly use textwrap.dedent() etc instead of this
     
+    # Edge case
+    if string == '':
+        return 0, ''
+
     # Split into lines
     lines = string.split('\n')
     
@@ -207,6 +211,12 @@ def get_indent(string: str) -> tuple[int, chr]:
         return len(string) == 0 or all(character.isspace() for character in string)
     lines = list(filter(lambda line: not is_empty(line), lines))
     
+    # Special case
+    if len(lines) == 0:
+        return 0, ''
+
+    # Loop
+
     indent_level = 0
     break_outer_loop = False
     
@@ -222,8 +232,8 @@ def get_indent(string: str) -> tuple[int, chr]:
             
             is_space = line[indent_level].isspace()
             is_differnt = line[indent_level] != last_line[indent_level] if last_line != None else False
-            if not is_space or is_differnt : 
-                break_outer_loop = True; break;
+            if not is_space or is_differnt: 
+                break_outer_loop = True; break
             last_line = line
         
         if break_outer_loop:
@@ -256,6 +266,50 @@ def set_indent(string: str, indent_level: int, indent_character: chr) -> str:
     
     # Return
     return string
+
+def trim_empty_lines(string: str) -> str:
+
+    """
+    Removes leading and trailling empty lines
+    """
+
+    # Split
+    lines = string.splitlines()
+
+    # Filter out leading empty lines
+    lines_2 = None
+    for i in range(0, len(lines)):
+        
+        line_is_empty = (lines[i].strip() == '')
+        
+        if not line_is_empty:
+            lines_2 = lines[i:]
+            break
+    
+    # Early return
+    if lines_2 == None:
+        return ''
+
+    # Filter out trailling empty lines
+    lines_3 = None
+    for i in reversed(range(0, len(lines_2))):
+
+        line_is_empty = (lines_2[i].strip() == '')
+
+        if not line_is_empty:
+            lines_3 = lines_2[:i+1]
+            break
+    
+    # Early return
+    if lines_3 == None:
+        assert False, f'Not sure this can happen, since the lines_2 early return case should\'ve already been hit if the string only contains empty lines.'
+        return ''
+
+    # Assemble result
+    result = '\n'.join(lines_3)
+
+    # Return
+    return result
 
 #
 # JSON

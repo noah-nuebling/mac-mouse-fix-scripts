@@ -520,7 +520,8 @@ def country_code_to_continent_code(country_code: str) -> str:
 
 
 #
-# Markdown parsing (Localizable strings)
+# Sourcefile parsing 
+#   (Extracting localizable strings from .markdown/.vue files.)
 #
 
 def add_index_prefix_to_key(key: str, key_index: int, max_index: int) -> str:
@@ -540,7 +541,7 @@ def add_index_prefix_to_key(key: str, key_index: int, max_index: int) -> str:
                     key_index:  0               (-> this key is the 1st one that appears in the template)
                     max_index:  50
                 Output:
-                    01:some.key                 (Note that we have 0-based indexes in the input, and 1-based indexes in the output, since I think 1-based indices look friendlier to localizers.)
+                    01: some.key                 (Note that we have 0-based indexes in the input, and 1-based indexes in the output, since I think 1-based indices look friendlier to localizers.)
 
             Example 2:
                 Input:
@@ -548,7 +549,7 @@ def add_index_prefix_to_key(key: str, key_index: int, max_index: int) -> str:
                     key_index:  3               (-> this key is the 4th one that appears in the template)
                     max_index:  150
                 Output:
-                    004:some.other.key          (Note that we're padding the key_index with zeros up to the width of the max_index. Otherwise you'd have have problems with where e.g. '12' < '2' under alphanumeric sorting. [Whereas '02' < '12' which is what we want.])
+                    004: some.other.key          (Note that we're padding the key_index with zeros up to the width of the max_index. Otherwise you'd have have problems with where e.g. '12' < '2' under alphanumeric sorting. [Whereas '02' < '12' which is what we want.])
     """
 
     key_index += 1 # Make index 1-based instead of 0-based
@@ -556,7 +557,7 @@ def add_index_prefix_to_key(key: str, key_index: int, max_index: int) -> str:
 
     max_index_width = len(str(max_index))
     padded_index = str(key_index).zfill(max_index_width)
-    result = padded_index + ':' + key
+    result = padded_index + ': ' + key              # Note that we're adding a space after the colon (:) for better legibility in the .xcstrings file.
 
     return result
 
@@ -566,23 +567,17 @@ def remove_index_prefix_from_key(key: str) -> str:
     
     if ':' in key:
         index_prefix, result = key.split(':')
+        if result[0] == ' ': # Strip the first space after the colon (:), since we sometimes add a space after the colon and sometimes not.
+            result = result[1:]
         assert index_prefix.isdigit(), f"The prefix {index_prefix} before ':' in key {key} contains non-digit characters. This shouldn't happen. The characters before the first ':' are reserved for the index prefix."
     else:
         result = key
 
     return result
 
+
 def get_localizable_strings_from_markdown(md_string: str):
 
-    # Declare return type
-    @dataclass
-    class LocalizedStringData:
-        condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %})
-        key: str                    # a.key.that identifies the string across different languages
-        key_with_index_prefix: str  # Key that looks like 001:some.key or 002:some.other.key, etc. Where we call '002:' the 'index_prefix'. The index tells us the order that the keys appear in the template.
-        value: str                  # The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
-        comment: str | None         # A comment providing context for translators.
-        full_match: str             # The entire substring of the .md file that we extracted the key, value, and comment from. Replace all full_matches with translated strings to localize the .md file.
 
     """
     Returns a list of LocalizedStringData instances extracted from the `md_string`.
@@ -666,6 +661,16 @@ def get_localizable_strings_from_markdown(md_string: str):
 
     """
 
+    # Declare return type
+    @dataclass
+    class LocalizedStringData:
+        condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %})
+        key: str                    # a.key.that identifies the string across different languages
+        key_with_index_prefix: str  # Key that looks like 001:some.key or 002:some.other.key, etc. Where we call '002:' the 'index_prefix'. The index tells us the order that the keys appear in the template.
+        value: str                  # The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
+        comment: str | None         # A comment providing context for translators.
+        full_match: str             # The entire substring of the .md file that we extracted the key, value, comment (and condition) from. Replace all full_matches with translated strings to localize the .md file.
+
     # Extract translatable strings with inline syntax
 
     inline_regex = r"\{\{(.*?)\|\|(.*?)\|\|(.*?)\}\}"           # r makes it so \ is treated as a literal character and so we don't have to double escape everything
@@ -717,6 +722,9 @@ def get_localizable_strings_from_markdown(md_string: str):
         key = key.strip()
         comment = comment.strip() 
 
+        # Guard duplicate keys
+        assert all(key != k.key for k in result), f"There's a duplicate key '{key}' in the md file."
+
         # Get key_with_index_prefix
         key_with_index_prefix = add_index_prefix_to_key(key, i, len(all_matches) - 1)
         
@@ -725,4 +733,118 @@ def get_localizable_strings_from_markdown(md_string: str):
     
     # Return
     
+    return result
+
+def get_localizable_strings_from_website_source_code(source_code: str):
+
+    """
+    Returns a list of LocalizedStringData instances extracted from the `source_code` string.
+
+    We do this by looking for invocations of the ```MFLocalizedString(<key>, <comment>)``` function in the source code, and returning the <key> <comment> pairs we find in a list.
+
+    Notes: 
+    - Regex was created/tested with this regex101 project: https://regex101.com/r/HkyrTo
+    - This function is very similar to the get_localizable_strings_from_markdown() function. Maybe we should combine them into one?
+    """
+
+    # Declare return type
+    @dataclass
+    class LocalizedStringData:
+        key: str                    # a.key.that identifies the string across different languages
+        key_with_index_prefix: str  # Key that looks like 001:some.key or 002:some.other.key, etc. Where we call '002:' the 'index_prefix'. The index tells us the order that the keys appear in the source code (usually .vue files).
+        value: str                  # English UI String
+        comment: str | None         # A comment providing context for translators.
+        full_match: str             # The entire substring of the source file that we extracted the key, and comment from. Replace all full_matches with translated strings to localize the .md file.
+
+    # Extract translatable strings
+    #    using regex that matches ```MFLocalizedString('<key>', '<english ui string>, '<localizerHint>')```` calls.
+    #    Notes:
+    #       - We created and tested this regex using regex101.com - using the source code of index.vue as the test string.
+
+    regex = r"""(?x)                                           # `(?x)` activates verbose mode. (Letting us use comments and linebreaks inside the regex)
+    MFLocalizedString                                          # Match 'MFLocalizedString'
+    \s*?\(\s*?                                                 # Match opening parenthesis
+    (?P<quote_1>[`'\"])(?P<value>.*?)(?<!\\)(?P=quote_1)       # Match Match English UI string      (Note: `(?<!\\)` prevents the backreference `(?P=quote_1)` from matching escaped quotes (such as `\'`))
+    \s*?,\s*?                                                  # Match comma 1
+    (?P<quote_2>[`'\"])(?P<key>.*?)(?<!\\)(?P=quote_2)         # Match localization key. (Note: The key being empty or containing any char except [a-zA-Z0-9\.\-] is an error. But we still match in those cases so we can notify the developer about the error.)
+    \s*?,\s*?                                                  # Match comma 2
+    (?P<quote_3>[`'\"])(?P<comment>.*?)(?<!\\)(?P=quote_3)     # Match localizer hint
+    \s*?,?                                                     # Match trailling comma (See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Trailing_commas)
+    \s*?\)                                                     # Match closing parenthesis
+    """
+
+    """
+    On VSCode search:
+
+        Steps to transform the regex for use in **VSCode Search**:
+                (Last updated: Sep 2024)
+            1. Replace `.` with `[\s\S\r]` to match all chars including newlines.
+            2. Wrap all the comma and parens sections into capture groups (so we can reuse them in the `replace` field.)
+            3. Remove any `\` before `'` and `"`, since that's an 'invalid escape sequence'.
+            4. Remove the python capture group **names** (The `P?<>` syntax), to turn the capture groups into regular, numbered capture groups.
+            5. Replace python's named-capture-group-backreferences (The `(?P=)` syntax) with regular numbered-capture-group-backreferences (`\1`, `\2` etc.)
+            6. Remove comments and whitespace
+            7. Move everything onto one line
+    
+        Result: (Sep 2024)
+            MFLocalizedString(\s*?\(\s*?)([`'"])([\s\S\r]*?)(?<!\\)\2(\s*?,\s*?)([`'"])([\s\S\r]*?)(?<!\\)\5(\s*?,\s*?)([`'"])([\s\S\r]*?)(?<!\\)\8(\s*?,?)(\s*?\))
+
+    """
+
+    matches = list(re.finditer(regex, source_code, re.DOTALL))
+
+    # Assemble result
+    result: list[LocalizedStringData] = []
+
+    for i, match in enumerate(matches):
+
+        # Get info from match
+        groupdict = match.groupdict()
+
+        full_match = match.group(0)
+        comment = groupdict['comment']
+        value = groupdict['value']
+        key = groupdict['key']
+        key_with_index_prefix = None
+        
+        # Validate
+        assert re.match(r"[^a-zA-Z0-9\.\-]", key) == None ,                             f"key contains invalid characters: '{key}' (Should only contain a-z, A-Z, 0-9, . or -)"
+        assert len(key) > 0,                                                            f"key is empty. Need a key to do anything useful."
+        assert all((r'MFLocalizedString(' not in st) for st in [value, key, comment]),  f"value, key, or comment contains 'MFLocalizedString('. This probably means the regex over-matched.\nvalue:{value}\nkey:{key}\ncomment:{comment}"
+        
+        # Strip results
+        #   As they appear in the source code, the `comment` and `value` strings may be 
+        #       - Indented
+        #       - Contain leading/trailling empty lines
+        #       We want to remove these things here, since these things are not part of the localized string, but just artifacts to make them nicely writable in the source code.
+        #       
+        #   Sidenote: I'm not sure if the key can contain whitespace with the way the regex is set up.
+
+        def cool_strip(s: str) -> str:
+
+            # Remove leading/trailling empty lines
+            s = mfutils.trim_empty_lines(s)
+
+            # Remove indent
+            s = mfutils.set_indent(s, 0, '')
+
+            # Return 
+            return s
+
+        key = cool_strip(key)
+        value = cool_strip(value)
+        comment = cool_strip(comment)
+
+        # TEST
+        #   Skip duplicate keys. Right now, we sometimes use the same key twice in the same .vue file. Maybe we should restructure .vue files to avoid this, and then assert 'no duplicate keys' here.
+        if not all(key != k.key for k in result):
+            continue
+
+        # Get key_with_index_prefix
+        key_with_index_prefix = add_index_prefix_to_key(key, i, len(matches) - 1)
+        
+        # Store
+        result.append(LocalizedStringData(key, key_with_index_prefix, value, comment, full_match))
+    
+    # Return
     return result
