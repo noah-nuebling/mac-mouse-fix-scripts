@@ -740,7 +740,7 @@ def get_localizable_strings_from_website_source_code(source_code: str):
     """
     Returns a list of LocalizedStringData instances extracted from the `source_code` string.
 
-    We do this by looking for invocations of the ```MFLocalizedString(<key>, <comment>)``` function in the source code, and returning the <key> <comment> pairs we find in a list.
+    We do this by looking for invocations of the ```MFLocalizedString(<englishUIString>, <key>, <comment>)``` function in the source code, and returning the <key> <comment> pairs we find in a list.
 
     Notes: 
     - Regex was created/tested with this regex101 project: https://regex101.com/r/HkyrTo
