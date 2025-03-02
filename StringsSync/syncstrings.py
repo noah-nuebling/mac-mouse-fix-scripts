@@ -16,6 +16,7 @@ import glob
 
 import mfutils
 import mflocales
+from pathlib import Path
 
 from dataclasses import dataclass, astuple
 
@@ -37,6 +38,7 @@ website_repo = {
 
     'quotes': {
         'tool_path': './utils/quotesTool.mjs',
+        'sourcefile_path': './utils/quotes.js',
         'xcstrings_path': './locales/strings/Quotes.xcstrings',
     },
     'dotvue': {
@@ -84,12 +86,10 @@ def main():
         # Quotes
         #
 
-        # Extract strings from quotes.js
-        # Note: 
-        #   I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
-
-        # TODO: 
-        #   Also extract quotes.translation-disclaimer.[...] strings and quotes.source.[...] strings.
+        # Extract quotes via quotesTool.mjs
+        # Notes: 
+        #   - I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
+        #   - [Feb 2025] This extracts the quotes themselves.
 
         quotes = json.loads(mfutils.runclt(['node', website_repo['quotes']['tool_path']], cwd=target_repo))
         extracted_strings: list[StringsDataItem] = []
@@ -104,8 +104,15 @@ def main():
             
             extracted_strings.append(StringsDataItem(comment, key, value, None)) # Set key-with-index to None to prevent adding index-prefixes in the .xcstrings file.
         
-        # Call subfunc
+        # Extract MFLocalizedString() invocations from quotes.js
+        quotesjs_content = Path(website_repo['quotes']['sourcefile_path']).read_text()
+        for st in mflocales.get_localizable_strings_from_website_source_code(quotesjs_content):
+            extracted_strings.append(StringsDataItem(st.comment, st.key, st.value, None))
+
+        # Get xcstrings file path
         quotes_xcstrings_path = os.path.join(target_repo, website_repo['quotes']['xcstrings_path'])
+
+        # Call subfunc
         update_xcstrings(quotes_xcstrings_path, extracted_strings, did_extract_values=True)
         
         #
@@ -132,13 +139,10 @@ def main():
             print(f"                                               {xcstrings_path}")
 
             # Load source file
-            vue_content = None
-            with open(vue_path, 'r') as file:
-                vue_content = file.read()
+            vue_content = Path(vue_path).read_text()
             
-            # Declare loop result
+            # Extract from MFLocalizedString() calls inside the source file.
             extracted_strings: list[StringsDataItem_NoValue] = []
-            
             for st in mflocales.get_localizable_strings_from_website_source_code(vue_content):
                 
                 # Print
