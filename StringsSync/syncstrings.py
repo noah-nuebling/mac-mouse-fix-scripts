@@ -148,10 +148,8 @@ def main():
                 # Print
                 print(f"syncstrings.py:\nk:\n{st.key}\nc:\n{st.comment}\n-----------------------\n")
 
-                # Remove all mdlink urls from extracted strings
-                #       And replace with {url1}, {url2}, etc.
-                #   TODO: Figure out if / how to do this for the website.
-                # ui_string = mfutils.replace_markdown_urls_with_format_specifiers(ui_string).md_string
+                # Note: in the equivalent string extraction code for markdown documents, we're replacing all urls with format specifiers like {url1}, {url2} etc (Using mfutils.replace_markdown_urls_with_format_specifiers())
+                #   But for the website, we simply don't put urls into the localized strings in the first place (instead we use format specifiers like {url1}, or {url2}, and then replace them with the urls in our javascript code.)
 
                 # Store result
                 #   In .stringsdata format
