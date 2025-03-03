@@ -757,20 +757,30 @@ def get_localizable_strings_from_website_source_code(source_code: str):
         full_match: str             # The entire substring of the source file that we extracted the key, and comment from. Replace all full_matches with translated strings to localize the .md file.
 
     # Extract translatable strings
-    #    using regex that matches ```MFLocalizedString('<key>', '<english ui string>, '<localizerHint>')```` calls.
+    #    using regex that matches ```MFLocalizedString('<english ui string>', '<key>', '<localizerHint>')``` calls.
     #    Notes:
     #       - We created and tested this regex using regex101.com - using the source code of index.vue as the test string.
+    #       - [Feb 2025] When testing this on regex101.com, don't forget to set the flavour (python) and the flags (re.DOTALL | re.MULTILINE).
+    #       - [Feb 2025] Added matching for code comments, is this overkill?
 
-    regex = r"""(?x)                                           # `(?x)` activates verbose mode. (Letting us use comments and linebreaks inside the regex)
-    MFLocalizedString                                          # Match 'MFLocalizedString'
-    \s*?\(\s*?                                                 # Match opening parenthesis
-    (?P<quote_1>[`'\"])(?P<value>.*?)(?<!\\)(?P=quote_1)       # Match Match English UI string      (Note: `(?<!\\)` prevents the backreference `(?P=quote_1)` from matching escaped quotes (such as `\'`))
-    \s*?,\s*?                                                  # Match comma 1
-    (?P<quote_2>[`'\"])(?P<key>.*?)(?<!\\)(?P=quote_2)         # Match localization key. (Note: The key being empty or containing any char except [a-zA-Z0-9\.\-] is an error. But we still match in those cases so we can notify the developer about the error.)
-    \s*?,\s*?                                                  # Match comma 2
-    (?P<quote_3>[`'\"])(?P<comment>.*?)(?<!\\)(?P=quote_3)     # Match localizer hint
-    \s*?,?                                                     # Match trailling comma (See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Trailing_commas)
-    \s*?\)                                                     # Match closing parenthesis
+    regex = r"""(?x)                                            # `(?x)` activates verbose mode. (Letting us use comments and linebreaks inside the regex)
+    MFLocalizedString                                           # Match 'MFLocalizedString'
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?\(                                                      # Match opening parenthesis
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?(?P<quote_1>[`'\"])(?P<value>.*?)(?<!\\)(?P=quote_1)    # Match Match English UI string      (Note: `(?<!\\)` prevents the backreference `(?P=quote_1)` from matching escaped quotes (such as `\'`))
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?,                                                       # Match comma 1
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?(?P<quote_2>[`'\"])(?P<key>.*?)(?<!\\)(?P=quote_2)      # Match localization key. (Note: The key being empty or containing any char except [a-zA-Z0-9\.\-] is an error. But we still match in those cases so we can notify the developer about the error.)
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?,                                                       # Match comma 2
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?(?P<quote_3>[`'\"])(?P<comment>.*?)(?<!\\)(?P=quote_3)  # Match localizer hint
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?,?                                                      # Match trailling comma (See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Trailing_commas)
+    (\s*?((/\*.*?\*/)|(//.*?$)))*?                              # Match code comments
+    \s*?\)                                                      # Match closing parenthesis
     """
 
     """
@@ -786,12 +796,14 @@ def get_localizable_strings_from_website_source_code(source_code: str):
             6. Remove comments and whitespace
             7. Move everything onto one line
     
-        Result: (Sep 2024)
+        Result: [Sep 2024]
             MFLocalizedString(\s*?\(\s*?)([`'"])([\s\S\r]*?)(?<!\\)\2(\s*?,\s*?)([`'"])([\s\S\r]*?)(?<!\\)\5(\s*?,\s*?)([`'"])([\s\S\r]*?)(?<!\\)\8(\s*?,?)(\s*?\))
+        Result: [Feb 2025] (After adding comment matching)
+            <Fill in when needed>
 
     """
 
-    matches = list(re.finditer(regex, source_code, re.DOTALL))
+    matches = list(re.finditer(regex, source_code, re.DOTALL | re.MULTILINE))
 
     # Assemble result
     result: list[LocalizedStringData] = []
