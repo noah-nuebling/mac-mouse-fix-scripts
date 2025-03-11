@@ -223,39 +223,51 @@ def main():
 # Helper
 #
 
-def update_xcstrings(xcstrings_path: str, extracted_strings: list[StringsDataItem|StringsDataItem_NoValue], did_extract_values: bool):
+def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsDataItem|StringsDataItem_NoValue], did_extract_values: bool):
 
     # Validate extracted strings exist
     assert extracted_strings != None and len(extracted_strings) > 0, f"syncstrings.py: extracted_strings are unexpectedly 'None'. Don't call update_xcstrings if there's nothing to extract. Called for xcstring_path: {xcstrings_path}"
 
     # Validate: xcstrings file exists
-    assert os.path.exists(xcstrings_path), f"syncstrings.py: Tried to update {xcstrings_path}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"
+    assert os.path.exists(xcstrings_path_final), f"syncstrings.py: Tried to update {xcstrings_path_final}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"
+
+    # Get temp dir
+    tempdir_path = tempfile.gettempdir()
 
     # Create .stringsdata file
     #   Notes on stringsTable name: 
     #       Each .xcstrings file represents one stringsTable (and should be (has to be?) named after it). 
     #       See apple docs for more info on strings tables.
     
-    xcstrings_name = os.path.basename(xcstrings_path)
+    xcstrings_name = os.path.basename(xcstrings_path_final)
     strings_table_name = os.path.splitext(xcstrings_name)[0]
     stringsdata_content = {
-        "source": "garbage/path.txt",
+        "source": "garbage/path.txt", # [Mar 2025] Path to source file doesn't seem to be used.
         "tables": {
             strings_table_name: extracted_strings
         },
         "version": 1
     }
-    stringsdata_path = None
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".stringsdata", mode='w') as file: # Not sure what the 'delete' option does
-        # write data
-        json.dump(stringsdata_content, file, indent=2, cls=mfutils.JSONEncoder)
-        # Store file path
-        stringsdata_path = file.name
+
+    stringsdata_path = os.path.join(tempdir_path, 'stringsdata_temp.stringsdata')
+    with open(stringsdata_path, 'w') as f:
+        json.dump(stringsdata_content, f, indent=2, cls=mfutils.JSONEncoder)
     
     print(f"syncstrings.py: Created .stringsdata file at: {stringsdata_path}")
     
+    #
+    # Create temporary copy of xcstrings file
+    #
+    # (So that we don't leave behind a half-edited xcstrings file if one of the next steps goes wrong)
+
+    xcstrings_path = os.path.join(tempdir_path, xcstrings_name)
+    with open(xcstrings_path, 'w') as t, open(xcstrings_path_final, 'r') as f:
+        for line in f: t.write(line)
+
+    print(f"syncstrings.py: Created temporary copy of {xcstrings_path_final} at {xcstrings_path}")
+
     # 
-    # Modfiy .xcstrings file: 
+    # Modify .xcstrings file: 
     # 
 
     xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
@@ -327,10 +339,12 @@ def update_xcstrings(xcstrings_path: str, extracted_strings: list[StringsDataIte
         else:
             info['extractionState'] = 'manual'
 
-    # 2. Modification: Add indexes back to keys (e.g. some.key -> 003:some.key)
+    # Extract keys
     xcstrings_obj_keys = set(xcstrings_obj['strings'].keys())
     extracted_from_template_keys = set(map(lambda item: item.key, extracted_strings))
-    assert xcstrings_obj_keys == extracted_from_template_keys, f"Something went wrong.\nxcstrings_obj_keys:\n{xcstrings_obj_keys}\n\nextracted_from_template_keys:\n{extracted_from_template_keys}\n\nsymmetric difference:\n{xcstrings_obj_keys.symmetric_difference(extracted_from_template_keys)}"
+    assert xcstrings_obj_keys.issuperset(extracted_from_template_keys), f"Something went wrong.\nxcstrings_obj_keys is missing keys from the template: \n{extracted_from_template_keys.difference(xcstrings_obj_keys)}" # If xcstrings_obj_keys contains extra keys not found in the template, that's fine. Those are just stale.
+
+    # 2. Modification: Add indexes back to keys (e.g. some.key -> 003:some.key)
     for item in extracted_strings:
         # Skip none
         #   Callers can set key_with_index_prefix to None to avoid adding an index prefix.
@@ -340,8 +354,8 @@ def update_xcstrings(xcstrings_path: str, extracted_strings: list[StringsDataIte
         xcstrings_obj['strings'][item.key_with_index_prefix] = xcstrings_obj['strings'][item.key]
         del xcstrings_obj['strings'][item.key]
 
-    # Write modified .xcstrings file
-    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)
+    # Write modified .xcstrings obj to the destination
+    mfutils.write_xcstrings_file(xcstrings_path_final, xcstrings_obj)
     print(f"syncstrings.py: Set the extractionState of all strings to 'manual'")
 
 #
