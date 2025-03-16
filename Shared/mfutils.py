@@ -46,7 +46,7 @@ stderr:
     
     return result
     
-def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, prefer_arm64: bool = True) -> str | None:
+def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, fail_on_stderr: bool = True, prefer_arm64: bool = True) -> str | None:
     
     """
     
@@ -135,8 +135,12 @@ def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = F
                 break
 
     if not print_live_output:
-        assert stderr == '' and returncode in success_codes, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
-        stdout = stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
+        assert returncode in success_codes and (stderr == '' or not fail_on_stderr), f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+        if stderr != '':                                                                # If command was successful but there's still an stderr – print it. || Reasoning: [Mar 2025] When running node on .ts files it will work but print to stderr that it's an experimental feature.
+            print(f"{command_name}: stderr {{", end='\n')
+            print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
+            print(f"}} endstderr: {command_name}", end='\n')
+        stdout = stdout.strip()                                                         # The stdout sometimes has trailing newline character which we remove here.
         return stdout
     else:
         print('')

@@ -1,6 +1,8 @@
 """
 This script is part of the build process for the Mac Mouse Fix Website. 
 It compiles .xcstrings files, which hold the localizable strings for the website, to a nuxt-i18n-compatible .js file.
+    Update: [Mar 2025] Removing nuxt-i18n dependency
+    -> We're removing nuxt-i18n dependency – so perhaps reconsider?
 """
 
 #

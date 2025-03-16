@@ -91,7 +91,7 @@ def main():
         #   - I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
         #   - [Feb 2025] This extracts the quotes themselves using quotesTool.mjs
 
-        quotes = json.loads(mfutils.runclt(['node', website_repo['quotes']['tool_path']], cwd=target_repo))
+        quotes = json.loads(mfutils.runclt(['node', website_repo['quotes']['tool_path']], cwd=target_repo, fail_on_stderr=False))
         extracted_strings: list[StringsDataItem] = []
         for quote in quotes:
             key = quote['quoteKey']
@@ -158,7 +158,7 @@ def main():
 
             # Call subfunc
             if len(extracted_strings) > 0:
-                update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=False)
+                update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=True)
             else:
                 print(f"syncstrings.py: No localizable strings found in {xcstrings_path}. Skipping.")
         
@@ -215,7 +215,7 @@ def main():
                 extracted_strings.append(StringsDataItem(st.comment, st.key, ui_string, st.key_with_index_prefix))
 
             # Call subfunc
-            update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=False)
+            update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=True)
 
     else:
         assert False
@@ -230,6 +230,9 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
 
     # Validate: xcstrings file exists
     assert os.path.exists(xcstrings_path_final), f"syncstrings.py: Tried to update {xcstrings_path_final}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"
+
+    # Validate: did_extract_values
+    assert did_extract_values, f"syncstrings.py: did_extract_values is set to False, but as of [Mar 2025] we're always extracting values."
 
     # Get temp dir
     tempdir_path = tempfile.gettempdir()
@@ -261,8 +264,8 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     # (So that we don't leave behind a half-edited xcstrings file if one of the next steps goes wrong)
 
     xcstrings_path = os.path.join(tempdir_path, xcstrings_name)
-    with open(xcstrings_path, 'w') as t, open(xcstrings_path_final, 'r') as f:
-        for line in f: t.write(line)
+    with open(xcstrings_path, 'w') as temp, open(xcstrings_path_final, 'r') as final:
+        for line in final: temp.write(line)
 
     print(f"syncstrings.py: Created temporary copy of {xcstrings_path_final} at {xcstrings_path}")
 
@@ -275,7 +278,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     assert source_language == 'en'
     
     # 1. Modification: Set the 'extractedState' for all strings
-    
+    #   Note: [Mar 2025] Not sure this is necessary? Logically, the xcstringstool should set this based on whether our .stringsdata file entries contain values or not.
     extraction_state = 'extracted_with_value' if did_extract_values else 'extracted'
     for key, info in xcstrings_obj['strings'].items():
         info['extractionState'] = extraction_state
@@ -324,7 +327,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     print(f"syncstrings.py: ran xcstringstool to update {xcstrings_path}. Result: '{result}'")
     
     #
-    # Modify .xcstrings file
+    # Modify .xcstrings file some more:
     # 
 
     xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
