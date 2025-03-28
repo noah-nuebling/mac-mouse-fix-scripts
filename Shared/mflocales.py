@@ -58,6 +58,9 @@ import mfutils
 
 from dataclasses import dataclass
 
+import urllib.parse
+from typing import Callable
+
 #
 # Constants
 #
@@ -860,3 +863,168 @@ def get_localizable_strings_from_website_source_code(source_code: str):
     
     # Return
     return result
+
+#
+# URL Localization
+#
+
+# Discussion [Mar 2025] 
+#   This finds URLs following specific patterns in a text and replaces them with localized versions. 
+#   I wrote this is for our AI translation system for the update notes.
+#   In general, we should prefer a mored structure approach where we generate the URLs in code, and insert them via format specifiers.
+#   However, this more dynamic approach was the best I could come up with for this purpose (Translating all the existing update notes from GitHub Releases)
+
+def localize_urls(source_locale: str, locale: str, text: str) -> str:
+    
+    # URL prefix patterns
+    #   For the urls we wanna localize
+    #   Note: `s?` lets us match `http` and `https` (not sure that's necessary)
+    urlpref_redirect1   = 'https?://redirect.macmousefix.com'
+    urlpref_redirect2   = 'https?://noah-nuebling.github.io/redirection-service'
+    urlpref_ghrelease   = 'https?://github.com/noah-nuebling/mac-mouse-fix/releases/tag'
+
+    # Replace urls for our 'redirection-service'
+    def replurls_redirection_service(url: str) -> str:
+        def f(querydict): querydict['locale'] = [locale]
+        new_url = _modify_query_params_in_url(f, url)
+        print(f"Replacing url '{url}' -> '{new_url}'")
+        return new_url
+    text = _replace_urls_in_text(replurls_redirection_service, [urlpref_redirect1, urlpref_redirect2], text)
+
+    # Replace urls for direct links to GitHub Releases
+    def replurls_ghreleases(url: str) -> str:
+        if locale == source_locale: # The GitHub Releases pages are already in the source language (English)
+            return url
+        parsed = urllib.parse.urlsplit(url)
+        release_tag = parsed.path.split('/')[-1]
+        new_url = mmf_release_url(locale, release_tag)
+        print(f"Replacing url '{url}' -> '{new_url}'")
+        return new_url
+    text = _replace_urls_in_text(replurls_ghreleases, [urlpref_ghrelease], text)
+
+    # Return
+    return text
+
+def mmf_release_url(locale: str, release_tag: str) -> str:
+    # Note: [Mar 2025] The original GitHub Releases pages are in the source language (English) 
+    #   They are at `https://github.com/noah-nuebling/mac-mouse-fix/releases/tag/{release_tag}`
+    #   Users of this function might wanna link to that directly for decreased page loading times (?) That theoretically makes things less flexible if we ever wanna move the releases to another address, but I think in that case, we'll have to restructure this a bit anyways.
+    result = f"https://redirect.macmousefix.com/?target=mmf-release&tag={release_tag}&locale={locale}"
+    return result
+
+def _find_urls_in_text(url_prefix_patterns: list[str], text: str) -> list[str]:
+
+    # Regex pattern matching chars that might appear in a URL
+    #   Sources: 
+    #       - https://support.exactonline.com/community/s/knowledge-base#All-All-DNO-Content-urlcharacters
+    #       - http://www.blooberry.com/indexdot/html/topics/urlencoding.html
+    #   Notes:
+    #       - The only allowed type of 'enclosing' chars are `(` and `)`.
+    #       - `,` and `'` are allowed - weird!
+    #       - What is `;` reserved for?
+    #  Also see:
+    #       - John Gruber's solution: https://daringfireball.net/2010/07/improved_regex_for_matching_urls
+    purlchar = mfutils.mfdedent(r"""
+        (?x)
+        [0-9a-zA-Z]         # Alphanumerics
+        |
+        [\$\-_\.\+!\*'\(\),] # Other 'safe' chars
+        |
+        [;\/?:@=&]          # 'reserved' chars
+        |
+        [#%]                # 'unsafe' chars that are used inside URLs (Why aren't these considered 'reserved'?)
+        """)
+
+    # Find urls in text
+    result = []
+    for i in range(len(text)):      # Note: [Mar 2025] Not sure it causes any significant slowdown to manually iterate through each index? Using regex for this is probably faster, but this works.
+        
+        # Find URL start
+        match = None
+        for pat in url_prefix_patterns:
+            if match := re.match(pat, text[i:], re.NOFLAG): 
+                break
+
+        # Skip
+        if match is None: continue
+
+        # Find end of URL
+        #   Note: 
+        #   - The parentheses-depth-tracking is because URLs can contain `(` and `)`, 
+        #       but markdown also uses `)` as a delimiter e.g. in `[abc](https://google.com/)`
+        #       Based on minimal testing on https://kip2.github.io/MarkdownToHTML/:
+        #           It seems that markdown parsers resolve this ambiguity by counting matching parentheses inside the URL. 
+        #           (Also making them incompatible with URLs containing unbalanced parentheses)
+        #           We're mirroring that behavior here.
+        #       For urls with mismatched parentheses outside of [markdown](links), there might be some cases where this fails to parse the url, while a markdown parser would succeed. (Haven't tested this) But that's an edge-case.
+        paren_depth = 0
+        urlend = None                       # Note: [Mar 2025] If we don't find a urlend before the end of the text, this stays None, and we slice to the end of the text – which is correct.
+        for j in range(i+1, len(text)):
+            c = text[j]
+            if      '(' == c: paren_depth += 1
+            elif    ')' == c: paren_depth -= 1
+            is_urlchar = None is not re.match(purlchar, c, re.NOFLAG)
+            is_urlend = not is_urlchar or (paren_depth < 0)
+            if is_urlend: 
+                urlend = j
+                break
+        
+        # Get URL
+        url = text[i:urlend]
+
+        # Store URL
+        result.append(url)
+
+    # Return
+    return result
+
+def _replace_urls_in_text(url_replacer: Callable[[str], str], url_prefix_patterns: list[str], text: str) -> str:
+
+    # Define datatype
+    @dataclass
+    class Replacement:
+        old: str
+        new: str
+
+    # Find urls
+    urls = _find_urls_in_text(url_prefix_patterns, text)
+
+    # Get replacements for the urls
+    url_replacements: list[Replacement] = []
+    for url in urls:
+        new_url = url_replacer(url)
+        url_replacements.append(Replacement(old=url, new=new_url))
+
+    # Replace urls
+    searchi = 0
+    new_release_notes = text
+    for repl in url_replacements:
+        oldlen = len(repl.old); newlen = len(repl.new)
+        foundi = new_release_notes.find(repl.old, searchi, None)
+        new_release_notes = new_release_notes[:foundi] + repl.new + new_release_notes[foundi+oldlen:]
+        searchi = foundi + newlen
+    
+    # Return
+    return new_release_notes
+
+def _modify_query_params_in_url(param_modifier: Callable[[dict[str, list[str]]], None], url: str) -> str:
+        
+        # Parse url
+        parsed_url = urllib.parse.urlparse(url)
+
+        # Extract query
+        query = parsed_url.query
+        querydict = urllib.parse.parse_qs(query, keep_blank_values=True, strict_parsing=True)
+
+        # Apply modification
+        param_modifier(querydict)
+
+        # Assemble query
+        new_query = urllib.parse.urlencode(query=querydict, doseq=True)
+
+        # Assemble url
+        new_parsed_result = parsed_url._replace(query=new_query)
+        new_url = urllib.parse.urlunparse(new_parsed_result)
+
+        # Return
+        return new_url

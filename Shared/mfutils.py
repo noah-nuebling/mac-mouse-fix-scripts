@@ -28,53 +28,8 @@ from typing import Callable
 from dataclasses import dataclass
 from typing import List, Union
 
-
-# 
-# Byte - Human
-#   Convert number of bytes to human-readable representation
-#   I don't think this needs to be localized.
-# 
-
-class HumanBytes: # Source: 
-    METRIC_LABELS: List[str] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
-    BINARY_LABELS: List[str] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"]
-    PRECISION_OFFSETS: List[float] = [0.5, 0.05, 0.005, 0.0005] # PREDEFINED FOR SPEED.
-    PRECISION_FORMATS: List[str] = ["{}{:.0f} {}", "{}{:.1f} {}", "{}{:.2f} {}", "{}{:.3f} {}"] # PREDEFINED FOR SPEED.
-    @staticmethod
-    def format(num: Union[int, float], metric: bool=False, precision: int=1) -> str:
-        """
-        Human-readable formatting of bytes, using binary (powers of 1024)
-        or metric (powers of 1000) representation.
-        """
-        assert isinstance(num, (int, float)), "num must be an int or float"
-        assert isinstance(metric, bool), "metric must be a bool"
-        assert isinstance(precision, int) and precision >= 0 and precision <= 3, "precision must be an int (range 0-3)"
-        unit_labels = HumanBytes.METRIC_LABELS if metric else HumanBytes.BINARY_LABELS
-        last_label = unit_labels[-1]
-        unit_step = 1000 if metric else 1024
-        unit_step_thresh = unit_step - HumanBytes.PRECISION_OFFSETS[precision]
-        is_negative = num < 0
-        if is_negative: # Faster than ternary assignment or always running abs().
-            num = abs(num)
-        for unit in unit_labels:
-            if num < unit_step_thresh:
-                # VERY IMPORTANT:
-                # Only accepts the CURRENT unit if we're BELOW the threshold where
-                # float rounding behavior would place us into the NEXT unit: F.ex.
-                # when rounding a float to 1 decimal, any number ">= 1023.95" will
-                # be rounded to "1024.0". Obviously we don't want ugly output such
-                # as "1024.0 KiB", since the proper term for that is "1.0 MiB".
-                break
-            if unit != last_label:
-                # We only shrink the number if we HAVEN'T reached the last unit.
-                # NOTE: These looped divisions accumulate floating point rounding
-                # errors, but each new division pushes the rounding errors further
-                # and further down in the decimals, so it doesn't matter at all.
-                num /= unit_step
-        return HumanBytes.PRECISION_FORMATS[precision].format("-" if is_negative else "", num, unit)
-
 #
-# Other 
+# MARK: Other 
 # General utility functions that don't belong together
 #
 
@@ -122,8 +77,89 @@ def mfdedent(s: str) -> str:
     if s.endswith('\n'):    s = s[:-1]
     return s
 
+def xcode_project_uuid():
+    
+    """
+    The project.pbxproj file from Xcode uses 12 digit hexadecimal numbers (which have 24 characters) as keys/identifiers for it's 'objects'. So here we generate such an identifier. (In a really naive way)
+    """
+    
+    result = ""
+    for _ in range(24):
+        num = random.randint(0, 15)
+        hexa = hex(num)[2:].capitalize()
+        result += hexa
+    
+    assert(len(result) == 24)
+    
+    return result
+    
+
+def find_xcode_project_build_schemes(repo_path, project_path):
+
+    # Credit: ChatGPT
+    
+    # Define extra options
+    #   Hopefull these prevent xcodebuild from resolving packages and doing weird stuff.
+    #   ...If I do this, CocoaLumberJack will be deleted and added by Xcode in an infinite loop or sth ->  "-dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution"
+    #   Update:  The cocoalumberjack issues were bc I drag-and-dropped a copy of the framework into a project folder inside Xcode, so maybe we could try this again.
+    extra_options = "" 
+    
+    # Run xcodebuild -list to get the list of schemes
+    result = runclt(f'xcodebuild -list -project "{project_path}" {extra_options}', cwd=repo_path)
+    
+    # Extract schemes using regex
+    schemes_string = result.split('Schemes:')[1]
+    result = re.findall(r'^\s+(\S+)\s*$', schemes_string, flags=re.MULTILINE)
+    
+    # Return
+    return result
+
+
+# 
+# MARK: Byte -> Human
+#   Convert number of bytes to human-readable representation
+#   I don't think this needs to be localized.
+# 
+class HumanBytes: # Source: 
+    METRIC_LABELS: List[str] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+    BINARY_LABELS: List[str] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"]
+    PRECISION_OFFSETS: List[float] = [0.5, 0.05, 0.005, 0.0005] # PREDEFINED FOR SPEED.
+    PRECISION_FORMATS: List[str] = ["{}{:.0f} {}", "{}{:.1f} {}", "{}{:.2f} {}", "{}{:.3f} {}"] # PREDEFINED FOR SPEED.
+    @staticmethod
+    def format(num: Union[int, float], metric: bool=False, precision: int=1) -> str:
+        """
+        Human-readable formatting of bytes, using binary (powers of 1024)
+        or metric (powers of 1000) representation.
+        """
+        assert isinstance(num, (int, float)), "num must be an int or float"
+        assert isinstance(metric, bool), "metric must be a bool"
+        assert isinstance(precision, int) and precision >= 0 and precision <= 3, "precision must be an int (range 0-3)"
+        unit_labels = HumanBytes.METRIC_LABELS if metric else HumanBytes.BINARY_LABELS
+        last_label = unit_labels[-1]
+        unit_step = 1000 if metric else 1024
+        unit_step_thresh = unit_step - HumanBytes.PRECISION_OFFSETS[precision]
+        is_negative = num < 0
+        if is_negative: # Faster than ternary assignment or always running abs().
+            num = abs(num)
+        for unit in unit_labels:
+            if num < unit_step_thresh:
+                # VERY IMPORTANT:
+                # Only accepts the CURRENT unit if we're BELOW the threshold where
+                # float rounding behavior would place us into the NEXT unit: F.ex.
+                # when rounding a float to 1 decimal, any number ">= 1023.95" will
+                # be rounded to "1024.0". Obviously we don't want ugly output such
+                # as "1024.0 KiB", since the proper term for that is "1.0 MiB".
+                break
+            if unit != last_label:
+                # We only shrink the number if we HAVEN'T reached the last unit.
+                # NOTE: These looped divisions accumulate floating point rounding
+                # errors, but each new division pushes the rounding errors further
+                # and further down in the decimals, so it doesn't matter at all.
+                num /= unit_step
+        return HumanBytes.PRECISION_FORMATS[precision].format("-" if is_negative else "", num, unit)
+
 #
-# Dependency Tracking
+# MARK: Dependency Tracking
 #
 
 def _deptracker_get_deps(deptracker_archive_path: str) -> dict:
@@ -290,7 +326,7 @@ def deptracked(deptracker_archive_path: str, source_paths: list[str], target_pat
     return decorator
 
 #
-# Command line tools
+# MARK: Command line tools
 #
 
 def clt_result_description(returncode, stdout, stderr) -> str:
@@ -347,7 +383,8 @@ def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = F
     # Launch the arm64 version of the clt
     #   Background: On my M1 mac all the clts are normally launched as x86_64 for some reason. This causes xcodebuild to fail with weird errors about provisioning profiles. 
     #   Explanation: `arch -arm64 -x86_64 <clt> <args>` will launch the -arm64 version of clt, if available, otherwise it should fall back to available archs.
-    if prefer_arm64:
+    #   Update: [Mar 2025] IIRC, this is not necessary anymore. I forgot why. I think my shell was in x86_64 mode or something?
+    if prefer_arm64 and False:
         commands = ['arch', '-arm64', '-x86_64'] + commands
     
     # Run process and collect output
@@ -458,7 +495,7 @@ def run_git_command(repo_path, command):
 
 
 #
-# Strings
+# MARK: Strings
 #
 
 def add_indent(s, indent_spaces=2):
@@ -581,7 +618,7 @@ def trim_empty_lines(string: str) -> str:
     return result
 
 #
-# JSON
+# MARK: JSON
 #
 
 import dataclasses, json
@@ -598,7 +635,7 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 #
-# Markdown
+# MARK: Markdown
 #  
 
 def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[str, bool]) -> str:
@@ -672,8 +709,6 @@ def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[st
     assert all_conditions_in_string == list(condition_dict.keys())
 
     return result
-
-            
 
 # Define mdlink regex
 #   Matches markdown links. [The](url) is captured in the first group.
@@ -769,7 +804,7 @@ def replace_format_specifiers_with_markdown_urls(md_string: str, urls: list[str]
     return result
 
 #
-# Files
+# MARK: Files
 #
 
 def create_temp_file(suffix=''):
@@ -828,44 +863,3 @@ def is_file_empty(file_path):
     """Check if file is empty by confirming if its size is 0 bytes.
         Also returns true if the file doesn't exist."""
     return not os.path.exists(file_path) or os.path.getsize(file_path) == 0
-
-#
-# Other
-#
-
-def xcode_project_uuid():
-    
-    """
-    The project.pbxproj file from Xcode uses 12 digit hexadecimal numbers (which have 24 characters) as keys/identifiers for it's 'objects'. So here we generate such an identifier. (In a really naive way)
-    """
-    
-    result = ""
-    for _ in range(24):
-        num = random.randint(0, 15)
-        hexa = hex(num)[2:].capitalize()
-        result += hexa
-    
-    assert(len(result) == 24)
-    
-    return result
-    
-
-def find_xcode_project_build_schemes(repo_path, project_path):
-
-    # Credit: ChatGPT
-    
-    # Define extra options
-    #   Hopefull these prevent xcodebuild from resolving packages and doing weird stuff.
-    #   ...If I do this, CocoaLumberJack will be deleted and added by Xcode in an infinite loop or sth ->  "-dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution"
-    #   Update:  The cocoalumberjack issues were bc I drag-and-dropped a copy of the framework into a project folder inside Xcode, so maybe we could try this again.
-    extra_options = "" 
-    
-    # Run xcodebuild -list to get the list of schemes
-    result = runclt(f'xcodebuild -list -project "{project_path}" {extra_options}', cwd=repo_path)
-    
-    # Extract schemes using regex
-    schemes_string = result.split('Schemes:')[1]
-    result = re.findall(r'^\s+(\S+)\s*$', schemes_string, flags=re.MULTILINE)
-    
-    # Return
-    return result
