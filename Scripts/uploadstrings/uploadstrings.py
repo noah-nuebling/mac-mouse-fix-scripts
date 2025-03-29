@@ -19,7 +19,7 @@ from pprint import pprint
 import argparse
 
 #
-# Import functions from ../Shared folder
+# Import functions from /shared folder
 #
 
 import mfutils
@@ -27,19 +27,19 @@ import mflocales
 import mfgithub
 
 # Print sys.path to debug
-#   - This needs to contain the ../Shared folder in oder for the import and VSCode completions to work properly
-#   - We add the ../Shared folder to the path through the .env file at the project root.
+#   - This needs to contain the ../shared folder in oder for the import and VSCode completions to work properly
+#   - We add the ../shared folder to the path through the .env file at the project root.
 
 # print("Current sys.path:")
 # for p in sys.path:
 #     print(p)
 
-# Note about vvv: Since we add the ../Shared folder to the python env inside the .env file (at the project root), we don't need the code below vvv any more. Using the .env file has the benefit that VSCode completions work with it.
+# Note about vvv: Since we add the ../shared folder to the python env inside the .env file (at the project root), we don't need the code below vvv any more. Using the .env file has the benefit that VSCode completions work with it.
 
 # code_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 # if code_dir not in sys.path:
 #     sys.path.append(code_dir)
-# from Shared import shared
+# from shared import shared
 
 #    
 # Constants

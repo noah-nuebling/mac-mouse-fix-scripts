@@ -691,7 +691,7 @@ def display_name(sale):
  
 def emoji_flag(sale):
     
-    # TODO: Move this to Shared/ (Also why are we using pycountry instead of babel as we do everywhere else?)
+    # TODO: Move this to shared/ (Also why are we using pycountry instead of babel as we do everywhere else?)
     
     # Get country code
     country_code = sale.get('country_iso2', '')

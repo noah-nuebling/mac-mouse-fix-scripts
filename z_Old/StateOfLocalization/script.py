@@ -38,13 +38,13 @@ import babel
 import requests
 
 #
-# Import functions from ../Shared folder
+# Import functions from ../shared folder
 #
 
 code_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if code_dir not in sys.path:
     sys.path.append(code_dir)
-from Shared import shared
+from shared import shared
 
 #
 # Main

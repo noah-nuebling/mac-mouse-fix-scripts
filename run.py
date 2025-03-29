@@ -1,8 +1,8 @@
 #
-# Imports
+# MARK: Imports
 #
 # (Only import stdlib stuff -> we want to run this without installing requirements)
-# (Also don't import Shared stuff I think (?) since we want this to be independent of other stuff (not sure this requirement makes sense))
+# (Also don't import shared stuff I think (?) since we want this to be independent of other stuff (not sure this requirement makes sense))
 
 import os
 import sys
@@ -11,9 +11,88 @@ import subprocess
 import re
 import json
 import shlex
+import textwrap
 
 #
-# Constants
+# MARK: Documentation
+#
+
+"""
+
+Convenience script for running other python scripts.
+
+Behavior: [Mar 2025]
+1. Recursively globs cwd for any .py files that have the same name as user-provided 'subcommand'
+    (Certain files and folders are excluded from the search e.g. the /site-packages/ folder found inside python venv folders)
+2. If an eligible .py file is found, its parent folder is searched for a requirements.txt file (with the glob pattern `*requirements*.txt`). If requirements are found, a venv is created, and the requirements are installed into it.
+3. Additional environment variables are loaded from the ./.env file
+4. The script is run (using the venv and the environment vars from the ./env file)
+
+Intended usage: [Mar 2025]
+    MMF project repos use mac-mouse-fix-scripts as a submodule, then they 
+    - Add a ./env file which adds the library files like mfutil.py to the PYTHONPATH (making those files importable from other scripts) 
+    - Add a ./run bash script which simply dispatches to this run.py script - as a convenience
+    Then you can simply invoke scripts like this:
+        ./run uploadstrings.py --some-arg
+        (And environment vars are also passed to the script)
+    -> SUPER CONVENIENT
+
+Sidenotes:
+     - How to run things without run.py? [Mar 2025]
+        Create venv:            python3 -m venv env
+        Install packages:       ./env/bin/python -m pip install -r <path to requirements.txt:
+        Use run with .env:      dotenv run -- ./env/bin/python <path to script> <args for script>  
+    - Why ./.env? [Mar 2025]
+        - IIRC, ./.env was the only way to get VSCode to understand the imports for our own library files like mfutil.py
+            (I think its built-in Terminal also imports .env automatically?)
+    - How to debug this in VSCode?
+        - I think you could: 1. Use run.py to install requirements into a venv. 2. In VSCode, choose the python interpreter from the venv -> Then everything should work.
+
+dotenv file explanation:
+
+    A dotenv file defines environment variables to be used with python.
+
+    Why is mac-mouse-fix using it?
+    We want to make the shared.py script importable to the other scripts.
+    The only way I found to do this such that VSCode code completions work for the shared.py imports 
+    is by creating an .env file and putting ```PYTHONPATH=mac-mouse-fix-scripts/shared/``` into it.
+    To use the .env file without vscode, you normally import the `dotenv` library or use the `dotenv`
+    command-line-tool, However, you have to install these manually.
+    
+    Since we want to keep run.py dependency-free, we instead do custom parsing of the .env file inside run.py.
+
+    Custom parsing of the .env file:
+
+        The .env file has a simple syntax that looks like this:
+    
+            # Application configuration
+            APP_NAME=MyCoolApp
+            DEBUG=True
+            VERSION=1.0.0
+            
+            # Database configuration
+            DATABASE_URL=postgres://user:password@localhost:5432/mydatabase
+                            
+            # Multiline value using \n
+            GREETING=Hello, welcome to MyCoolApp!\nEnjoy your stay.
+            
+            # Garbage
+            THISEQUALS=T=H=A=T
+            LOTSOF  =  WHITESPACE
+            # comment  =  that should not be parsed
+        
+        To parse it, we use the regex:
+
+            ^(?!\s*#)(.*?)=(.*)$
+        
+        You can test it here:
+
+            https://regex101.com/
+
+"""
+
+#
+# MARK: Constants
 #
 
 venv_path = "env"
@@ -22,22 +101,19 @@ dotenv_path = ".env"
 # Command map
 
 subcommand_map = {
-    
-    "create-sfsymbols": f"./SFSymbolsFontCreate",
-    "upload-strings": f"./StringsUpload",
+    # [Mar 2025] Now filled programmatically
+}
+
+compound_subcommands = {
     
     "build-markdown":  [
-        lambda args: f"python3 {__file__} sync-strings",                            # We invoke this script again with different subcommands. 
-        lambda args: f"python3 {__file__} __internal_build-markdown {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
+        lambda args: f"python3 {__file__} syncstrings.py",           # We invoke this script again with different subcommands. 
+        lambda args: f"python3 {__file__} _buildmd.py {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
     ],       
     "mmf-website_build-strings": [
-        lambda args: f"python3 {__file__} sync-strings",
-        lambda args: f"python3 {__file__} __internal_mmf-website_build-strings {args}"
+        lambda args: f"python3 {__file__} syncstrings.py",
+        lambda args: f"python3 {__file__} _buildstrings-website.py {args}"
     ],
-        
-    "sync-strings": f"./StringsSync",                                               # This can be called from the website repo or the main repo
-    "__internal_build-markdown": f"./MarkdownBuild",
-    "__internal_mmf-website_build-strings": f"./MMFWebsite-StringsBuild",
 }
 
 help_string = """
@@ -47,7 +123,7 @@ Use ./run like this:
 
 Known subcommands:
 
-    {}
+{}
 
 Provided subcommand:
 
@@ -56,147 +132,25 @@ Provided subcommand:
 """
 
 def print_help_and_exit(subcommand, exit_code=1):
-    print(help_string.format(' | '.join(subcommand_map.keys()), subcommand))
+
+    longest_name = max([len(k) for k in subcommand_map.keys()])
+    command_desc = ''
+    for i, (name, value) in enumerate(subcommand_map.items()):
+        if i != 0: command_desc += '\n'
+        name = name + ' '*(longest_name-len(name))
+        command_desc += f"- {name}"
+        if isinstance(value, str):
+            command_desc += f" ({value})"
+    command_desc = textwrap.indent(command_desc, 4*' ')
+
+    print(help_string.format(command_desc, subcommand))
     exit(exit_code)
 
-
 #
-# Documentation
-#
-
-"""
-
-This is a convenience script. It invokes the other python scripts - 
-    - after creating a venv, then installing the requirements.txt, and then loading environment variables from the ./.env file.
-
-    We also have a bash script `./run` at the project root which simply dispatches to this script right here to make things EVEN MORE CONVENIENT
-
-    So in effect you can invoke the scripts like this:
-
-        ./run upload-strings --api-key hlkjhfalksdhf
-
-    Or, after setting the API_KEY environment variable, you can just use:
-
-        ./run upload-strings
-
-    -> SUPER CONVENIENT
-
-
-SIDENOTES
-
-If you are not using ./run you can still run things like this:
-
-    Command line:
-
-        Create venv:
-        
-            python3 -m venv env
-        
-        Install packages:
-
-            ./env/bin/python -m pip install -r <path to requirements.txt>
-
-        Use venv:
-    
-            1. Option: Use `./env/bin/python` everytime
-            2. Option: Activate the venv using `source env/bin/activate.fish` to have `python` work like `./env/bin/python`
-
-        Use .env:
-        
-            dotenv run -- python <path to script> <args for script>
-
-    VSCode:
-
-        Create venv:
-        
-            Not possible (?)
-        
-        Install packages:
-
-            Not possible (?)
-            
-        Use venv:
-
-            Set the Python Interpreter of VSCode to the one inside your venv (./env/bin/python)
-        
-        Use  .env:
-
-            Set the `Python: Env File` setting to your .env file.
-        
-        Pass args:
-        
-            Add ```"args": ["my", "args"],``` inside .vscode/launch.json
-            
-            Note:
-                DONT ADD API KEYS to .vscode/launch.json. Pass them using environment vars instead.
-        
-        -> You could use ./run to easily create the venv and install your packages and then run the scripts in VSCode for debugging.
-            
-        
-- If you're not using ./run, you can use the ./.env file from the command line using `dotenv run ...`.
-  
-    Example:
-    
-    
-- In VSCode, you can easily run scripts without ./run, since:
-    1. VSCode loads the ./.env file automatically.
-    2. If you  then your installed packages will work, as well!
-
-
-
-"""
-
-
-#
-# Dotenv
+# MARK: Dotenv
 #
 
 def load_dotenv():
-    
-    """
-
-    dotenv file explanation:
-
-        A dotenv file defines environment variables to be used with python.
-
-        Why is mac-mouse-fix using it?
-        We want to make the shared.py script importable to the other scripts.
-        The only way I found to do this such that VSCode code completions work for the shared.py imports 
-        is by creating an .env file and putting ```PYTHONPATH=Scripts/Shared/``` into it.
-        To use the .env file without vscode, you normally import the `dotenv` library or use the `dotenv`
-        command-line-tool, However, you have to install these manually.
-        
-        Since we want to keep run.py dependency-free, we instead do custom parsing of the .env file inside run.py.
-
-        Custom parsing of the .env file:
-
-            The .env file has a simple syntax that looks like this:
-        
-                # Application configuration
-                APP_NAME=MyCoolApp
-                DEBUG=True
-                VERSION=1.0.0
-                
-                # Database configuration
-                DATABASE_URL=postgres://user:password@localhost:5432/mydatabase
-                                
-                # Multiline value using \n
-                GREETING=Hello, welcome to MyCoolApp!\nEnjoy your stay.
-                
-                # Garbage
-                THISEQUALS=T=H=A=T
-                LOTSOF  =  WHITESPACE
-                # comment  =  that should not be parsed
-            
-            To parse it, we use the regex:
-
-                ^(?!\s*#)(.*?)=(.*)$
-            
-            You can test it here:
-
-                https://regex101.com/
-
-    """
     
     # Get file content
     content = None
@@ -219,21 +173,51 @@ def load_dotenv():
     return result
 
 #
-# Main
+# MARK: Main
 #
 
 def main():
     
     # Make sure we're running in the mac-mouse-fix project folder (We don't really need to be asserting this)
     cwd_name = os.path.basename(os.getcwd())
-    assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website'
+    assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website' or cwd_name == 'mac-mouse-fix-update-feed'
     
     # Log
     print(f"Invoking run.py with cwd: {os.getcwd()}")
     
+    def fill_subcommand_map():
+        # Find all python scripts in the cwd
+        python_script_paths = glob.glob('./**/*.py', recursive=True)
+
+        # Filter weird stuff
+        def passes_filter(script_path: str) -> str:
+            
+            if 'site-packages'                 in script_path: return False           # Ignore downloaded packages inside venvs
+            if '__init__.py'                   in script_path: return False           # Ignore python package directory markers
+            if 'mac-mouse-fix-scripts/z_old'   in script_path: return False           # Ignore 'old' scripts
+            if 'mac-mouse-fix-scripts/shared'  in script_path: return False           # Ignore library files
+            if 'mac-mouse-fix-scripts/run.py'  in script_path: return False           # Ignore this script
+            # Passed all filters
+            return True
+        python_script_paths = list(filter(passes_filter, python_script_paths))
+
+        # Create name -> path map for python scripts
+        script_name_to_path = {}
+        for p in python_script_paths:
+            name = os.path.basename(p)
+            assert name not in script_name_to_path, f"Duplicate script name at 1. '{p}' 2. '{script_name_to_path[name]}'"
+            script_name_to_path[name] = p
+
+        # Add found scripts to 'subcommand map'
+        subcommand_map.update(script_name_to_path)
+
+        # Add compound_subcommands to subcommand_map
+        subcommand_map.update(compound_subcommands)
+    fill_subcommand_map()
+
     # Handle missing subcommand
     if len(sys.argv) < 2:
-        print_help_and_exit('run.py: <no subcommand provided>')
+        print_help_and_exit('<no subcommand provided>')
         exit(1)
     
     # Process subcommand
@@ -244,15 +228,12 @@ def main():
     if subcommand == '-h' or subcommand == 'help':
         print_help_and_exit(subcommand)
 
-    # Unknown command
+    # Check if provided command is known
     if not (subcommand in subcommand_map.keys()):
         print_help_and_exit(subcommand)
-    
-    # Implement special subcommands in the subcommand_map
-    #   that contain custom command-line-tool-invocations
 
+    # Implement compound subcommands
     if isinstance(subcommand_map[subcommand], list):
-        
         for commandline_string_maker in subcommand_map[subcommand]:
             commandline_string = commandline_string_maker(shlex.join(subcommand_args))
             print(f'\nrun.py: Running clt {commandline_string} ...\n')
@@ -263,17 +244,15 @@ def main():
                 sys.exit(result.returncode)
         
         exit(0)        
-    
+
     # Find paths
-    scripts_dir = os.path.dirname(__file__) # Where the scripts folder is relative to the host repo. Assumes that run.py is at the root of the folder.
-    script_folder = os.path.join(scripts_dir, subcommand_map[subcommand]) # The folder where the script for this subcommand is.
-    script_folder = os.path.normpath(script_folder) # Normalize the path so it looks nicer when printing
-    requiremements_paths = glob.glob(f'{script_folder}/*.txt')
-    script_paths = glob.glob(f'{script_folder}/*.py')
-    assert len(requiremements_paths) <= 1
-    assert len(script_paths) == 1
-    requiremements_path = requiremements_paths[0] if len(requiremements_paths) > 0 else None
-    script_path = script_paths[0]
+    script_path             = subcommand_map[subcommand]
+    script_folder           = os.path.dirname(script_path)
+    requiremements_paths    = glob.glob(f'{script_folder}/*requirements*.txt')
+    assert len(requiremements_paths) <= 1, f"Multiple requirements.txt files found for script {subcommand}: {requiremements_paths}"
+    requiremements_path     = requiremements_paths[0] if len(requiremements_paths) > 0 else None
+    
+    script_folder           = os.path.normpath(script_folder)                 # Normalize the path so it looks nicer when printing
     
     # Handle requirements
     
@@ -295,11 +274,9 @@ def main():
             
             if (not venv_seems_valid) or (not reuse_existing):
                 
-                
                 if venv_exists:
                     # Log
-                    print(f"\nrun.py: Deleting existing venv at ./{venv_path} ...")
-                    
+                    print(f"\nrun.py: Deleting existing venv at ./{venv_path} ...")    
                     # Delete existing venv
                     subprocess.check_call(f"rm -r ./{venv_path}", text=True, shell=True)
 
@@ -367,7 +344,7 @@ def main():
     exit(script_result.returncode)    
 
 #
-# Call main
+# MARK: Call main
 #
 if __name__ == "__main__":
     main()
