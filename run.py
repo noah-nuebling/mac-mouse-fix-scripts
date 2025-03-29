@@ -185,18 +185,23 @@ def main():
     # Log
     print(f"Invoking run.py with cwd: {os.getcwd()}")
     
+    # Find 'subcommands'
     def fill_subcommand_map():
+        
+        # Add compound_subcommands to subcommand_map
+        subcommand_map.update(compound_subcommands)
+
         # Find all python scripts in the cwd
         python_script_paths = glob.glob('./**/*.py', recursive=True)
 
         # Filter weird stuff
         def passes_filter(script_path: str) -> str:
             
-            if 'site-packages'                 in script_path: return False           # Ignore downloaded packages inside venvs
-            if '__init__.py'                   in script_path: return False           # Ignore python package directory markers
-            if 'mac-mouse-fix-scripts/z_old'   in script_path: return False           # Ignore 'old' scripts
-            if 'mac-mouse-fix-scripts/shared'  in script_path: return False           # Ignore library files
-            if 'mac-mouse-fix-scripts/run.py'  in script_path: return False           # Ignore this script
+            if 'site-packages'                 in script_path: return False # Ignore downloaded packages inside venvs
+            if '__init__.py'                   in script_path: return False # Ignore python package directory markers
+            if 'mac-mouse-fix-scripts/z_old'   in script_path: return False # Ignore 'old' scripts
+            if 'mac-mouse-fix-scripts/shared'  in script_path: return False # Ignore library files
+            if 'mac-mouse-fix-scripts/run.py'  in script_path: return False # Ignore this script
             # Passed all filters
             return True
         python_script_paths = list(filter(passes_filter, python_script_paths))
@@ -210,12 +215,10 @@ def main():
 
         # Add found scripts to 'subcommand map'
         subcommand_map.update(script_name_to_path)
-
-        # Add compound_subcommands to subcommand_map
-        subcommand_map.update(compound_subcommands)
     fill_subcommand_map()
 
     # Handle missing subcommand
+    #   (Note: [Mar 2025] We do this after building subcommand_map so we can show the user the available subcommands.)
     if len(sys.argv) < 2:
         print_help_and_exit('<no subcommand provided>')
         exit(1)
