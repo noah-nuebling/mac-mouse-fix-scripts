@@ -173,11 +173,11 @@ def _deptracker_set_deps(deptracker_path: str, newdeps: dict) -> None:
     result = json.dumps(newdeps, ensure_ascii=False, indent=4)
     Path(deptracker_path).write_text(result)
 
-def _deptracker_hash(s: str) -> str:
+def _deptracker_hash(s: bytes) -> str:
     #   Note: [Mar 2025] haven't looked into what the best hashing algorithm or library or params or anything.
-    return hashlib.md5(s.encode()).hexdigest()
+    return hashlib.md5(s).hexdigest()
 
-def _deptracker_check(deptracker_archive_path: str, source_paths: list[str], target_path: str) -> bool:
+def _deptracker_check(deptracker_archive_path:str, source_hashes_or_paths:list[str], target_path:str, sources_are_files:bool) -> bool:
 
     # If this returns true, the target file is still up-to-date
     # If this returns false, the target file should be recomputed from its sources
@@ -187,7 +187,7 @@ def _deptracker_check(deptracker_archive_path: str, source_paths: list[str], tar
     reason = None
 
     try:
-        
+
         # Check if target exists
         if not os.path.exists(target_path):
             raise Exception(f"Target file doesn't exist at '{target_path}'")
@@ -196,29 +196,36 @@ def _deptracker_check(deptracker_archive_path: str, source_paths: list[str], tar
         deps = _deptracker_get_deps(deptracker_archive_path)
 
         # Check target hashes
-        target_hash = _deptracker_hash(Path(target_path).read_text())
+        #   Note: [Mar 2025] Checking the target file hash for modifications isn't super necessary I think. Might even slow things down for big files.
+        target_hash = _deptracker_hash(Path(target_path).read_bytes())
         stored_target_hash = deps[target_path]['target_hash']
         if target_hash != stored_target_hash:
             raise Exception(f"Target file has been modified at '{target_path}'. Stored hash: {stored_target_hash}, fresh hash: {target_hash}")
 
-        # Compare source files
-        cached_source_paths = []
-        for source in deps[target_path]['sources']:
-            
-            # Store path
-            cached_source_path = source['source_path']
-            cached_source_paths.append(cached_source_path)
-            
-            # Check hash
-            cached_source_hash = source['source_hash']
-            source_hash = _deptracker_hash(Path(cached_source_path).read_text())
-            if source_hash != cached_source_hash:
-                raise Exception(f"Source file has been modified at '{cached_source_path}'")
+        if not sources_are_files:
+            # Compare source hashes
+            cached_source_hashes = deps[target_path]['source_hashes']
+            if cached_source_hashes != source_hashes_or_paths:
+                raise Exception(f"Source hashes differ - fresh: {source_hashes_or_paths}, cached: {cached_source_hashes}")
+        else:
+            # Compare source files
+            cached_source_paths = []
+            for source in deps[target_path]['sources']:
+                
+                # Store path
+                cached_source_path = source['source_path']
+                cached_source_paths.append(cached_source_path)
+                
+                # Check hash
+                cached_source_hash = source['source_hash']
+                source_hash = _deptracker_hash(Path(cached_source_path).read_bytes())
+                if source_hash != cached_source_hash:
+                    raise Exception(f"Source file has been modified at '{cached_source_path}'")
 
-        # Check paths
-        diff = set(cached_source_paths).symmetric_difference(set(source_paths))
-        if len(diff) > 0:
-            raise Exception(f"Source files differ. diff: {diff}")
+            # Check paths
+            diff = set(cached_source_paths).symmetric_difference(set(source_hashes_or_paths))
+            if len(diff) > 0:
+                raise Exception(f"Source files differ. diff: {diff}")
 
         # Success
         result = True
@@ -239,7 +246,7 @@ def _deptracker_check(deptracker_archive_path: str, source_paths: list[str], tar
     # Return
     return result
 
-def _deptracker_stamp(deptracker_archive_path: str, source_paths: list[str], target_path: str) -> None:
+def _deptracker_stamp(deptracker_archive_path:str, source_hashes_or_paths:list[str], target_path:str, sources_are_files:bool) -> None:
 
     # Call this after recomputing the target file from the source files
 
@@ -248,15 +255,19 @@ def _deptracker_stamp(deptracker_archive_path: str, source_paths: list[str], tar
     
     # Update deps
     new_entry = {
-        'target_hash': _deptracker_hash(Path(target_path).read_text()),
-        'sources': [
+        'target_hash': _deptracker_hash(Path(target_path).read_bytes()),
+    }
+    if not sources_are_files:
+        new_entry['source_hashes'] = source_hashes_or_paths
+    else:
+        new_entry['sources'] = [
             { 
                 'source_path': source_path, 
-                'source_hash': _deptracker_hash(Path(source_path).read_text()) 
+                'source_hash': _deptracker_hash(Path(source_path).read_bytes()) 
             }
-            for source_path in source_paths
+            for source_path in source_hashes_or_paths
         ]
-    }
+
     deps[target_path] = new_entry
 
     # Store deps
@@ -266,63 +277,48 @@ def _deptracker_stamp(deptracker_archive_path: str, source_paths: list[str], tar
     entry_desc = f"{{'{target_path}': {new_entry}}}"
     print(f"Dependency tracker: Recorded stamp-of-approval for target-sources relationship: {entry_desc}")
 
-def deptracked(deptracker_archive_path: str, source_paths: list[str], target_path: str):
-    def decorator(derivation_func: Callable[[None], str|None]):
-        def upget() -> str|None:
+def deptracked(deptracker_archive_path:str, source_hashes_or_paths:list[str], target_path:str, sources_are_files:bool=False, allow_missing_source_files:bool=True):
 
-            # Decorator for automatically adding dependency-tracking to a 'derivation' function
-            # Note: [Mar 2025] What does 'upget' mean?
-            #   We prefix depency-tracked functions with 'upget', e.g. 'upget_translation()' to signify that deptracked functions not only *get* and return the fresh value, but also *up*date the target_path with that fresh value.
-            #   This is important to keep in mind, because, to ensure correctness, our code needs to manually make sure that all dependency-files are updated *before* their dependent-files.
-            #   (Before we try to abstract that away, it's probably better to use an existing tool like make or snakemake or something, for now it's manageable to handle this manually)
+    # Decorator for automatically adding to-file-caching to a function
+    #
+    # Note: [Mar 2025] On source hashes/files
+    #   The deptracker accepts either hashes or file paths as sources. If the sources are file paths, it generates the hashes itself based on file content.
+    #
+    # Notes for _deptracker_stamped() invocation below
+    #   Caution: [Mar 2025]
+    #       User needs to make sure to update the source files before this is called! (Otherwise, the deptracker will reference an outdated source file)
+    #   Optimization: [Mar 2025]
+    #       - This reloads and recomputes the hash for the source_paths every time. (Inefficient since for translations there's one source file for many translations – and the source file always has the same hash.)
+    #       - This reloads the new_target_string from file – the derivation func probably already knows this string and could pass it in.
+    #       - We could reuse file-handles from _deptracker_check() for the _deptracker_stamp() instead of opening/closing the files twice.
+    #       > Conclusion: We'll use the deptracker on slow operations, so this stuff is unlikely to matter.
 
-            # Check some source doesn't exist
-            #   (We only expect this during development)
-            do_skip = False
-            for p in source_paths:
+    def decorator(target_file_updater: Callable[[None],None]):
+
+        # Validate source hashes
+        if not sources_are_files:
+            assert all([len(hash) > 0 for hash in source_hashes_or_paths]), f'Some source hash is empty. Source hashes: {source_hashes_or_paths}'
+
+        # Validate source files
+        if sources_are_files:
+            for p in source_hashes_or_paths:
                 if not os.path.exists(p):
-                    print(f"Dependency tracker: Skipping derivation of '{target_path}' because source file '{p}' doesn't exist.") # ([Mar 2025] The deptracker-archive and target-path are expected to sometimes not exist even during prod.)
-                    do_skip = True
-                    break
-            if do_skip:
-                return None
+                    msg = "Dependency tracker: {action} derivation of '{target_path}' because source file '{p}' doesn't exist."
+                    if allow_missing_source_files:
+                        print(msg.format(action="Skipping", target_path=target_path, p=p)) # [Mar 2025] We wanna allow missing source files during development for flexibility.
+                        return lambda: None
+                    else:
+                        assert False, msg.format(action="Aborting on", target_path=target_path, p=p)
 
-            # Use cache if it's still up-to-date
-            if _deptracker_check(deptracker_archive_path, source_paths, target_path):
-                return Path(target_path).read_text()
-
-            # Do derivation
-            new_target_string = derivation_func()
-
-            # Check None
-            #   Derivation func might return None if it doesn't want to derive the string at this point.
-            if new_target_string is None:
-                return None # [Mar 2025] Should we return the (outdated) cache here?
-
-            # Validate
-            if new_target_string == (Path(target_path).read_text() if os.path.exists(target_path) else ''):
-                if 0: assert False, f"Dependency tracker: Content of '{target_path}' was already up-to-date, but our dependency tracker didn't catch that." # Not sure this validation is helpful/correct/fast enough || [Mar 2025] disabled it cause this can happen even if nothing goes wrong.
-                pass
-            else:
-                # Write updated target to file
-                p = Path(target_path)
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(new_target_string)
-
-                # Update dependency tracker
-                #   [Mar 2025] Caution:
-                #       User needs to make sure to update the source files before this is called! (Otherwise, the deptracker will reference an outdated source file)
-                #   [Mar 2025] Optimization:
-                #       - This reloads and recomputes the hash for the source_paths every time. (Inefficient since for translations there's one source file for many translations – and the source file always has the same hash.)
-                #       - This reloads the new_target_string from file – we could just pass it in.
-                #       - We could reuse file-handles from _deptracker_check() above
-                #       > Conclusion: We'll use the deptracker on slow operations, so this stuff is unlikely to matter.
-                _deptracker_stamp(deptracker_archive_path, source_paths, target_path)
-
-            # Return
-            return new_target_string
+        def wrapper() -> None:            
+            # Main logic
+            if not _deptracker_check(deptracker_archive_path, source_hashes_or_paths, target_path, sources_are_files):
+                derivation_succeeded = target_file_updater() # This is expected to update the target file, or return False
+                assert isinstance(derivation_succeeded, bool), f"Wrapped function unexpectedly returned non-boolean value: {derivation_succeeded}"
+                if derivation_succeeded:
+                    _deptracker_stamp(deptracker_archive_path, source_hashes_or_paths, target_path, sources_are_files)
         
-        return upget
+        return wrapper
     return decorator
 
 #
@@ -347,7 +343,7 @@ stderr:
     
     return result
     
-def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, fail_on_stderr: bool = True, prefer_arm64: bool = True) -> str | None:
+def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, prefer_arm64: bool = True) -> str | None:
     
     """
     
@@ -442,7 +438,8 @@ def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = F
             print(f"{command_name}: stderr {{", end='\n')
             print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
             print(f"}} endstderr: {command_name}", end='\n')
-        stdout = stdout.strip()                                                         # The stdout sometimes has trailing newline character which we remove here.
+        if strip_output:
+            stdout = stdout.strip()                                                     # The stdout sometimes has trailing newline character which we remove here.
         return stdout
     else:
         print('')
@@ -817,21 +814,20 @@ def create_temp_file(suffix=''):
         temp_file_path = temp_file.name
     return temp_file_path
 
-def read_file(file_path, encoding='utf-8'):
-    
-    result = ''
-    with open(file_path, 'r', encoding=encoding) as temp_file:
-        result = temp_file.read()
-    
-    return result
-
-
 def read_tempfile(temp_file_path, remove=True):
     
     result = read_file(temp_file_path)
     
     if remove:
         os.remove(temp_file_path)
+    
+    return result
+
+def read_file(file_path, encoding='utf-8'):
+    # Note: [Mar 2025] It's probably better to just use pathlib instead
+    result = ''
+    with open(file_path, 'r', encoding=encoding) as temp_file:
+        result = temp_file.read()
     
     return result
 
