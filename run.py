@@ -33,7 +33,7 @@ Intended usage: [Mar 2025]
     - Add a ./env file which adds the library files like mfutil.py to the PYTHONPATH (making those files importable from other scripts) 
     - Add a ./run bash script which simply dispatches to this run.py script - as a convenience
     Then you can simply invoke scripts like this:
-        ./run uploadstrings.py --some-arg
+        ./run uploadstrings --some-arg
         (And environment vars are also passed to the script)
     -> SUPER CONVENIENT
 
@@ -209,7 +209,7 @@ def main():
         # Create name -> path map for python scripts
         script_name_to_path = {}
         for p in python_script_paths:
-            name = os.path.basename(p)
+            name = os.path.splitext(os.path.basename(p))[0]
             assert name not in script_name_to_path, f"Duplicate script name at 1. '{p}' 2. '{script_name_to_path[name]}'"
             script_name_to_path[name] = p
 
