@@ -896,9 +896,9 @@ def localize_urls(source_locale: str, locale: str, text: str) -> str:
         if locale == source_locale: # The GitHub Releases pages are already in the source language (English)
             return url
         if url.endswith('/'): url = url[:-1]
-        if url.endswith('releases'):
+        if url.endswith('releases'):                    # Trying to match url https://github.com/noah-nuebling/mac-mouse-fix/releases/
             new_url = mmf_release_overview_url(locale)
-        elif '/tag/' in url:
+        elif '/tag/' in url:                            # Trying to match urls https://github.com/noah-nuebling/mac-mouse-fix/releases/tag/<releasetag>
             parsed = urllib.parse.urlsplit(url)
             release_tag = parsed.path.split('/')[-1]
             new_url = mmf_release_url(locale, release_tag)

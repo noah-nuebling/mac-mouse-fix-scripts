@@ -195,7 +195,7 @@ def main():
         python_script_paths = glob.glob('./**/*.py', recursive=True)
 
         # Filter weird stuff
-        def passes_filter(script_path: str) -> str:
+        def passes_filter(script_path: str) -> bool:
             
             if 'site-packages'                 in script_path: return False # Ignore downloaded packages inside venvs
             if '__init__.py'                   in script_path: return False # Ignore python package directory markers
