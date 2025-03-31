@@ -881,7 +881,7 @@ def localize_urls(source_locale: str, locale: str, text: str) -> str:
     #   Note: `s?` lets us match `http` and `https` (not sure that's necessary)
     urlpref_redirect1   = 'https?://redirect.macmousefix.com'
     urlpref_redirect2   = 'https?://noah-nuebling.github.io/redirection-service'
-    urlpref_ghrelease   = 'https?://github.com/noah-nuebling/mac-mouse-fix/releases/tag'
+    urlpref_ghrelease = 'https?://github.com/noah-nuebling/mac-mouse-fix/releases'
 
     # Replace urls for our 'redirection-service'
     def replurls_redirection_service(url: str) -> str:
@@ -895,15 +895,24 @@ def localize_urls(source_locale: str, locale: str, text: str) -> str:
     def replurls_ghreleases(url: str) -> str:
         if locale == source_locale: # The GitHub Releases pages are already in the source language (English)
             return url
-        parsed = urllib.parse.urlsplit(url)
-        release_tag = parsed.path.split('/')[-1]
-        new_url = mmf_release_url(locale, release_tag)
+        if url.endswith('/'): url = url[:-1]
+        if url.endswith('releases'):
+            new_url = mmf_release_overview_url(locale)
+        elif '/tag/' in url:
+            parsed = urllib.parse.urlsplit(url)
+            release_tag = parsed.path.split('/')[-1]
+            new_url = mmf_release_url(locale, release_tag)
+        else: assert False, f"Unexpected GitHub Releases URL: {url}"
         print(f"Replacing url '{url}' -> '{new_url}'")
         return new_url
     text = _replace_urls_in_text(replurls_ghreleases, [urlpref_ghrelease], text)
 
     # Return
     return text
+
+def mmf_release_overview_url(locale: str) -> str:
+    result = f"https://redirect.macmousefix.com/?target=mmf-releases-overview&locale={locale}"
+    return result
 
 def mmf_release_url(locale: str, release_tag: str) -> str:
     # Note: [Mar 2025] The original GitHub Releases pages are in the source language (English) 
