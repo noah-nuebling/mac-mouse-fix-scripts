@@ -3,6 +3,8 @@
 
 This script compiles markdown documents which are translatable or which have dynamic content.
 
+- [ ] TODO: [Jul 2025] Transfer over special requests from mac-mouse-fix/master to mac-mouse-fix-scripts (Haodi Wang, maybe others)
+
 """
 
 #
