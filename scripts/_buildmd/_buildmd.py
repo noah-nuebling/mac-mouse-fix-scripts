@@ -619,15 +619,11 @@ def insert_root_paths(template, path, locale, development_locale):
 def display_name(sale):
     
     name = ''
-
-    # Special requests & rules
-    if sale['email'] == 'rawad.aboud@icloud.com': # Gumroad api says he's from IL-TA (Tel Aviv, Israel), but he's Palestinian. See [this mail](message:<8C5D64EE-447A-4A65-89A4-27F99115C986@icloud.com>)
-        return '🇵🇸 Rawad Aboud'
     
     # Get user-provided name field
     name = gumroad_custom_field_content(sale, gumroad_custom_field_labels_name)
     if name == None: name = ''
-    
+
     # Fall back to full_name field
     if name == '':
         if 'full_name' in sale:
@@ -686,6 +682,16 @@ def display_name(sale):
     if name == "🇩🇪 Gmail":
         print("Hughhhh")
     
+    # Special requests & rules
+    
+    #   Note: [Jul 2025] Update: We used to use ppls email here (in mac-mouse-fix > markdown_generator.py and in mac-mouse-fix-scripts > _buildmd.py). Don't do that anymore and look into rewriting git history if someone complains.
+
+    if name == "🇦🇺 Haodi Wang": # Requested to use Chinese flag
+        name = "🇨🇳 Haodi Wang"
+    
+    if name == "🇮🇱 Rawad Aboud": # Gumroad api says he's from IL-TA (Tel Aviv, Israel), but he's Palestinian. See [this mail](message:<8C5D64EE-447A-4A65-89A4-27F99115C986@icloud.com>)
+        name = "🇵🇸 Rawad Aboud"
+
     # Replace all spaces with non-breaking spaces
     name = name.replace(' ', nbsp)
     
@@ -831,7 +837,7 @@ def user_message(sale, name):
     while True:
         
         name = name.replace(nbsp, ' ')
-        
+
         if name == "🇹🇼 Eugene" and message == "Taiwan no.1":
             message = ''
             break
