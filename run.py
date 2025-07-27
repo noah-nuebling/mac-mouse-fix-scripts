@@ -107,12 +107,12 @@ subcommand_map = {
 compound_subcommands = {
     
     "build-markdown":  [
-        lambda args: f"python3 {__file__} syncstrings.py",           # We invoke this script again with different subcommands. 
-        lambda args: f"python3 {__file__} _buildmd.py {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
+        lambda args: f"python3 {__file__} syncstrings",           # We invoke this script again with different subcommands. 
+        lambda args: f"python3 {__file__} _buildmd {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
     ],       
     "mmf-website_build-strings": [
-        lambda args: f"python3 {__file__} syncstrings.py",
-        lambda args: f"python3 {__file__} _buildstrings-website.py {args}"
+        lambda args: f"python3 {__file__} syncstrings",
+        lambda args: f"python3 {__file__} _buildstrings-website {args}"
     ],
 }
 

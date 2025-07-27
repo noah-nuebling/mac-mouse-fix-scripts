@@ -321,9 +321,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
 
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata
     #   This is the core of what we're trying to do here.
-    developer_dir = mfutils.runclt("xcode-select --print-path")
-    stringstool_path = os.path.join(developer_dir, 'usr/bin/xcstringstool')
-    result = mfutils.runclt(f"{stringstool_path} sync {xcstrings_path} --stringsdata {stringsdata_path}")
+    result = mfutils.runclt(f"xcrun xcstringstool sync {xcstrings_path} --stringsdata {stringsdata_path}")
     print(f"syncstrings.py: ran xcstringstool to update {xcstrings_path}. Result: '{result}'")
     
     #

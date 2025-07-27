@@ -3,8 +3,6 @@
 
 This script compiles markdown documents which are translatable or which have dynamic content.
 
-- [ ] TODO: [Jul 2025] Transfer over special requests from mac-mouse-fix/master to mac-mouse-fix-scripts (Haodi Wang, maybe others)
-
 """
 
 #
@@ -179,13 +177,15 @@ def main():
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--api_key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api_key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
-    parser.add_argument("--document"), # We used to get the document through .getenv, too but that can be confusing I think
-    parser.add_argument("--no_api", action='store_true') # no_api option is not necessary anymore now since we have caching to make things fast when testing.
+    parser.add_argument("--document"),                                  # We used to get the document through .getenv, too but that can be confusing I think
+    parser.add_argument("--no_api", action='store_true')                # no_api option is not necessary anymore now since we have caching to make things fast when testing.
+    parser.add_argument("--no_cache_expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
     args = parser.parse_args()
 
-    document_key = args.document
-    gumroad_api_key = args.api_key
-    no_api = args.no_api
+    document_key        = args.document
+    gumroad_api_key     = args.api_key
+    no_api              = args.no_api
+    no_cache_expiration = args.no_cache_expiration
     
     # Validate --api_key
     if gumroad_api_key == None or len(gumroad_api_key) == 0:
@@ -193,12 +193,16 @@ def main():
     else:
         print(f"Working with gumroad api key: {gumroad_api_key}")
     
+    # Implement --no_cache_expiration
+    if no_cache_expiration:
+        gumroad_sales_cache_shelf_life = "no_cache_expiration"
+
     # Guard --document exists
     document_key_was_provided = isinstance(document_key, str) and document_key != ''
     if not document_key_was_provided:
         print("No document key provided. Provide one using the '--document' command line argument")
         sys.exit(1)
-    
+
     # Adjust capitalization of --document
     #   So that the clt arg becomes effectively case-insensitive
     if False:
@@ -678,12 +682,7 @@ def display_name(sale):
     # Normalize whitespace
     name = normalize_whitespace_for_user_generated(name)
     
-    # Debug
-    if name == "🇩🇪 Gmail":
-        print("Hughhhh")
-    
     # Special requests & rules
-    
     #   Note: [Jul 2025] Update: We used to use ppls email here (in mac-mouse-fix > markdown_generator.py and in mac-mouse-fix-scripts > _buildmd.py). Don't do that anymore and look into rewriting git history if someone complains.
 
     if name == "🇦🇺 Haodi Wang": # Requested to use Chinese flag
@@ -920,11 +919,14 @@ def get_latest_sales(cache_file, cache_shelf_life, gumroad_api_key, gumroad_api_
             return cache['sales']
         
         # Check cache expiration
-        cache_creation_date = datetime.datetime.strptime(cache['created_at'], gumroad_date_format) # We don't have to use the gumroad_date_format here, but why not
-        cache_is_expired = datetime.datetime.utcnow() > (cache_creation_date + datetime.timedelta(hours=cache_shelf_life))
-        if cache_is_expired:
-            print('The cache is expired. Will load all sales from the Gumroad API...')
-            return None
+        if cache_shelf_life == "no_cache_expiration":
+            print('no_cache_expiration is set. This is intended for testing purposes.')
+        else: 
+            cache_creation_date = datetime.datetime.strptime(cache['created_at'], gumroad_date_format) # We don't have to use the gumroad_date_format here, but why not
+            cache_is_expired = datetime.datetime.utcnow() > (cache_creation_date + datetime.timedelta(hours=cache_shelf_life))
+            if cache_is_expired:
+                print('The cache is expired. Will load all sales from the Gumroad API...')
+                return None
 
         # Extract sales from cache
         cached_sales = cache['sales']
