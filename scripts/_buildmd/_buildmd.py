@@ -328,7 +328,17 @@ def main():
         
         # Validate that template is completely filled out
         #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
-        template_parse_result = list(string.Formatter().parse(template))
+        try:
+            template_parse_result = list(string.Formatter().parse(template))
+        except Exception as e:
+            # Debug-printing
+            # [Jul 2025] `string.Formatter().parse()` will throw parsing errors if there are mismatched unescaped '{' / '}' characters. However, it won't tell you _where_ the mismatch occurred, so we do some additional printing here to help debugging.
+            print(f"Exception while formatting: {e}") 
+            index_unescaped_open  = re.search(r'[^\{]\{[^\{]', template)
+            index_unescaped_close = re.search(r'[^\}]\}[^\}]', template)
+            if index_unescaped_open:  print(f"Unescaped '{{' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_open.start() -100: index_unescaped_open.start() +100])}\n\"\n")
+            if index_unescaped_close: print(f"Unescaped '}}' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_close.start()-100: index_unescaped_close.start()+100])}\n\"\n")
+            sys.exit(1)
         template_fields = [tup[1] for tup in template_parse_result if tup[1] is not None]
         is_fully_formatted = len(template_fields) == 0
         if not is_fully_formatted:
