@@ -714,9 +714,9 @@ def get_localizable_strings_from_markdown(md_string: str):
         assert len(key) > 0   # We need a key to do anything useful
         assert len(value) > 0 # English ui strings are defined directly in the markdown file - don't think this should be empty
         for st in [condition or '', value, key, comment]:
-            assert r'}}' not in st # Protect against matching past the first occurrence of }}
-            assert r'||' not in st # Protect against ? - this is weird
-            assert r'{{' not in st # Protect against ? - this is also weird
+            assert r'}}' not in st, f"st: {st}" # Protect against matching past the first occurrence of }}
+            assert r'||' not in st, f"st: {st}" # Protect against ? - this is weird
+            assert r'{{' not in st, f"st: {st}" # Protect against ? - this is also weird
         # TODO: Maybe somehow protect against over matching on block syntax, too
         
         # Strip results
@@ -1037,3 +1037,129 @@ def _modify_query_params_in_url(param_modifier: Callable[[dict[str, list[str]]],
 
         # Return
         return new_url
+
+#
+# MainRepo document paths
+#
+# Naming:
+#   [Jul 2025] We use prefix `mainmdp_` which stands for: Functions for obtaining file [p]aths involved in compiling and translating .[md] files in the [main] repo (The 'main' repo is mac-mouse-fix)
+#
+# Context: 
+#   [Jul 2025] These functions are used by the scripts that translate markdown documents in the main repo. (_buildmd.py and syncstrings.py)
+#   The functions here have knowledge about where all the files (templates, xcstrings, compiled) should go. To share this knowledge between the scripts, we're putting it here into shared/mflocales. Maybe we should just combine those two scripts into one?
+#
+# Explanation:
+#   syncstrings.py  extracts the localizable data from the `templates` and updates the `xcstrings` files with that.
+#   _buildmd.py     takes a `template` .md file plus an `.xcstrings` file and then compiles them into a series of localized `compiled` .md files - one for each locale in the .xcstrings file.
+#   
+#   The `template`, `xcstrings`, and `compiled` files all have the same filename stem, but with different extensions. 
+#   They are also found in different directories. 
+#   Example where the 'filename stem' is 'Readme':
+#       Template: 
+#           ./Markdown/Templates/Readme.md
+#       XCStrings: 
+#           ./Markdown/Strings/Readme.xcstrings
+#       Compiled: 
+#           ./Readme.md                                     (English aka 'development language' document)
+#           ./Markdown/LocalizedDocuments/de/Readme.md      (German Document)
+#           ./Markdown/LocalizedDocuments/vi/Readme.md      (Vietnamese Document)
+#           ...                                             (And so on)
+#  
+#   To compile one of these documents, run _buildmd.py and pass in the `filename stem` ('Readme' in this example) as the `--document`
+#   
+# Notes:
+#   - All the hardcoded paths in this script are relative to the root directory of the repo - we expect this script to be run from the repo root.
+
+mainmdp_template_root = "Markdown/Templates"                                        # The script will look for document templates in this directory (It's relative to the repo root)
+mainmdp_xcstrings_root = "Markdown/Strings"                                         # The script will look for xcstrings files in this dir
+mainmdp_compiled_doc_root_for_development_locale = ""                                  # Compiled documents in the 'development language' (English) will be put into this dir
+mainmdp_compiled_doc_root_for_translated_locales = "Markdown/LocalizedDocuments"       # Compiled documents in translated languages will be put into this dir
+
+from enum import Enum
+class mainmdp_DocType(Enum):
+    TEMPLATE = 2
+    XCSTRINGS = 1
+    COMPILED_DOC = 3
+
+import glob
+import pathlib
+
+def mainmdp_get_document_keys():
+    
+    # Returns the filename stems of all files in the 'mainmdp_template_root' folder
+    # These filename stems can be used as 'document keys' - they identify a certain document that we might want to compile.
+
+    result_lowercase = []
+    result = []
+
+    for item in glob.glob(f"{mainmdp_template_root}/**/*.md", recursive=True):
+        
+        # Normalize
+        item = item[len(mainmdp_template_root)+1:]
+
+        # Get stem
+        filename_stem, ext = os.path.splitext(item)
+
+        # Filter stuff
+        if "Old (for reference)/" in item: continue
+        if (0): 
+            if not os.path.isfile(item): continue
+        if not ext == '.md': continue
+
+        # Store result
+        result.append(filename_stem)
+
+        # Validate
+        assert filename_stem.lower() not in result_lowercase, f"Found duplicate template name: {item}. (Checked case-insensitively.) (This is a problem because the template names determine the document keys, which we might want to use case-insensitively. So the template names need to be case-insensitively unique.)"
+        result_lowercase.append(filename_stem.lower())
+    
+    return result
+
+def mainmdp_construct_path(filename_stem: str, doc_type: mainmdp_DocType, locale: str|None = None, development_locale: str = 'en'):
+
+    match doc_type:
+        case mainmdp_DocType.TEMPLATE:
+            return os.path.join(mainmdp_template_root, filename_stem + '.md')
+        
+        case mainmdp_DocType.XCSTRINGS:
+            return os.path.join(mainmdp_xcstrings_root, filename_stem + '.xcstrings')
+        
+        case mainmdp_DocType.COMPILED_DOC:
+
+            assert locale != None and len(locale) > 0
+
+            if (locale == development_locale):
+                return os.path.join(mainmdp_compiled_doc_root_for_development_locale, filename_stem + '.md')
+            else:
+                return os.path.join(mainmdp_compiled_doc_root_for_translated_locales, locale, filename_stem + '.md')
+        
+        case _:
+            assert False
+            return None
+
+def mainmdp_path_to_repo_root(path):
+    parent_count = len(pathlib.Path(path).parents)
+    root_path = '../' * (parent_count-1)
+    return root_path
+
+def mainmdp_path_to_compiled_doc_root(thisdoc_path: str, locale: str, development_locale: str):
+    
+    # Construct docroot for locale
+    docroot = None
+    if locale == development_locale:
+        docroot = mainmdp_compiled_doc_root_for_development_locale
+    else:
+        docroot = os.path.join(mainmdp_compiled_doc_root_for_translated_locales, locale)
+    
+    # Validate
+    assert(thisdoc_path.startswith(docroot))
+
+    # Get thisdoc path relative to docroot.
+    thisdoc_path_relative = thisdoc_path.removeprefix(docroot)
+
+    # Construct path from thisdoc to docroot
+    parent_count = len(pathlib.Path(thisdoc_path_relative).parents)
+    root_path = '../' * (parent_count-1)
+
+    # Return
+    return root_path

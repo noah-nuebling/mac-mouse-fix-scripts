@@ -703,7 +703,8 @@ def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[st
         
         all_conditions_in_string.append(condition)
     
-    assert all_conditions_in_string == list(condition_dict.keys())
+    if (0): # Turn off assert because we're not using the same set of conditions for every document
+        assert all_conditions_in_string == list(condition_dict.keys())
 
     return result
 
@@ -835,8 +836,12 @@ def write_file(file_path, content, encoding='utf-8'):
     with open(file_path, 'w', encoding=encoding) as file:
         file.write(content)
 
-def read_xcstrings_file(xcstrings_path: str) -> dict:
-    return json.loads(read_file(xcstrings_path))
+def read_xcstrings_file(xcstrings_path: str, allow_empty=False) -> dict|None:
+    s = read_file(xcstrings_path)
+    if len(s.strip()) == 0:
+        if not allow_empty: assert False
+        else: return None
+    return json.loads(s)
 
 def write_xcstrings_file(xcstrings_path: str, xcstrings_obj: dict):
     

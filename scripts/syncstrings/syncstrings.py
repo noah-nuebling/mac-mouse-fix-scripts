@@ -24,12 +24,8 @@ from dataclasses import dataclass, astuple
 # Constants
 #
 
-main_repo = { # Maybe we should reuse construct_path() from buildmd.py instead of this stuff, (or maybe just combine those two scripts into one)
-    'source_paths': [ # The .md file from which we want to extract strings.
-        'Markdown/Templates/Acknowledgements.md',
-        'Markdown/Templates/Readme.md',
-    ],
-    'xcstrings_dir': "Markdown/Strings/", # The folder where all the .xcstrings files are, which we want to update with the strings from the .md files.
+main_repo = { 
+    # [Jul 2025] This is empty now since we use the `mainmdp_` functions to obtain the document paths, instead of hardcoding them here.
 }
 website_repo = {
     # 'quotes_tool_path': "./utils/quotesTool.mjs",
@@ -170,14 +166,18 @@ def main():
         print("")
 
         # Extract strings from source_files        
-        for source_file in main_repo['source_paths']:
-
-            # Construct path to xcstrings file
-            stem = os.path.splitext(os.path.basename(source_file))[0]
-            xcstrings_path = os.path.join(main_repo['xcstrings_dir'], (stem + '.xcstrings'))
+        for document_key in mflocales.mainmdp_get_document_keys():
+            
+            # Construct file paths
+            source_file     = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
+            xcstrings_path  = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
 
             # Log
             print(f"syncstrings.py: Syncing {xcstrings_path}")
+
+            # Validate
+            if (not os.path.isfile(xcstrings_path)):
+                assert False, f"No xcstrings file found. Expected xcstrings file at '{xcstrings_path}' for template '{source_file}'. To create the file, run:\nmkdir -p \"{os.path.dirname(xcstrings_path)}\"; touch \"{xcstrings_path}\""
 
             # Load content
             content = None
@@ -273,57 +273,70 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     # Modify .xcstrings file: 
     # 
 
-    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path)
-    source_language = xcstrings_obj['sourceLanguage']
-    assert source_language == 'en'
-    
-    # 1. Modification: Set the 'extractedState' for all strings
-    #   Note: [Mar 2025] Not sure this is necessary? Logically, the xcstringstool should set this based on whether our .stringsdata file entries contain values or not.
-    extraction_state = 'extracted_with_value' if did_extract_values else 'extracted'
-    for key, info in xcstrings_obj['strings'].items():
-        info['extractionState'] = extraction_state
-
-    print(f"syncstrings.py: Set the extractionState of all strings to '{extraction_state}'")
-
-    # 2. Modification: Set the 'state' of all 'source_language' ui strings to 'new'
-    #   -> If we have accidentally changed them, their state will be 'translated' 
-    #       instead which will prevent xcstringstool from updating them to the new value from the source file.
-
-    #   -> All these modifications are necessary so that xcstringstool updates everything (I think)
-
-    if did_extract_values:
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path, allow_empty=True)
+    if not xcstrings_obj:
+        # [Jul 2025] File exists, signalling that the user intends there to be an xcstrings file here, but it's empty – so we should fill it up! This way the user can create the xcstrings file via the touch clt and we handle the rest (instead of them having to use Xcode) (Not sure this is worth making the code more complex)
+        Path(xcstrings_path).write_text(mfutils.mfdedent( # This is the content that Xcode 26.0 Beta 3 fills a fresh xcstrings file up with [Jul 2025] ... Actually, Xcode uses version 1.1 instead of 1.0 – but our scripts are built with 1.0 (not sure what the difference is)
+        """
+        {
+            "sourceLanguage" : "en",
+            "strings" : {},
+            "version" : "1.0"
+        }
+        """))
+    if xcstrings_obj: 
+        
+        source_language = xcstrings_obj['sourceLanguage']
+        assert source_language == 'en'
+        
+        # 1. Modification: Set the 'extractedState' for all strings
+        #   Note: [Mar 2025] Not sure this is necessary? Logically, the xcstringstool should set this based on whether our .stringsdata file entries contain values or not.
+        extraction_state = 'extracted_with_value' if did_extract_values else 'extracted'
         for key, info in xcstrings_obj['strings'].items():
-            if 'localizations' in info.keys() and source_language in info['localizations'].keys():
-                info['localizations'][source_language]['stringUnit']['state'] = 'new'
-            else:
-                pass
-                # assert False
+            info['extractionState'] = extraction_state
 
-    # 3. Modification: Remove indexes from keys (e.g. 003:some.key -> some.key)
-    #   Explanation: We have to first remove all the prefixes from the .xcstrings file before calling xcstringstool to synchronize.
-    #       Otherwise I think the syncing would break if we ever change the order that the keys appear in the template.
-    for key in list(xcstrings_obj['strings'].keys()):
-        key: str = key
+        print(f"syncstrings.py: Set the extractionState of all strings to '{extraction_state}'")
 
-        # Get new, index-less key
-        key_without_index = mflocales.remove_index_prefix_from_key(key)
+        # 2. Modification: Set the 'state' of all 'source_language' ui strings to 'new'
+        #   -> If we have accidentally changed them, their state will be 'translated' 
+        #       instead which will prevent xcstringstool from updating them to the new value from the source file.
 
-        # Guard
-        if key == key_without_index:
-            continue
+        #   -> All these modifications are necessary so that xcstringstool updates everything (I think)
 
-        # Move content from key -> new_key
-        xcstrings_obj['strings'][key_without_index] = xcstrings_obj['strings'][key]
-        del xcstrings_obj['strings'][key]
+        if did_extract_values:
+            for key, info in xcstrings_obj['strings'].items():
+                if 'localizations' in info.keys() and source_language in info['localizations'].keys():
+                    info['localizations'][source_language]['stringUnit']['state'] = 'new'
+                else:
+                    pass
+                    # assert False
 
-    # Write modified .xcstrings file
-    mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)   
+        # 3. Modification: Remove indexes from keys (e.g. 003:some.key -> some.key)
+        #   Explanation: We have to first remove all the prefixes from the .xcstrings file before calling xcstringstool to synchronize.
+        #       Otherwise I think the syncing would break if we ever change the order that the keys appear in the template.
+        for key in list(xcstrings_obj['strings'].keys()):
+            key: str = key
+
+            # Get new, index-less key
+            key_without_index = mflocales.remove_index_prefix_from_key(key)
+
+            # Guard
+            if key == key_without_index:
+                continue
+
+            # Move content from key -> new_key
+            xcstrings_obj['strings'][key_without_index] = xcstrings_obj['strings'][key]
+            del xcstrings_obj['strings'][key]
+
+        # Write modified .xcstrings file
+        mfutils.write_xcstrings_file(xcstrings_path, xcstrings_obj)   
 
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata
     #   This is the core of what we're trying to do here.
     result = mfutils.runclt(f"xcrun xcstringstool sync {xcstrings_path} --stringsdata {stringsdata_path}")
     print(f"syncstrings.py: ran xcstringstool to update {xcstrings_path}. Result: '{result}'")
-    
+    assert result == ''
+
     #
     # Modify .xcstrings file some more:
     # 

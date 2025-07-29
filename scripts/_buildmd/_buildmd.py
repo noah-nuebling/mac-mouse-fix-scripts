@@ -26,118 +26,6 @@ import json
 
 import mfutils
 import mflocales
-
-#
-# Document paths
-#
-# Explanation:
-#   This script takes a `template .md` file plus an `.xcstrings` file and then compiles them into a series of proper, localized `compiled .md` - one for each locale in the .xcstrings file.
-#   
-#   The `template .md`, `.xcstrings`, and `compiled .md` files all have the same filename stem, but with different extensions. 
-#   They are also found in different directories. 
-#   Example where the 'filename stem' is 'Readme':
-#       Template: 
-#           ./Markdown/Templates/Readme.md
-#       XCStrings: 
-#           ./Markdown/Strings/Readme.xcstrings
-#       Compiled: 
-#           ./Readme.md                                     (English aka 'development language' document)
-#           ./Markdown/LocalizedDocuments/de/Readme.md      (German Document)
-#           ./Markdown/LocalizedDocuments/vi/Readme.md      (Vietnamese Document)
-#           ...                                             (And so on)
-#  
-#   To compile one of these documents, run this script and pass in the `filename stem` ('Readme' in this example) as the `--document`
-#   
-# Notes:
-#   - All the hardcoded paths in this script are relative to the root directory of the repo - we expect this script to be run from the repo root.
-
-template_root = "Markdown/Templates"                                        # The script will look for document templates in this directory (It's relative to the repo root)
-xcstrings_root = "Markdown/Strings"                                         # The script will look for xcstrings files in this dir
-compiled_doc_root__development_locale = ""                                  # Compiled documents in the 'development language' (English) will be put into this dir
-compiled_doc_root__translated_locales = "Markdown/LocalizedDocuments"       # Compiled documents in translated languages will be put into this dir
-
-from enum import Enum
-class DocType(Enum):
-    TEMPLATE = 2
-    XCSTRINGS = 1
-    COMPILED_DOC = 3
-
-def get_document_keys():
-    
-    # Returns the filename stems of all files in the 'template_root' folder
-    # These filename stems can be used as 'document keys' - they identify a certain document that we might want to compile.
-
-
-    result_lowercase = []
-    result = []
-
-    for item in os.listdir(template_root):
-
-        # Get stem
-        filename_stem, ext = os.path.splitext(item)
-
-        # Guard
-        if not os.path.isfile(item): continue
-        if not ext == '.md': continue
-
-        # Store result
-        result.append(filename_stem)
-
-        # Validate
-        assert filename_stem.lower() not in result_lowercase, f"Found duplicate template name: {item}. (Checked case-insensitively.) (This is a problem because the template names determine the document keys, which we might want to use case-insensitively. So the template names need to be case-insensitively unique.)"
-        result_lowercase.append(filename_stem.lower())
-    
-    return result
-
-def path_to_repo_root(path):
-    parent_count = len(pathlib.Path(path).parents)
-    root_path = '../' * (parent_count-1)
-    return root_path
-
-def path_to_compiled_doc_root(thisdoc_path: str, locale: str, development_locale: str):
-    
-    # Construct docroot for locale
-    docroot = None
-    if locale == development_locale:
-        docroot = compiled_doc_root__development_locale
-    else:
-        docroot = os.path.join(compiled_doc_root__translated_locales, locale)
-    
-    # Validate
-    assert(thisdoc_path.startswith(docroot))
-
-    # Get thisdoc path relative to docroot.
-    thisdoc_path_relative = thisdoc_path.removeprefix(docroot)
-
-    # Construct path from thisdoc to docroot
-    parent_count = len(pathlib.Path(thisdoc_path_relative).parents)
-    root_path = '../' * (parent_count-1)
-
-    # Return
-    return root_path
-
-def construct_path(filename_stem: str, doc_type: DocType, locale: str|None = None, development_locale: str = 'en'):
-
-    match doc_type:
-        case DocType.TEMPLATE:
-            return os.path.join(template_root, filename_stem + '.md')
-        
-        case DocType.XCSTRINGS:
-            return os.path.join(xcstrings_root, filename_stem + '.xcstrings')
-        
-        case DocType.COMPILED_DOC:
-
-            assert locale != None and len(locale) > 0
-
-            if (locale == development_locale):
-                return os.path.join(compiled_doc_root__development_locale, filename_stem + '.md')
-            else:
-                return os.path.join(compiled_doc_root__translated_locales, locale, filename_stem + '.md')
-        
-        case _:
-            assert False
-            return None
-
 #
 # Constants
 #
@@ -172,7 +60,7 @@ nbsp = '&nbsp;'  # Non-breaking space. &nbsp; doesn't seem to work on GitHub. (E
 def main():
     
     # Get document keys
-    document_keys = get_document_keys()
+    document_keys = mflocales.mainmdp_get_document_keys()
     
     # Parse args
     parser = argparse.ArgumentParser()
@@ -221,7 +109,7 @@ def main():
     print(f"Generating document: {document_key}")
     
     # Construct paths to .xcstrings file
-    xcstrings_path = construct_path(document_key, DocType.XCSTRINGS)
+    xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
 
     # Load xcstrings file as python object
     xcstrings = []
@@ -262,8 +150,8 @@ def main():
         
         # Get src and dst paths
 
-        template_path = construct_path(document_key, DocType.TEMPLATE)
-        destination_path = construct_path(document_key, DocType.COMPILED_DOC, locale, development_locale)
+        template_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
+        destination_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
         
         # Load template
         template = ""
@@ -323,8 +211,10 @@ def main():
             template = insert_root_paths(template, destination_path, locale, development_locale) # This is not currently necessary here since we don't use the {root_path} placeholder in the acknowledgements templates
             template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
             template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
+        elif document_key == "Guides/CapturedButtons": # [Jul 2025] Document name will probably change
+            pass # [Jul 2025] TODO: Fill this in or something
         else:
-            assert False # Should never happen because we check document_key for validity above.
+            assert False
         
         # Validate that template is completely filled out
         #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
@@ -572,9 +462,9 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
         language_name2 = f'{mflocales.locale_to_language_name(locale2, locale2, True)}'
         
         # Create relative path from the location of the `language_dict` document to the `language_dict2` document. This relative path works as a link. See https://github.blog/2013-01-31-relative-links-in-markup-files/
-        path = construct_path(document_key, DocType.COMPILED_DOC, locale, development_locale)
-        path2 = construct_path(document_key, DocType.COMPILED_DOC, locale2, development_locale)
-        root_path = path_to_repo_root(path)
+        path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
+        path2 = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale2, development_locale)
+        root_path = mflocales.mainmdp_path_to_repo_root(path)
         relative_path = root_path + path2
         link = urllib.parse.quote(relative_path) # This percent encodes spaces and others chars which is necessary
         
@@ -617,8 +507,8 @@ def insert_root_paths(template, path, locale, development_locale):
     # Extract info from language_dict
         
     # path = os.path.join(document_root, document_subpath, '') # The '' at the end makes it end with a separator `/`
-    repo_root = path_to_repo_root(path)
-    language_root = path_to_compiled_doc_root(path, locale, development_locale)
+    repo_root = mflocales.mainmdp_path_to_repo_root(path)
+    language_root = mflocales.mainmdp_path_to_compiled_doc_root(path, locale, development_locale)
     
     template = template.replace('{repo_root}', repo_root)
     template = template.replace('{language_root}', language_root) # Maybe rename to 'locale_root'? We try to use 'locale' consistently in the python scripts now (as of 07.09.2024, see mflocales.py discussion)
