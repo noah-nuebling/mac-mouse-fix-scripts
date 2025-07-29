@@ -659,7 +659,7 @@ def get_localizable_strings_from_markdown(md_string: str):
             Since, this way, translators will never have to add blank lines above or below their content to make the layout of the .md file work as intended.
             
     Notes:
-    - The block syntax was created in this regex101 project: https://regex101.com/r/IcHuN0
+    - The block syntax was created in this regex101 project: https://regex101.com/r/R39rXW/2
     - To test, you might want to post the whole .md file on regex101. That way you can see any under or overmatching which might not be obvious when testing a smaller example string.
 
     """
@@ -680,8 +680,7 @@ def get_localizable_strings_from_markdown(md_string: str):
     inline_matches: re.Iterator[re.Match[str]] = re.finditer(inline_regex, md_string)
     
     # Extract translatable strings with block syntax
-    
-    block_regex = r"```(?:\n\s*?if:\s*(.*?)\s*)?\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```"
+    block_regex = r"^[^\S\r\n]*?```(?:\n\s*?if:\s*(.*?)\s*)?\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```"
     block_matches: re.Iterator[re.Match[str]] = re.finditer(block_regex, md_string, re.DOTALL | re.MULTILINE)
 
     # Assemble result
@@ -722,7 +721,7 @@ def get_localizable_strings_from_markdown(md_string: str):
         
         # Strip results
         #   The comment sometimes contained whitespace, I'm not sure if the key can contain whitespace with the way the regex is set up.
-        #   Stripping the value is not good since we want to preserve the indent
+        #   Stripping the value is not good since we want to preserve the indent (Update: [Jul 2025] Might be cleaner to strip the indent here and return the indent as a number.)
         key = key.strip()
         comment = comment.strip() 
 
