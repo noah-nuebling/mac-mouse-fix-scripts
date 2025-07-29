@@ -667,7 +667,7 @@ def get_localizable_strings_from_markdown(md_string: str):
     # Declare return type
     @dataclass
     class LocalizedStringData:
-        condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %})
+        condition: str | None       # A string specifying the condition under which to include this localizable string in the rendered document (Instead of this we should probably just use our more powerful jinja-style {% if blocks %} – See conditional_render_with_jinja_if_blocks())
         key: str                    # a.key.that identifies the string across different languages
         key_with_index_prefix: str  # Key that looks like 001:some.key or 002:some.other.key, etc. Where we call '002:' the 'index_prefix'. The index tells us the order that the keys appear in the template.
         value: str                  # The user-facing string in the development language (english). The goal is to translate this string into differnt languages.
@@ -677,17 +677,18 @@ def get_localizable_strings_from_markdown(md_string: str):
     # Extract translatable strings with inline syntax
 
     inline_regex = r"\{\{(.*?)\|\|(.*?)\|\|(.*?)\}\}"           # r makes it so \ is treated as a literal character and so we don't have to double escape everything
-    inline_matches = re.finditer(inline_regex, md_string)
+    inline_matches: re.Iterator[re.Match[str]] = re.finditer(inline_regex, md_string)
     
     # Extract translatable strings with block syntax
     
     block_regex = r"```(?:\n\s*?if:\s*(.*?)\s*)?\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```"
-    block_matches = re.finditer(block_regex, md_string, re.DOTALL | re.MULTILINE)
+    block_matches: re.Iterator[re.Match[str]] = re.finditer(block_regex, md_string, re.DOTALL | re.MULTILINE)
 
     # Assemble result
 
     all_matches = list(map(lambda m: ('inline', m), inline_matches)) + list(map(lambda m: ('block', m), block_matches))
-    
+    all_matches.sort(key=lambda match: match[1].start(0)) # Sort by where the match appears in the string
+
     result: list[LocalizedStringData] = []
         
     for i, match in enumerate(all_matches):
