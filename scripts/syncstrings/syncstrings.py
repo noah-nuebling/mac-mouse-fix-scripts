@@ -174,11 +174,7 @@ def main():
 
             # Log
             print(f"syncstrings.py: Syncing {xcstrings_path}")
-
-            # Validate
-            if (not os.path.isfile(xcstrings_path)):
-                assert False, f"No xcstrings file found. Expected xcstrings file at '{xcstrings_path}' for template '{source_file}'. To create the file, run:\nmkdir -p \"{os.path.dirname(xcstrings_path)}\"; touch \"{xcstrings_path}\""
-
+            
             # Load content
             content = None
             with open(source_file, 'r') as file:
@@ -214,8 +210,12 @@ def main():
                 #   In .stringsdata format
                 extracted_strings.append(StringsDataItem(st.comment, st.key, ui_string, st.key_with_index_prefix))
 
-            # Call subfunc
-            update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=True)
+            if (len(extracted_strings) > 0):
+                # Validate
+                if (not os.path.isfile(xcstrings_path)): assert False, f"No xcstrings file found. Expected xcstrings file at '{xcstrings_path}' for template '{source_file}'. To create the file, run:\nmkdir -p \"{os.path.dirname(xcstrings_path)}\"; touch \"{xcstrings_path}\""
+                update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=True)
+            else:
+                print(f"No strings extracted for '{source_file}'. Not attempting to update xcstrings file '{xcstrings_path}. (Which should exist since the source file has no localizable strings.)")
 
     else:
         assert False
@@ -226,7 +226,7 @@ def main():
 def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsDataItem|StringsDataItem_NoValue], did_extract_values: bool):
 
     # Validate extracted strings exist
-    assert extracted_strings != None and len(extracted_strings) > 0, f"syncstrings.py: extracted_strings are unexpectedly 'None'. Don't call update_xcstrings if there's nothing to extract. Called for xcstring_path: {xcstrings_path}"
+    assert extracted_strings != None and len(extracted_strings) > 0, f"syncstrings.py: extracted_strings are unexpectedly 'None'. Don't call update_xcstrings if there's nothing to extract. Called for xcstring_path: {xcstrings_path_final}"
 
     # Validate: xcstrings file exists
     assert os.path.exists(xcstrings_path_final), f"syncstrings.py: Tried to update {xcstrings_path_final}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"
@@ -276,14 +276,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path, allow_empty=True)
     if not xcstrings_obj:
         # [Jul 2025] File exists, signalling that the user intends there to be an xcstrings file here, but it's empty – so we should fill it up! This way the user can create the xcstrings file via the touch clt and we handle the rest (instead of them having to use Xcode) (Not sure this is worth making the code more complex)
-        Path(xcstrings_path).write_text(mfutils.mfdedent( # This is the content that Xcode 26.0 Beta 3 fills a fresh xcstrings file up with [Jul 2025] ... Actually, Xcode uses version 1.1 instead of 1.0 – but our scripts are built with 1.0 (not sure what the difference is)
-        """
-        {
-            "sourceLanguage" : "en",
-            "strings" : {},
-            "version" : "1.0"
-        }
-        """))
+        Path(xcstrings_path).write_text(mflocales.fresh_xcstrings_content(development_locale="en"))
     if xcstrings_obj: 
         
         source_language = xcstrings_obj['sourceLanguage']
@@ -333,8 +326,8 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
 
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata
     #   This is the core of what we're trying to do here.
-    result = mfutils.runclt(f"xcrun xcstringstool sync {xcstrings_path} --stringsdata {stringsdata_path}")
-    print(f"syncstrings.py: ran xcstringstool to update {xcstrings_path}. Result: '{result}'")
+    result = mfutils.runclt(f"xcrun xcstringstool sync '{xcstrings_path}' --stringsdata '{stringsdata_path}'")
+    print(f"syncstrings.py: ran xcstringstool to update '{xcstrings_path}'. Result: '{result}'")
     assert result == ''
 
     #

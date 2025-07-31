@@ -209,6 +209,18 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
     # Return
     return localization_progress
 
+def fresh_xcstrings_content(development_locale: str) -> dict[str, str]:
+    # [Jul 2025] 
+    #   This is the content that Xcode 26.0 Beta 3 fills a fresh xcstrings file up with [Jul 2025] ... Actually, Xcode uses version 1.1 instead of 1.0 – but our scripts are built with 1.0 (not sure what the difference is)
+    return mfutils.mfdedent( 
+        """
+        {{
+            "sourceLanguage" : "{development_locale}",
+            "strings" : {{}},
+            "version" : "1.0"
+        }}
+        """).format(development_locale=development_locale)
+
 def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_to_next_best_language: bool = True) -> tuple[str, str]:
     
     """
@@ -1086,52 +1098,55 @@ import pathlib
 
 def mainmdp_get_document_keys():
     
-    # Returns the filename stems of all files in the 'mainmdp_template_root' folder
-    # These filename stems can be used as 'document keys' - they identify a certain document that we might want to compile.
+    # Returns the relative filepaths of all files in the 'mainmdp_template_root' folder.
+    # These filepaths are used as 'document keys' - they identify a certain document that we might want to compile.
 
     result_lowercase = []
     result = []
 
-    for item in glob.glob(f"{mainmdp_template_root}/**/*.md", recursive=True):
+    for filepath in glob.glob(f"{mainmdp_template_root}/**/*.md", recursive=True):
         
         # Normalize
-        item = item[len(mainmdp_template_root)+1:]
+        filepath = filepath[len(mainmdp_template_root)+1:]
 
         # Get stem
-        filename_stem, ext = os.path.splitext(item)
+        filename_stem, ext = os.path.splitext(filepath)
 
         # Filter stuff
-        if "Old (for reference)/" in item: continue
+        if "Old (for reference)/" in filepath: continue
         if (0): 
-            if not os.path.isfile(item): continue
+            if not os.path.isfile(filepath): continue
         if not ext == '.md': continue
 
         # Store result
-        result.append(filename_stem)
+        result.append(filepath)
 
         # Validate
-        assert filename_stem.lower() not in result_lowercase, f"Found duplicate template name: {item}. (Checked case-insensitively.) (This is a problem because the template names determine the document keys, which we might want to use case-insensitively. So the template names need to be case-insensitively unique.)"
-        result_lowercase.append(filename_stem.lower())
+        assert filepath.lower() not in result_lowercase, f"Found duplicate template name: {filepath}. (Checked case-insensitively.) (This is a problem because the template names determine the document keys, which we might want to use case-insensitively. So the template names need to be case-insensitively unique.)"
+        result_lowercase.append(filepath.lower())
     
     return result
 
-def mainmdp_construct_path(filename_stem: str, doc_type: mainmdp_DocType, locale: str|None = None, development_locale: str = 'en'):
+def mainmdp_construct_path(filepath: str, doc_type: mainmdp_DocType, locale: str|None = None, development_locale: str = 'en'):
+
+    assert filepath.endswith('.md')
+    filepath_stem = filepath[0:-3]
 
     match doc_type:
         case mainmdp_DocType.TEMPLATE:
-            return os.path.join(mainmdp_template_root, filename_stem + '.md')
+            return os.path.join(mainmdp_template_root, filepath_stem + '.md')
         
         case mainmdp_DocType.XCSTRINGS:
-            return os.path.join(mainmdp_xcstrings_root, filename_stem + '.xcstrings')
+            return os.path.join(mainmdp_xcstrings_root, filepath_stem + '.xcstrings')
         
         case mainmdp_DocType.COMPILED_DOC:
 
             assert locale != None and len(locale) > 0
 
             if (locale == development_locale):
-                return os.path.join(mainmdp_compiled_doc_root_for_development_locale, filename_stem + '.md')
+                return os.path.join(mainmdp_compiled_doc_root_for_development_locale, filepath_stem + '.md')
             else:
-                return os.path.join(mainmdp_compiled_doc_root_for_translated_locales, locale, filename_stem + '.md')
+                return os.path.join(mainmdp_compiled_doc_root_for_translated_locales, locale, filepath_stem + '.md')
         
         case _:
             assert False

@@ -112,9 +112,21 @@ def main():
     xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
 
     # Load xcstrings file as python object
+    do_localize: bool
     xcstrings = []
-    with open(xcstrings_path, 'r') as file:
-        xcstrings = json.load(file)
+    try:
+        with open(xcstrings_path, 'r') as file:
+            xcstrings = json.load(file)
+            do_localize = True
+    except Exception as e:
+        # Notes: [Jul 2025]
+        #   - If the document *does* have localizable strings but no xcstrings file, our other script syncstrings.py should catch that already, so we're not validating that here
+        #   - Creating dummy, empty xcstrings object here. That way we can keep the codepaths largely the same whether or not an xcstrings file exists.
+        #       - Currently I think the only processing that is done on non-localized docs is conditional_render_with_jinja_if_blocks() and the `# Insert into template` stuff. And currently I think none of that is used. So maybe we should just return here or sth? I guess that would make things faster.
+        #           - Either way, it is nice to have separate folders for all 'input files' which we edit, and another folder for all 'output files' which are user-facing – even if there's no processing done on some of the files.
+        print(f"Error reading xcstrings file at '{xcstrings_path}'. We assume this means the document is only in the development_language (English) and doesn't need to be localized.")
+        xcstrings = json.loads(mflocales.fresh_xcstrings_content(development_locale="en"))
+        do_localize = False
     
     # Remove index-prefixes from keys inside xcstrings obj (e.g. 003:some.key -> some.key)
     for key in list(xcstrings['strings'].keys()):
@@ -126,6 +138,8 @@ def main():
 
     # Find locales
     development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
+    if not do_localize: 
+        translation_locales = []
     
     # Get translation progress
     translation_progress = mflocales.get_localization_progress([xcstrings], translation_locales)
@@ -204,17 +218,17 @@ def main():
         print(f'buildmd.py: Inserting generated strings into template at {template_path}...')
         
         # Insert into template
-        if document_key == "Readme":
+        
+        if do_localize:
             template = insert_root_paths(template, destination_path, locale, development_locale)
             template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
-        elif document_key == "Acknowledgements":
-            template = insert_root_paths(template, destination_path, locale, development_locale) # This is not currently necessary here since we don't use the {root_path} placeholder in the acknowledgements templates
-            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
+        
+        if document_key == "Readme.md":
+            pass
+        elif document_key == "Acknowledgements.md":
             template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
-        elif document_key == "Guides/CapturedButtons": # [Jul 2025] Document name will probably change
-            pass # [Jul 2025] TODO: Fill this in or something
         else:
-            assert False
+            print(f"Inserting into not-explicitly-handled document template with key '{document_key}'")
         
         # Validate that template is completely filled out
         #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
