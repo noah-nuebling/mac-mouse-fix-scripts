@@ -107,19 +107,19 @@ subcommand_map = {
 compound_subcommands = {
     
     "build-markdown":  [
-        lambda args: f"python3 {__file__} syncstrings",           # We invoke this script again with different subcommands. 
-        lambda args: f"python3 {__file__} _buildmd {args}"         # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
+        lambda run_args, args: f"python3 {__file__} {run_args} -- syncstrings",           # We invoke this script again with different subcommands. 
+        lambda run_args, args: f"python3 {__file__} {run_args} -- _buildmd {args}"        # Note: We tried calling ./run instead of `python3 __file__` which should do the same thing, but broke the VSCode debugger for some reason.
     ],       
     "mmf-website_build-strings": [
-        lambda args: f"python3 {__file__} syncstrings",
-        lambda args: f"python3 {__file__} _buildstrings-website {args}"
+        lambda run_args, args: f"python3 {__file__} {run_args} -- syncstrings",
+        lambda run_args, args: f"python3 {__file__} {run_args} -- _buildstrings-website {args}"
     ],
 }
 
 help_string = """
 Use ./run like this:
 
-    ./run <subcommand> <args>
+    ./run [<run_args> --] <subcommand> <subcommand_args>
 
 Known subcommands:
 
@@ -217,15 +217,31 @@ def main():
         subcommand_map.update(script_name_to_path)
     fill_subcommand_map()
 
+    # Extract run.py args
+    run_args   = []
+    argv_other = []
+    try:    spliti = sys.argv.index('--')
+    except: spliti = None
+    if spliti: # The args before `--` are for run.py
+        run_args   = sys.argv[1:spliti]
+        argv_other = [sys.argv[0]] + sys.argv[spliti+1:] # [Jul 2025] argv[0] isn't needed but it makes argv_other exactly match the "else" case.
+        print(f"run.py: Split args into run.py args: {run_args}, and other args: {argv_other}")
+    else:
+        argv_other = sys.argv
+
+    # Parse run.py args
+    #   [Jul 2025] Maybe we could print_help_and_exit() if the user passes unknown args?
+    arg_nopip = "--nopip" in run_args
+
     # Handle missing subcommand
     #   (Note: [Mar 2025] We do this after building subcommand_map so we can show the user the available subcommands.)
-    if len(sys.argv) < 2:
+    if len(argv_other) < 2:
         print_help_and_exit('<no subcommand provided>')
         exit(1)
-    
+
     # Process subcommand
-    subcommand = sys.argv[1]
-    subcommand_args = sys.argv[2:]
+    subcommand      = argv_other[1]
+    subcommand_args = argv_other[2:]
     
     # Help
     if subcommand == '-h' or subcommand == 'help':
@@ -238,7 +254,7 @@ def main():
     # Implement compound subcommands
     if isinstance(subcommand_map[subcommand], list):
         for commandline_string_maker in subcommand_map[subcommand]:
-            commandline_string = commandline_string_maker(shlex.join(subcommand_args))
+            commandline_string = commandline_string_maker(shlex.join(run_args), shlex.join(subcommand_args))
             print(f'\nrun.py: Running clt {commandline_string} ...\n')
             commandline_list = shlex.split(commandline_string) # shlex allows you to escape whitespace inside a single arg with \ or "with quotes". Just like the shell!
             result = subprocess.run(commandline_list)
@@ -300,13 +316,15 @@ def main():
             subprocess.check_call(f'./{venv_python_path} -m pip install -r "{requiremements_path}"', text=True, shell=True)
 
         # Do stuff
-        create_venv()
-        try:
-            install_requirements()
-        except Exception as e:
-            print(f"\nrun.py: Installing requirements failed with exception:\n{e}\nTrying again without reusing existing venv...")
-            create_venv(reuse_existing=False)
-            install_requirements()
+        if not arg_nopip: # --nopip turns off the superrr slow `pip install -r`, which does nothing if all the requirements are already installed. (Which is most of the time if you're iterating on something.)
+                          # An alternative way to speed things up would be using `uv`. Test result: [Aug 2025] uv: 20ms, pip: 400ms
+            create_venv()
+            try:
+                install_requirements()
+            except Exception as e:
+                print(f"\nrun.py: Installing requirements failed with exception:\n{e}\nTrying again without reusing existing venv...")
+                create_venv(reuse_existing=False)
+                install_requirements()
 
         # Tell the WORLD
         python_interpreter = f'./{venv_python_path}'
