@@ -708,11 +708,6 @@ def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[st
 
     return result
 
-# Define mdlink regex
-#   Matches markdown links. [The](url) is captured in the first group.
-#   Created and documented here: https://regex101.com/r/mntroB
-mdlink_regex = r'\[[^\]]+?\]\(([^\)]+?)\)'
-
 def int_to_letter(n: int):
     # Maps 1 -> a, 2 -> b, 3 -> c, ...
     return chr(96 + n)
@@ -734,6 +729,21 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
     #           md_string = "Some [cool]({url1}) stuff"
     #           removed_urls = ["https://google.com"]
 
+    # Define mdlink regex
+    #   Matches markdown links. [The](url) is captured in group url1 or url2.
+    #   Created and documented here: https://regex101.com/r/FcEKlP/3
+    #   Meta: [Jul 2025] Not sure we're overcomplicating things with the (<escaped>) urls. Those urls are useful if the url contains spaces or `)` – but couldn't we just avoid creating such URLs?
+    mdlink_regex = r'''(?x)
+    \[
+        [^\]]+? # Link Name
+    \] 
+    \((?:
+        <(?P<url1>[^>]*?)> # (<escaped>) urls. These can contain `)`
+        |
+        (?P<url2>[^\)]*?) # (regular) urls.
+    )\)
+    '''
+
     # Declare result type
     @dataclass
     class Result:
@@ -750,7 +760,10 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
     #   For re.sub()
     def get_replacement(match: re.Match) -> str:
 
-        removed_urls.append(match.group(1))
+        url = match.groupdict()['url1'] or match.groupdict()['url2']
+        assert len(url) > 0, f"Empty url in match '{match.group(0)}'"
+
+        removed_urls.append(url)
 
         nonlocal url_ctr
         url_ctr += 1
@@ -759,7 +772,7 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
         if url_count != 1:
             placeholder = f'{{url_{url_ctr}}}'
 
-        replacement = match.group(0).replace(match.group(1), placeholder)
+        replacement = match.group(0).replace(url, placeholder)
 
         return replacement
 
