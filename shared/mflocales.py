@@ -132,6 +132,40 @@ path_to_xcodeproj = {
 }
 
 #
+# Program-defined localizable strings
+#
+
+#   Explanation: [Aug 2025] Most of our our localizable strings are defined in .md templates. 
+#       But sometimes we wanna generate part of the documents in code.
+#       The @dataclass is also used by the AI translation of update notes in mac-mouse-fix-update-feed, but the strings for that aren't defined here. 
+#           (The strings defined here are for markdown doc generation in the main mac-mouse-fix repo)
+
+@dataclass
+class mf_localizable_str:
+    string: str
+    hint: str|None = None
+
+programmatic_localizable_strings = {
+    'localization.progress': mf_localizable_str(
+        mfutils.mfdedent(r"""
+            This document is `{localization_progress}` translated into `{current_language}`
+            To help translate, click [here](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)!
+        """),
+        hint=mfutils.mfdedent(r"""
+        """)
+    ),
+    'localization.translate-prompt': mf_localizable_str(
+        mfutils.mfdedent(r"""
+            [Help translate Mac Mouse Fix to different languages!](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)
+        """),
+        hint=mfutils.mfdedent(r"""
+            Note: {url} will be replaced by a link. Make sure to type "{url}" exactly like in the original for the text-replacement to work.)
+            NOTE TO SELF: IIRC this hint was supposed to show up on the first string containing a url that localizers would see. It probably doesn't belong here.
+        """)
+    )
+}
+
+#
 # Language stuff
 #
 def sorted_locales(locales, source_locale):
