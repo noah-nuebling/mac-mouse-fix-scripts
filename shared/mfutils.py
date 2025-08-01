@@ -738,7 +738,7 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
         [^\]]+? # Link Name
     \] 
     \((?:
-        <(?P<url1>[^>]*?)> # (<escaped>) urls. These can contain `)`
+        <(?P<url1>.*?)> # (<escaped>) urls. These can contain `)`
         |
         (?P<url2>[^\)]*?) # (regular) urls.
     )\)
