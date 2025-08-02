@@ -61,6 +61,8 @@ from dataclasses import dataclass
 import urllib.parse
 from typing import Callable
 
+from pathlib import Path
+
 #
 # Constants
 #
@@ -132,7 +134,7 @@ path_to_xcodeproj = {
 }
 
 #
-# Program-defined localizable strings
+# (P)rogram-defined (l)ocalizable (strings) – aka plstrings
 #
 
 #   Explanation: [Aug 2025] Most of our our localizable strings are defined in .md templates. 
@@ -140,13 +142,15 @@ path_to_xcodeproj = {
 #       The @dataclass is also used by the AI translation of update notes in mac-mouse-fix-update-feed, but the strings for that aren't defined here. 
 #           (The strings defined here are for markdown doc generation in the main mac-mouse-fix repo)
 
+plstrings_xcstrings_path = 'Markdown/Strings/Shared.xcstrings' # [Aug 2025] The xcstrings file that manages the translations for the plstrings
+
 @dataclass
 class mf_localizable_str:
     string: str
     hint: str|None = None
 
-programmatic_localizable_strings = {
-    'localization.progress': mf_localizable_str(
+plstrings: dict[str, mf_localizable_str] = {
+    'localization.progress-message': mf_localizable_str(
         mfutils.mfdedent(r"""
             This document is `{localization_progress}` translated into `{current_language}`
             To help translate, click [here](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)!
@@ -164,6 +168,16 @@ programmatic_localizable_strings = {
         """)
     )
 }
+
+def plstrings_get_xcstrings() -> dict:
+    # [ ] TODO: Perhaps cache this – _buildmd.insert_locale_stuff() calls this many times.
+    result = json.loads(Path(plstrings_xcstrings_path).read_text())
+    return result
+
+def plstrings_get_postprocessed_translation(key: str, locale: str):
+    translation, locale = get_translation(plstrings_get_xcstrings(), key, locale, fall_back_to_next_best_language=True)
+    translation = postprocess_translated_ui_string(translation, template_ui_string=plstrings[key].string)
+    return translation
 
 #
 # Language stuff
@@ -295,7 +309,49 @@ def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_
         translation = localizations.get(translation_locale, {}).get('stringUnit', {}).get('value', '') # Why are we returning emptystring instead of None?
     
     return translation, translation_locale
-        
+
+def postprocess_template_ui_string(template_ui_string: str):
+
+    # [Aug 2025] After a string is extracted from the template, and before it is inserted into the xcstrings file by syncstrings.py, we make some modifications to make the string easier to edit for translators.
+
+    # [ ] TODO: Maybe rename to prepare_string_for_translation() and invert_prepare_string_for_translation()
+
+    # Remove indentation from ui_string 
+    #   (Otherwise translators have to manually add indentation to every indented line)
+    #   (When we insert the translated strings back into the .md we have to add the indentation back in.)
+
+    old_template_ui_string = template_ui_string
+    old_indent_level, old_indent_char = mfutils.get_indent(template_ui_string)
+    template_ui_string = mfutils.set_indent(template_ui_string, 0, ' ')
+    new_indent_level, new_indent_char = mfutils.get_indent(template_ui_string)
+    
+    if old_indent_level != new_indent_level:
+        print(f'syncstrings.py: [Changed {old_template_ui_string} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
+
+    # Remove all mdlink urls from extracted strings
+    #       And replace with {url1}, {url2}, etc.
+    #   Discussion: We do this so there's less margin for error for localizers. 
+    template_ui_string = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).md_string
+
+    # Return
+    return template_ui_string
+
+def postprocess_translated_ui_string(translated_ui_string: str, template_ui_string: str): 
+
+    # [Aug 2025] Inverse of postprocess_template_ui_string()
+    #   Before _buildmd.py inserts a translated string into the document, it needs to undo the modifications done by postprocess_template_ui_string() (Add indentation back and insert real urls)
+
+    # Insert urls from the template into the translation
+    urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
+    translated_ui_string = mfutils.replace_format_specifiers_with_markdown_urls(translated_ui_string, urls_from_template)
+
+    # Apply the original indentation to the translation
+    indent_level, indent_char = mfutils.get_indent(template_ui_string)
+    assert indent_char == ' ' or indent_char == None
+    translated_ui_string = mfutils.set_indent(translated_ui_string, indent_level, ' ')
+
+    # Return 
+    return translated_ui_string
 
 def make_custom_xcstrings_visible_to_xcodebuild(path_to_xcodeproj: str, custom_xcstrings_paths: list) -> dict:
     

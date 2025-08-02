@@ -142,7 +142,13 @@ def main():
         translation_locales = []
     
     # Get translation progress
-    translation_progress = mflocales.get_localization_progress([xcstrings], translation_locales)
+    translation_progress = mflocales.get_localization_progress(
+        [
+            xcstrings, 
+            mflocales.plstrings_get_xcstrings() # [Aug 2025] If some plstrings are not localized, the localization progress of *all* documents will be lowered – even if they don't use that plstring. This is slightly incorrect but ok I think. (Since the goal is mainly to inform people that there are missing translations in their language and that they can help – so even if this *exact* document they're looking at doesn't have missing localizations it's not too bad.)
+        ], 
+        translation_locales
+    )
     
     # Compile locales
     iterated_locales = translation_locales.copy() 
@@ -172,14 +178,18 @@ def main():
         with open(template_path, ) as f:
             template = f.read()
 
-        # Do conditional rendering
-        #   Explanation: 
-        #   - In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` (we also call these 'jinja-style if-blocks') to render the section only in case <some condition> is set to `True` in the render_condition_dict.
-        #   - Using show_localization_progress, we hide the note about the localization progress in case the locale is 100% translated. This follows the logic we use for showing the localization progress on the MMF Website.
-        render_condition_dict = {
-            'show_localization_progress': (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0),
-        }
-        template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
+        # Determine show_localization_progress
+        #   Using show_localization_progress, we hide the note about the localization progress in case the locale is 100% translated. This follows the logic we use for showing the localization progress on the MMF Website.
+        show_localization_progress = (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0)
+        
+        if False: # [Aug 2025] Jinja conditional rendering is no longer used. See note inside conditional_render_with_jinja_if_blocks()
+            
+            # Do conditional rendering
+            #   - In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` (we also call these 'jinja-style if-blocks') to render the section only in case <some condition> is set to `True` in the render_condition_dict.
+            render_condition_dict = {
+                'show_localization_progress': show_localization_progress,
+            }
+            template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
 
         # Log
         print('buildmd.py: Inserting translations into template at path {}...'.format(template_path))
@@ -189,22 +199,16 @@ def main():
 
         # Translate the template
         for st in mflocales.get_localizable_strings_from_markdown(template):
-            
+
             # Get the translated value
             translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
+
+            # Postprocess
+            translation = mflocales.postprocess_translated_ui_string(translation, template_ui_string=st.value)
 
             # Log
             if best_locale != locale:
                 missing_translations.append({ "key": st.key, "best_locale": best_locale })
-            
-            # Insert urls from the template into the translation
-            urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(st.value).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
-            translation = mfutils.replace_format_specifiers_with_markdown_urls(translation, urls_from_template)
-
-            # Apply the original indentation to the translation
-            indent_level, indent_char = mfutils.get_indent(st.value)
-            assert indent_char == ' ' or indent_char == None
-            translation = mfutils.set_indent(translation, indent_level, ' ')
             
             # Insert translation into template
             template = template.replace(st.full_match, translation)
@@ -219,9 +223,9 @@ def main():
         
         # Insert into template
         
+        template = insert_root_paths(template, destination_path, locale, development_locale) # [Aug 2025] Should this be outside `if do_localize`? I guess having a reference to the repo-root is also helpful to keep links working in case we move the English document.
         if do_localize:
-            template = insert_root_paths(template, destination_path, locale, development_locale)
-            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress)
+            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress, show_localization_progress)
         
         if document_key == "Readme.md":
             pass
@@ -458,55 +462,98 @@ def insert_acknowledgements(template, locale_str, gumroad_api_key, cache_file, c
     # Return
     return template
     
-def insert_locale_stuff(template: str, document_key: str, locale: str, development_locale: str, locales: list[str], translation_progress: dict):
-    
-    # Process `locale`
-    language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
-    
-    # Filter locales
-    #   Note: We filter out locales from the locale picker whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See usage of `showLocaleThreshold` in the MMF Website.
-    locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
+def insert_locale_stuff(template: str, document_key: str, locale: str, development_locale: str, locales: list[str], translation_progress: dict, show_localization_progress: bool):
 
-    # Generate language list ui string
-    ui_language_list = ''
-    for i, locale2 in enumerate(locales):
-        
-        is_last = i == len(locales) - 1
-        
-        language_name2 = f'{mflocales.locale_to_language_name(locale2, locale2, True)}'
-        
-        # Create relative path from the location of the `language_dict` document to the `language_dict2` document. This relative path works as a link. See https://github.blog/2013-01-31-relative-links-in-markup-files/
-        path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
-        path2 = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale2, development_locale)
-        root_path = mflocales.mainmdp_path_to_repo_root(path)
-        relative_path = root_path + path2
-        link = urllib.parse.quote(relative_path) # This percent encodes spaces and others chars which is necessary
-        
-        ui_language_list += '  '
-        
-        if language_name == language_name2:
-            ui_language_list += f'**{language_name2}**'
-        else:
-            ui_language_list += f'[{language_name2}]({link})'
-        
-        ui_language_list += '\\'
-        if not is_last: 
-            ui_language_list += '\n'
-        
-    # Log    
-    print(f'\nLanguage picker language list generated for language "{language_name}":\n{ui_language_list}\n')
-    
-    # Insert language list
-    #   template = template.format(current_language=language_name, language_list=ui_language_list)
-    template = template.replace('{language_list}', ui_language_list)
-    
     # Gather info
-    localization_progress_str = '100%' if (locale == development_locale) else (str(int(100 * translation_progress[locale]['percentage'])) + '%')
+    current_language = mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True) # Note: Maybe rename current_language to locale_name?
 
-    # Insert other stuff    
-    template = template.replace('{locale_code}', locale)
-    template = template.replace('{localization_progress}', localization_progress_str)
-    template = template.replace('{current_language}', mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True)) # Note: Maybe rename current_language to locale_name?
+    # Create and insert locale picker
+    if True:
+
+        # Define template
+        locale_picker_template = mfutils.mfdedent("""
+            <details>
+            <summary>󠁧󠁿{current_language}</summary>
+            
+            {language_list}
+            {help_translate}
+            </details>
+        """)
+
+        # Process `locale`
+        language_name = f'{mflocales.locale_to_language_name(locale, locale, True)}'
+        
+        # Filter locales
+        #   Note: We filter out locales from the locale picker whose progress is under show_locale_threshold. This follows the logic we use for the LocalePicker on the MMF website. See usage of `showLocaleThreshold` in the MMF Website.
+        locales = list(filter(lambda l: (l == development_locale) or (l == locale) or (translation_progress[l]['percentage'] > show_locale_threshold), locales))
+
+        # Generate language list ui string
+        ui_language_list = ''
+        for i, locale2 in enumerate(locales):
+            
+            is_last = i == len(locales) - 1
+            
+            language_name2 = f'{mflocales.locale_to_language_name(locale2, locale2, True)}'
+            
+            # Create relative path from the location of the `language_dict` document to the `language_dict2` document. This relative path works as a link. See https://github.blog/2013-01-31-relative-links-in-markup-files/
+            path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
+            path2 = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale2, development_locale)
+            root_path = mflocales.mainmdp_path_to_repo_root(path)
+            relative_path = root_path + path2
+            link = urllib.parse.quote(relative_path) # This percent encodes spaces and others chars which is necessary
+            
+            ui_language_list += '  '
+            
+            if language_name == language_name2:
+                ui_language_list += f'**{language_name2}**'
+            else:
+                ui_language_list += f'[{language_name2}]({link})'
+            
+            ui_language_list += '\\'
+            if not is_last: 
+                ui_language_list += '\n'
+            
+        # Log    
+        print(f'\nLanguage picker language list generated for language "{language_name}":\n{ui_language_list}\n')
+        
+        # Insert into template
+        #   Note: Why are we using .replace() instead of .format()? ... I think it's because .format() errors, if you don't replace *all* the format specifiers at once.
+        
+        locale_picker_template = locale_picker_template.replace('{help_translate}',   mflocales.plstrings_get_postprocessed_translation('localization.translate-prompt', locale))
+        locale_picker_template = locale_picker_template.replace('{language_list}',    ui_language_list)
+        locale_picker_template = locale_picker_template.replace('{current_language}', current_language)
+
+        # Prepend locale picker
+        template = locale_picker_template + '\n\n' + template
+
+    # Insert localization progress banner
+    if show_localization_progress:
+
+        # Define template
+        #   Notes: 
+        #   - Having an empty line after <td> lets us use md syntax inside the HTML block. 
+        #   - There needs to be no linebreak before </td> to avoid excessive whitespace.
+        localization_progress_template = mfutils.mfdedent(r"""
+            <table align="center"><td align="center">
+
+            {localization_progress_message}</td></table>
+        """)
+
+        # Gather info
+        localization_progress_str = '100%' if (locale == development_locale) else (str(int(100 * translation_progress[locale]['percentage'])) + '%')
+
+        # Insert into template
+        localization_progress_template = localization_progress_template.replace('{localization_progress_message}',  mflocales.plstrings_get_postprocessed_translation('localization.progress-message', locale))
+        localization_progress_template = localization_progress_template.replace('{localization_progress}',          localization_progress_str)
+        localization_progress_template = localization_progress_template.replace('{current_language}',               current_language)
+
+        # Prepend localization progress
+        template = localization_progress_template + '\n\n' + template
+
+    # Insert locale_code
+    #   (Used for redirect.macmousefix.com urls [Aug 2025])
+    if True:
+        template = template.replace('{locale_code}', locale)
 
     # Return
     return template

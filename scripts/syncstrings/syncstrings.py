@@ -189,23 +189,10 @@ def main():
 
                 # Print
                 print(f"syncstrings.py:\nk:\n{st.key}\nv:\n{ui_string}\nc:\n{st.comment}\n-----------------------\n")
-                  
-                # Remove indentation from ui_string 
-                #   (Otherwise translators have to manually add indentation to every indented line)
-                #   (When we insert the translated strings back into the .md we have to add the indentation back in.)
-                
-                old_indent_level, old_indent_char = mfutils.get_indent(ui_string)
-                ui_string = mfutils.set_indent(ui_string, 0, ' ')
-                new_indent_level, new_indent_char = mfutils.get_indent(ui_string)
-                
-                if old_indent_level != new_indent_level:
-                    print(f'syncstrings.py: [Changed {st.key} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
 
-                # Remove all mdlink urls from extracted strings
-                #       And replace with {url1}, {url2}, etc.
-                #   Discussion: We do this so there's less margin for error for localizers. 
-                ui_string = mfutils.replace_markdown_urls_with_format_specifiers(ui_string).md_string
-
+                # Postprocess
+                ui_string = mflocales.postprocess_template_ui_string(ui_string)
+                
                 # Store result
                 #   In .stringsdata format
                 extracted_strings.append(StringsDataItem(st.comment, st.key, ui_string, st.key_with_index_prefix))
@@ -216,6 +203,16 @@ def main():
                 update_xcstrings(xcstrings_path, extracted_strings, did_extract_values=True)
             else:
                 print(f"No strings extracted for '{source_file}'. Not attempting to update xcstrings file '{xcstrings_path}. (Which should exist since the source file has no localizable strings.)")
+        
+        # Extract plstrings
+        if True:
+            extracted_strings: list[StringsDataItem] = []
+            for (key, value) in mflocales.plstrings.items():
+                ui_string = value.string
+                ui_string = mflocales.postprocess_template_ui_string(ui_string) # [Aug 2025] Currently, we don't need the indentation removal, but we do want the url-replacement for plstrings. But simply having a single 'postprocess_template_ui_string()' function simplifies things.
+                extracted_strings.append(StringsDataItem(value.hint, key, ui_string, key_with_index_prefix=None))
+            assert len(extracted_strings) > 0
+            update_xcstrings(mflocales.plstrings_xcstrings_path, extracted_strings, did_extract_values=True)
 
     else:
         assert False

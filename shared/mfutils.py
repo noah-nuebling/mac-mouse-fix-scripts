@@ -677,6 +677,10 @@ def conditional_render_with_jinja_if_blocks(string: str, condition_dict: dict[st
     - If we need more powerful stuff for our md templates, we should probably actually use jinja instead of reimplementing its functionality. 
     """
 
+    assert False    # [Aug 2025] Unused now. This was only used for conditionally showing the 'localization progress' banner. But we've moved the generation of the 'localization progress' and 'locale picker' text completely into code now, instead of trying to do as much of it as possible in the templates. 
+                    #   (We made this change to avoid having to duplicate the 'localization header' stuff across all the localizable templates. 
+                    #       For that, we could've gone 2 routes: Make the templates more powerful with 'component' system, or move the duplicated strings into code entirely. We went with moving things into code, which also made this here obsolete. Before we make the templates more powerful, we should consider using a 'real' templating language like jinja instead.)
+
     result = string
 
     regex = r'{%\s*?if\s*(.*?)\s*?%}\n(.*?)\n{%\s*?endif\s*?%}'
