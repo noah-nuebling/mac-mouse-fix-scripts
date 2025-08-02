@@ -468,7 +468,7 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
     current_language = mflocales.locale_to_language_name(locale, destination_locale_str=locale, include_flag=True) # Note: Maybe rename current_language to locale_name?
 
     # Create and insert locale picker
-    if True:
+    if (1):
 
         # Define template
         locale_picker_template = mfutils.mfdedent("""
@@ -552,8 +552,31 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
 
     # Insert locale_code
     #   (Used for redirect.macmousefix.com urls [Aug 2025])
-    if True:
+    if (1):
         template = template.replace('{locale_code}', locale)
+
+    # Insert English-only tags
+    #   [Aug 2025] 
+    #       - Marks links to documents that are only available in English (and not the current language that the user is looking at). 
+    #       - `🇬🇧 English` matches the locale picker.
+    #       - Only used in Help.md.
+    #   Improvement Ideas: [Aug 2025]
+    #       'Nur auf Englisch' might feel more natural and clear than just '🇬🇧 English', but that would have to be a conditional, localizable string.
+    #           I thought about how to best implement conditional, localizable strings: 
+    #               - We could define the localizable string outside the template in plstrings
+    #                   -> This would be easy to implement but would make the strings a bit disjointed for localizers, since all the plstrings show up in a separate .xcstrings file.
+    #               - We could add the jinja {% if <condition> %} syntax into the template. (See conditional_render_with_jinja_if_blocks())
+    #                   Then we could either 
+    #                       - Make smaller localizable strings to put the jinja syntax outside of them, so localizers don't have to deal with them.
+    #                       - Put the jinja syntax inside the localizable strings
+    #                           but then either 
+    #                               - localizers would have to write jinja syntax (which looks scary but might not be too hard to get right if they're already used to writing {python_format_specifiers} I think?)
+    #                               - Split one localizable string with a conditional into 2 localizable strings in the .xcstrings files, and just have the localizer specify where the substring is inserted via {format_specifier}
+    #                                   -> This would be quite smooth for localizers, but feels like it might complicate the implementation a lot (haven't thought about it very much).
+
+    if (1):
+        if locale != 'en':  template = template.replace('{english_only_tag}', '(🇬🇧 English)')
+        else:               template = template.replace('{english_only_tag}', '')
 
     # Return
     return template
