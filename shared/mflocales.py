@@ -174,7 +174,7 @@ plstrings: dict[str, mf_localizable_str] = {
     ),
     'docname.readme':                       mf_localizable_str("Readme"),
     'docname.acknowledgements':             mf_localizable_str("Acknowledgements"),
-    'docname.support-overview':             mf_localizable_str("Support"),
+    'docname.support':                      mf_localizable_str("Support"),
     'docname.guide.captured-buttons':       mf_localizable_str("Captured Mouse Buttons"),
 }
 

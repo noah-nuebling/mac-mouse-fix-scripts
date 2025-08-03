@@ -610,7 +610,7 @@ def insert_docnames(template: str, locale: str) -> str:
 
     template = template.replace('{docname_readme}',                         mflocales.plstrings_get_postprocessed_translation('docname.readme', locale))
     template = template.replace('{docname_acknowledgements}',               mflocales.plstrings_get_postprocessed_translation('docname.acknowledgements', locale))
-    template = template.replace('{docname_support_overview}',               mflocales.plstrings_get_postprocessed_translation('docname.support-overview', locale))
+    template = template.replace('{docname_support}',               mflocales.plstrings_get_postprocessed_translation('docname.support', locale))
     template = template.replace('{docname_guide_captured_buttons_mmf3}',    mflocales.plstrings_get_postprocessed_translation('docname.guide.captured-buttons', locale))
     template = template.replace('{docname_guide_captured_buttons_mmf2}',    mflocales.plstrings_get_postprocessed_translation('docname.guide.captured-buttons', 'en')) # The MMF 2 version is English-only
     template = template.replace('{docname_guide_enabling}',                 'Enabling Mac Mouse Fix')
