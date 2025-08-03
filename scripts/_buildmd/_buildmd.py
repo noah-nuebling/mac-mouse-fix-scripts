@@ -604,7 +604,19 @@ def insert_root_paths(template, path, locale, development_locale):
 
 def insert_docnames(template: str, locale: str) -> str:
     
-    # [Aug 2025] Discussion: Not totally sure this is worth-to-have? Alleviates the localizers from having to keep docnames in-sync across different documents, but the format specifiers are a bit hard-to-type. ... Also, when the website or app refers to one of these documents localizers will still have to keep that in-sync.
+    # [Aug 2025] Discussion: Is this abstraction worth it?
+    #       Pro: 
+    #           - Alleviates the localizers from having to keep docnames in-sync across different markdown documents.
+    #           - Alleviates the localizers from having to think about which docnames should be localized, and which left in English. 
+    #               (Not sure this would actually be a problem, in practise – the {only_in_english} tags should make it more clear.)
+    #               (We could write localizer hints, would that be hard? Would we forget to add those hints if we add stuff in the future?)
+    #       Con: 
+    #           - Format specifiers are a bit hard-to-type for localizers. (Update: simplified them a bit)
+    #           - When the website or app refers to one of these documents, localizers will still have to keep that in-sync. So not having the {docname} abstraction would be more consistent and give a chance to 'practise' the docnames or somthing?
+    #               - But the outside sources would probably only ever link to Readme.md, Acknowledgements.md, and maybe Support.md – all of these should be relatively easier to translate, while the other support docs may link between each other (But currently, there's only 1 – the 'Captured Buttons' Guide) ... Not sure this makes sense.
+    #           - Extra abstraction layer. Less transparent for localizers.
+    #               - But I think it's not super important for localizers to be 100% certain which document we're linking out to, to translate the surrounding text – I might be wrong.
+    
     # [Aug 2025] Only used by Support.md
     #   - [ ] TODO: Make other documents use this (?)
 
