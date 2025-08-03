@@ -605,7 +605,7 @@ def insert_root_paths(template, path, locale, development_locale):
 def insert_docnames(template: str, locale: str) -> str:
     
     # [Aug 2025] Discussion: Not totally sure this is worth-to-have? Alleviates the localizers from having to keep docnames in-sync across different documents, but the format specifiers are a bit hard-to-type. ... Also, when the website or app refers to one of these documents localizers will still have to keep that in-sync.
-    # [Aug 2025] Only used by Support/Overview.md
+    # [Aug 2025] Only used by Support.md
     #   - [ ] TODO: Make other documents use this (?)
 
     template = template.replace('{docname_readme}',                         mflocales.plstrings_get_postprocessed_translation('docname.readme', locale))
