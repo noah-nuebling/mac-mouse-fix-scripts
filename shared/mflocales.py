@@ -150,23 +150,32 @@ class mf_localizable_str:
     hint: str|None = None
 
 plstrings: dict[str, mf_localizable_str] = {
-    'localization.progress-message': mf_localizable_str(
+    'localization.progress-message': mf_localizable_str( # [Aug 2025] Keep in sync with the localization progress banner on macmousefix.com.
+                                                         #      General learning: `Help translate!` used to be `To help translate, click [here]()!`. We often use the `<...>, click [here]()` phrasing, but if the first part is already an action, we can simplify that.
+                                                         #      `Help translate` difference: In the 'localization progress' informational banner, we use a more subdued "Help translate" instead of "🌎 Help translate!" as in the language picker. We do this as not to be pushy – it's supposed to be an informational banner first! I might be overthinking this.
         mfutils.mfdedent(r"""
             This document is `{localization_progress}` translated into `{current_language}`
-            To help translate, click [here](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)!
+            [Help translate](https://redirect.macmousefix.com/?locale={locale_code}&target=mmf-localization-contribution)
         """),
         hint=mfutils.mfdedent(r"""
+            .
         """)
     ),
     'localization.translate-prompt': mf_localizable_str(
         mfutils.mfdedent(r"""
-            [🌎 Help translate!](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)
+            [🌎 Help translate!](https://redirect.macmousefix.com/?locale={locale_code}&target=mmf-localization-contribution)
         """),
         hint=mfutils.mfdedent(r"""
             Note: {url} will be replaced by a link. Make sure to type "{url}" exactly like in the original for the text-replacement to work.)
             NOTE TO SELF: IIRC this hint was supposed to show up on the first string containing a url that localizers would see. It probably doesn't belong here.
+                              
+            Note: 'Help translate!' should sound like an invitation, not a command. In German I rephrased it a bit to avoid the imperative form (I landed on 'Beim Übersetzen helfen!')
         """)
-    )
+    ),
+    'docname.readme':                       mf_localizable_str("Readme"),
+    'docname.acknowledgements':             mf_localizable_str("Acknowledgements"),
+    'docname.support-overview':             mf_localizable_str("Support"),
+    'docname.guide.captured-buttons':       mf_localizable_str("Captured Mouse Buttons"),
 }
 
 def plstrings_get_xcstrings() -> dict:

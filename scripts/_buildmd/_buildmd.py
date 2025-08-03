@@ -223,6 +223,9 @@ def main():
         
         # Insert into template
         
+        if (1): # Insert document names
+            template = insert_docnames(template, locale)
+
         template = insert_root_paths(template, destination_path, locale, development_locale) # [Aug 2025] Should this be outside `if do_localize`? I guess having a reference to the repo-root is also helpful to keep links working in case we move the English document.
         if do_localize:
             template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress, show_localization_progress)
@@ -597,6 +600,23 @@ def insert_root_paths(template, path, locale, development_locale):
     template = template.replace('{repo_root}', repo_root)
     template = template.replace('{language_root}', language_root) # Maybe rename to 'locale_root'? We try to use 'locale' consistently in the python scripts now (as of 07.09.2024, see mflocales.py discussion)
     
+    return template
+
+def insert_docnames(template: str, locale: str) -> str:
+    
+    # [Aug 2025] Discussion: Not totally sure this is worth-to-have? Alleviates the localizers from having to keep docnames in-sync across different documents, but the format specifiers are a bit hard-to-type. ... Also, when the website or app refers to one of these documents localizers will still have to keep that in-sync.
+    # [Aug 2025] Only used by Support/Overview.md
+    #   - [ ] TODO: Make other documents use this (?)
+
+    template = template.replace('{docname_readme}',                         mflocales.plstrings_get_postprocessed_translation('docname.readme', locale))
+    template = template.replace('{docname_acknowledgements}',               mflocales.plstrings_get_postprocessed_translation('docname.acknowledgements', locale))
+    template = template.replace('{docname_support_overview}',               mflocales.plstrings_get_postprocessed_translation('docname.support-overview', locale))
+    template = template.replace('{docname_guide_captured_buttons_mmf3}',    mflocales.plstrings_get_postprocessed_translation('docname.guide.captured-buttons', locale))
+    template = template.replace('{docname_guide_captured_buttons_mmf2}',    mflocales.plstrings_get_postprocessed_translation('docname.guide.captured-buttons', 'en')) # The MMF 2 version is English-only
+    template = template.replace('{docname_guide_enabling}',                 'Enabling Mac Mouse Fix')
+    template = template.replace('{docname_guide_accessibility_access}',     'Granting Accessibility Access')
+    template = template.replace('{docname_guide_opening}',                  'Opening Mac Mouse Fix & Malware Messages')
+
     return template
 
 # 
