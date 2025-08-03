@@ -176,6 +176,10 @@ plstrings: dict[str, mf_localizable_str] = {
     'docname.acknowledgements':             mf_localizable_str("Acknowledgements"),
     'docname.support':                      mf_localizable_str("Support"),
     'docname.captured-buttons':             mf_localizable_str("Captured Mouse Buttons"),
+    'guide.footer.hope-it-helped.1':        mf_localizable_str("I hope this guide was helpful!"),       # 3 variants to make it feel a bit more high-effort and less generic.
+    'guide.footer.hope-it-helped.2':        mf_localizable_str("I hope this information was useful!"),
+    'guide.footer.hope-it-helped.3':        mf_localizable_str("I hope this guide cleared things up!"),
+    'guide.footer.still-have-questions':    mf_localizable_str("Still have questions? Click [here](https://redirect.macmousefix.com/?locale={locale_code}&target=mmf-feedback-help-content)."),    
 }
 
 def plstrings_get_xcstrings() -> dict:

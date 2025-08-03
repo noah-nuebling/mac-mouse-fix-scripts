@@ -26,6 +26,11 @@ import json
 
 import mfutils
 import mflocales
+
+import fnmatch
+
+import random
+
 #
 # Constants
 #
@@ -59,9 +64,6 @@ nbsp = '&nbsp;'  # Non-breaking space. &nbsp; doesn't seem to work on GitHub. (E
 #
 def main():
     
-    # Get document keys
-    document_keys = mflocales.mainmdp_get_document_keys()
-    
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--api_key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api_key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
@@ -70,7 +72,7 @@ def main():
     parser.add_argument("--no_cache_expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
     args = parser.parse_args()
 
-    document_key        = args.document
+    document_key_search_pattern   = args.document
     gumroad_api_key     = args.api_key
     no_api              = args.no_api
     no_cache_expiration = args.no_cache_expiration
@@ -86,9 +88,9 @@ def main():
         gumroad_sales_cache_shelf_life = "no_cache_expiration"
 
     # Guard --document exists
-    document_key_was_provided = isinstance(document_key, str) and document_key != ''
-    if not document_key_was_provided:
-        print("No document key provided. Provide one using the '--document' command line argument")
+    document_search_pattern_was_provided = isinstance(document_key_search_pattern, str) and document_key_search_pattern != ''
+    if not document_search_pattern_was_provided:
+        print("No document search pattern provided. Provide one using the '--document' command line argument")
         sys.exit(1)
 
     # Adjust capitalization of --document
@@ -99,177 +101,190 @@ def main():
                 document_key = k
                 break
     
+    # Get document keys
+    all_document_keys = mflocales.mainmdp_get_document_keys()
+    
+    # Filter documents that match the provided pattern
+    document_keys = fnmatch.filter(all_document_keys, document_key_search_pattern) # [Aug 2025] fnmatch doesn't support the `**` glob syntax from what I read. That might be useful.
+
     # Validate --document
-    document_key_is_valid = document_key in document_keys
-    if not document_key_is_valid:
-        print(f"Unknown document key '{document_key}'. Valid document keys: {list(document_keys)}")
+    if len(document_keys) == 0:
+        print(f"Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: {list(all_document_keys)}.\n(Tip: You can use '*' as a wildcard. Wrap the pattern in 'parens' to prevent shell globbing.)")
         sys.exit(1)
     
     # Log
-    print(f"Generating document: {document_key}")
-    
-    # Construct paths to .xcstrings file
-    xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
+    print(f"Will generate documents with keys: {document_keys}")
 
-    # Load xcstrings file as python object
-    do_localize: bool
-    xcstrings = []
-    try:
-        with open(xcstrings_path, 'r') as file:
-            xcstrings = json.load(file)
-            do_localize = True
-    except Exception as e:
-        # Notes: [Jul 2025]
-        #   - If the document *does* have localizable strings but no xcstrings file, our other script syncstrings.py should catch that already, so we're not validating that here
-        #   - Creating dummy, empty xcstrings object here. That way we can keep the codepaths largely the same whether or not an xcstrings file exists.
-        #       - Currently I think the only processing that is done on non-localized docs is conditional_render_with_jinja_if_blocks() and the `# Insert into template` stuff. And currently I think none of that is used. So maybe we should just return here or sth? I guess that would make things faster.
-        #           - Either way, it is nice to have separate folders for all 'input files' which we edit, and another folder for all 'output files' which are user-facing – even if there's no processing done on some of the files.
-        print(f"Error reading xcstrings file at '{xcstrings_path}'. We assume this means the document is only in the development_language (English) and doesn't need to be localized.")
-        xcstrings = json.loads(mflocales.fresh_xcstrings_content(development_locale="en"))
-        do_localize = False
-    
-    # Remove index-prefixes from keys inside xcstrings obj (e.g. 003:some.key -> some.key)
-    for key in list(xcstrings['strings'].keys()):
-
-        key_without_index = mflocales.remove_index_prefix_from_key(key)
-
-        xcstrings['strings'][key_without_index] = xcstrings['strings'][key]
-        del xcstrings['strings'][key]
-
-    # Find locales
-    development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
-    if not do_localize: 
-        translation_locales = []
-    
-    # Get translation progress
-    translation_progress = mflocales.get_localization_progress(
-        [
-            xcstrings, 
-            mflocales.plstrings_get_xcstrings() # [Aug 2025] If some plstrings are not localized, the localization progress of *all* documents will be lowered – even if they don't use that plstring. This is slightly incorrect but ok I think. (Since the goal is mainly to inform people that there are missing translations in their language and that they can help – so even if this *exact* document they're looking at doesn't have missing localizations it's not too bad.)
-        ], 
-        translation_locales
-    )
-    
-    # Compile locales
-    iterated_locales = translation_locales.copy() 
-    iterated_locales.append(development_locale)
-    
-    # Sort locales
-    #   Don't sort these while iterating - will lead to bugs
-    iterated_locales = mflocales.sorted_locales(iterated_locales, development_locale)
-    
-    # Iterate locales
-    for locale in iterated_locales:
-        
-        # Get document root
-        #   The folder that the output files for this locale go into
-        # document_root = get_destination_root(locale, development_locale)
-        
-        # Get document subpath
-        # document_subpath = document_key_to_filename_map[document_key]
-        
-        # Get src and dst paths
-
-        template_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
-        destination_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
-        
-        # Load template
-        template = ""
-        with open(template_path, ) as f:
-            template = f.read()
-
-        # Determine show_localization_progress
-        #   Using show_localization_progress, we hide the note about the localization progress in case the locale is 100% translated. This follows the logic we use for showing the localization progress on the MMF Website.
-        show_localization_progress = (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0)
-        
-        if False: # [Aug 2025] Jinja conditional rendering is no longer used. See note inside conditional_render_with_jinja_if_blocks()
-            
-            # Do conditional rendering
-            #   - In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` (we also call these 'jinja-style if-blocks') to render the section only in case <some condition> is set to `True` in the render_condition_dict.
-            render_condition_dict = {
-                'show_localization_progress': show_localization_progress,
-            }
-            template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
+    for document_key in document_keys:
 
         # Log
-        print('buildmd.py: Inserting translations into template at path {}...'.format(template_path))
+        print(f"Generating document: {document_key}")
+        
+        # Construct paths to .xcstrings file
+        xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
 
-        # Decare loop state
-        missing_translations = []
+        # Load xcstrings file as python object
+        do_localize: bool
+        xcstrings = []
+        try:
+            with open(xcstrings_path, 'r') as file:
+                xcstrings = json.load(file)
+                do_localize = True
+        except Exception as e:
+            # Notes: [Jul 2025]
+            #   - If the document *does* have localizable strings but no xcstrings file, our other script syncstrings.py should catch that already, so we're not validating that here
+            #   - Creating dummy, empty xcstrings object here. That way we can keep the codepaths largely the same whether or not an xcstrings file exists.
+            #       - Currently I think the only processing that is done on non-localized docs is conditional_render_with_jinja_if_blocks() and the `# Insert into template` stuff. And currently I think none of that is used. So maybe we should just return here or sth? I guess that would make things faster.
+            #           - Either way, it is nice to have separate folders for all 'input files' which we edit, and another folder for all 'output files' which are user-facing – even if there's no processing done on some of the files.
+            print(f"Error reading xcstrings file at '{xcstrings_path}'. We assume this means the document is only in the development_language (English) and doesn't need to be localized.")
+            xcstrings = json.loads(mflocales.fresh_xcstrings_content(development_locale="en"))
+            do_localize = False
+        
+        # Remove index-prefixes from keys inside xcstrings obj (e.g. 003:some.key -> some.key)
+        for key in list(xcstrings['strings'].keys()):
 
-        # Translate the template
-        for st in mflocales.get_localizable_strings_from_markdown(template):
+            key_without_index = mflocales.remove_index_prefix_from_key(key)
 
-            # Get the translated value
-            translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
+            xcstrings['strings'][key_without_index] = xcstrings['strings'][key]
+            del xcstrings['strings'][key]
 
-            # Postprocess
-            translation = mflocales.postprocess_translated_ui_string(translation, template_ui_string=st.value)
+        # Find locales
+        development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
+        if not do_localize: 
+            translation_locales = []
+        
+        # Get translation progress
+        translation_progress = mflocales.get_localization_progress(
+            [
+                xcstrings, 
+                mflocales.plstrings_get_xcstrings() # [Aug 2025] If some plstrings are not localized, the localization progress of *all* documents will be lowered – even if they don't use that plstring. This is slightly incorrect but ok I think. (Since the goal is mainly to inform people that there are missing translations in their language and that they can help – so even if this *exact* document they're looking at doesn't have missing localizations it's not too bad.)
+            ], 
+            translation_locales
+        )
+        
+        # Compile locales
+        iterated_locales = translation_locales.copy() 
+        iterated_locales.append(development_locale)
+        
+        # Sort locales
+        #   Don't sort these while iterating - will lead to bugs
+        iterated_locales = mflocales.sorted_locales(iterated_locales, development_locale)
+        
+        # Iterate locales
+        for locale in iterated_locales:
+            
+            # Get document root
+            #   The folder that the output files for this locale go into
+            # document_root = get_destination_root(locale, development_locale)
+            
+            # Get document subpath
+            # document_subpath = document_key_to_filename_map[document_key]
+            
+            # Get src and dst paths
+
+            template_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
+            destination_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
+            
+            # Load template
+            template = ""
+            with open(template_path, ) as f:
+                template = f.read()
+
+            # Determine show_localization_progress
+            #   Using show_localization_progress, we hide the note about the localization progress in case the locale is 100% translated. This follows the logic we use for showing the localization progress on the MMF Website.
+            show_localization_progress = (locale != development_locale) and (translation_progress[locale]['percentage'] < 1.0)
+            
+            if False: # [Aug 2025] Jinja conditional rendering is no longer used. See note inside conditional_render_with_jinja_if_blocks()
+                
+                # Do conditional rendering
+                #   - In the template md files we can wrap sections in `{% if <some condition> %}` and `{% endif %}` (we also call these 'jinja-style if-blocks') to render the section only in case <some condition> is set to `True` in the render_condition_dict.
+                render_condition_dict = {
+                    'show_localization_progress': show_localization_progress,
+                }
+                template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
 
             # Log
-            if best_locale != locale:
-                missing_translations.append({ "key": st.key, "best_locale": best_locale })
+            print('buildmd.py: Inserting translations into template at path {}...'.format(template_path))
+
+            # Decare loop state
+            missing_translations = []
+
+            # Translate the template
+            for st in mflocales.get_localizable_strings_from_markdown(template):
+
+                # Get the translated value
+                translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
+
+                # Postprocess
+                translation = mflocales.postprocess_translated_ui_string(translation, template_ui_string=st.value)
+
+                # Log
+                if best_locale != locale:
+                    missing_translations.append({ "key": st.key, "best_locale": best_locale })
+                
+                # Insert translation into template
+                template = template.replace(st.full_match, translation)
             
-            # Insert translation into template
-            template = template.replace(st.full_match, translation)
-        
-        # Log missing translations
-        if len(missing_translations) > 0:
-            s = ',\n'.join(list(map(lambda t: f"{t['key']} -> {t['best_locale']}", missing_translations)))
-            print(f"buildmd.py: Used fallbacks for some strings since they weren't available in {locale}:\n{s}\n")
+            # Log missing translations
+            if len(missing_translations) > 0:
+                s = ',\n'.join(list(map(lambda t: f"{t['key']} -> {t['best_locale']}", missing_translations)))
+                print(f"buildmd.py: Used fallbacks for some strings since they weren't available in {locale}:\n{s}\n")
 
-        # Log
-        print(f'buildmd.py: Inserting generated strings into template at {template_path}...')
-        
-        # Insert into template
-        
-        if (1): # Insert document names
-            template = insert_docnames(template, locale)
+            # Log
+            print(f'buildmd.py: Inserting generated strings into template at {template_path}...')
+            
+            # Insert into template
+            
+            if (1): # Insert document names
+                template = insert_docnames(template, locale)
 
-        template = insert_root_paths(template, destination_path, locale, development_locale) # [Aug 2025] Should this be outside `if do_localize`? I guess having a reference to the repo-root is also helpful to keep links working in case we move the English document.
-        if do_localize:
-            template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress, show_localization_progress)
-        
-        if document_key == "Readme.md":
-            pass
-        elif document_key == "Acknowledgements.md":
-            template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
-        else:
-            print(f"Inserting into not-explicitly-handled document template with key '{document_key}'")
-        
-        # Validate that template is completely filled out
-        #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
-        try:
-            template_parse_result = list(string.Formatter().parse(template))
-        except Exception as e:
-            # Debug-printing
-            # [Jul 2025] `string.Formatter().parse()` will throw parsing errors if there are mismatched unescaped '{' / '}' characters. However, it won't tell you _where_ the mismatch occurred, so we do some additional printing here to help debugging.
-            print(f"Exception while formatting: {e}") 
-            index_unescaped_open  = re.search(r'[^\{]\{[^\{]', template)
-            index_unescaped_close = re.search(r'[^\}]\}[^\}]', template)
-            if index_unescaped_open:  print(f"Unescaped '{{' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_open.start() -100: index_unescaped_open.start() +100])}\n\"\n")
-            if index_unescaped_close: print(f"Unescaped '}}' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_close.start()-100: index_unescaped_close.start()+100])}\n\"\n")
-            sys.exit(1)
-        template_fields = [tup[1] for tup in template_parse_result if tup[1] is not None]
-        is_fully_formatted = len(template_fields) == 0
-        if not is_fully_formatted:
-            print(f"Something went wrong. Template at '{template_path}' still has format field(s) after inserting: {template_fields}")
-            sys.exit(1)
-        
-        # Add comment to the top of the document which says that it is autogenerated
-        template = "<!-- THIS FILE IS AUTOMATICALLY GENERATED - EDITS WILL BE OVERRIDDEN -->\n" + template
-        
-        # Create path
-        destination_dir = os.path.dirname(destination_path)
-        if len(destination_dir) > 0:
-            os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-        
-        # Write template
-        with open(destination_path, mode="w") as f:
-            f.write(template)
-        
-        # Log
-        print('Wrote result to {}'.format(destination_path))
+            if (1):
+                template = insert_guide_footer(template, locale)
+
+            template = insert_root_paths(template, destination_path, locale, development_locale) # [Aug 2025] Should this be outside `if do_localize`? I guess having a reference to the repo-root is also helpful to keep links working in case we move the English document.
+            if do_localize:
+                template = insert_locale_stuff(template, document_key, locale, development_locale, iterated_locales, translation_progress, show_localization_progress)
+            
+            if document_key == "Readme.md":
+                pass
+            elif document_key == "Acknowledgements.md":
+                template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
+            else:
+                print(f"Inserting into not-explicitly-handled document template with key '{document_key}'")
+            
+            # Validate that template is completely filled out
+            #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
+            try:
+                template_parse_result = list(string.Formatter().parse(template))
+            except Exception as e:
+                # Debug-printing
+                # [Jul 2025] `string.Formatter().parse()` will throw parsing errors if there are mismatched unescaped '{' / '}' characters. However, it won't tell you _where_ the mismatch occurred, so we do some additional printing here to help debugging.
+                print(f"Exception while formatting: {e}") 
+                index_unescaped_open  = re.search(r'[^\{]\{[^\{]', template)
+                index_unescaped_close = re.search(r'[^\}]\}[^\}]', template)
+                if index_unescaped_open:  print(f"Unescaped '{{' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_open.start() -100: index_unescaped_open.start() +100])}\n\"\n")
+                if index_unescaped_close: print(f"Unescaped '}}' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_close.start()-100: index_unescaped_close.start()+100])}\n\"\n")
+                sys.exit(1)
+            template_fields = [tup[1] for tup in template_parse_result if tup[1] is not None]
+            is_fully_formatted = len(template_fields) == 0
+            if not is_fully_formatted:
+                print(f"Something went wrong. Template at '{template_path}' still has format field(s) after inserting: {template_fields}")
+                sys.exit(1)
+            
+            # Add comment to the top of the document which says that it is autogenerated
+            template = "<!-- THIS FILE IS AUTOMATICALLY GENERATED - EDITS WILL BE OVERRIDDEN -->\n" + template
+            
+            # Create path
+            destination_dir = os.path.dirname(destination_path)
+            if len(destination_dir) > 0:
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+            
+            # Write template
+            with open(destination_path, mode="w") as f:
+                f.write(template)
+            
+            # Log
+            print('Wrote result to {}'.format(destination_path))
 
 # 
 # Template inserters 
@@ -620,14 +635,72 @@ def insert_docnames(template: str, locale: str) -> str:
     # [Aug 2025] Only used by Support.md
     #   - [ ] TODO: Make other documents use this (?)
 
-    template = template.replace('{docname_readme}',                         mflocales.plstrings_get_postprocessed_translation('docname.readme', locale))
-    template = template.replace('{docname_acknowledgements}',               mflocales.plstrings_get_postprocessed_translation('docname.acknowledgements', locale))
-    template = template.replace('{docname_support}',                        mflocales.plstrings_get_postprocessed_translation('docname.support', locale))
-    template = template.replace('{docname_captured_buttons_mmf3}',          mflocales.plstrings_get_postprocessed_translation('docname.captured-buttons', locale))
-    template = template.replace('{docname_captured_buttons_mmf2}',          mflocales.plstrings_get_postprocessed_translation('docname.captured-buttons', 'en')) # The MMF 2 version is English-only
-    template = template.replace('{docname_enabling}',                       'Enabling Mac Mouse Fix')
-    template = template.replace('{docname_ax_access}',                      'Granting Accessibility Access')
-    template = template.replace('{docname_opening}',                        'Opening Mac Mouse Fix & Malware Messages')
+    template = template.replace('{docname_readme}',                         mflocales.plstrings_get_postprocessed_translation('docname.readme', locale))            # [Aug 3 2025] Very rarely used – usually we say stuff like 'Check out the [Q&A]()' and that will link to the Readme, but we won't mention the Readme by name.
+    template = template.replace('{docname_acknowledgements}',               mflocales.plstrings_get_postprocessed_translation('docname.acknowledgements', locale))  # [Aug 3 2025] Not using this, since it's usually grammatically embedded with 'the' ('Check out the Acknowledgements'). It also appears in alternate form as "🙌 Acknowledgements"
+    template = template.replace('{docname_support}',                        mflocales.plstrings_get_postprocessed_translation('docname.support', locale))           # [Aug 3 2025] Never linked-to from another doc. 
+    
+    # Guides
+    template = template.replace('{docname_captured_buttons_mmf3}',          mflocales.plstrings_get_postprocessed_translation('docname.captured-buttons', locale))  # [Aug 3 2025] Used in Support.md (like all the guides) and maybe the mmf2 captured buttons guide.
+    template = template.replace('{docname_captured_buttons_mmf2}',          'Captured Mouse Buttons')                                                               # [Aug 3 2025] Only linked-to from Support.md
+    template = template.replace('{docname_enabling}',                       'Enabling Mac Mouse Fix')                                                               # [Aug 3 2025] Only linked-to from Support.md
+    template = template.replace('{docname_ax_access}',                      'Granting Accessibility Access')                                                        # [Aug 3 2025] Only linked-to from Support.md
+    template = template.replace('{docname_opening}',                        'Opening Mac Mouse Fix & Malware Messages')                                             # [Aug 3 2025] Only linked-to from Support.md
+
+    return template
+
+def insert_guide_footer(template: str, locale: str): 
+
+    """
+
+    Footers we used when the guides still lived in GitHub Discussions:
+
+        Enabling.md:
+            I hope this helps! If you have any further questions or suggestions, let me know in a comment below.
+
+            *This guide was written with the help of ChatGPT.*
+
+        All the other docs: (With very slight variation)
+            I hope this helped you! If you have any questions you can:
+            - Write a comment down below
+            - [Open a new GitHub Discussion](https://github.com/noah-nuebling/mac-mouse-fix/discussions)
+            - [Send me an Email](mailto:noah.n.public@gmail.com?)
+            - Please note that I get many emails and I don't have that much time, so I might take a long time to respond
+
+            General feedback and improvement ideas for this guide are also very welcome of course!
+    """
+
+    """
+    Note: [Aug 2025] In Support.md, we use a different variation for the 'still have questions' link:
+        ```
+        ## Kontakt
+
+        Noch Fragen? [Klicke hier](https://redirect.macmousefix.com/?locale=de&target=mmf-feedback-help-content).
+        ```
+        I'm not sure why, but I think it works better there
+    """
+
+    template = template.replace('{guide_footer}', 
+        mfutils.mfdedent(r"""
+            
+            <br>
+
+            <table align="center">
+            <td>
+
+            {hope_it_helped}</td>
+            <td>
+
+            {still_have_questions}</td>
+            </table>
+        """)
+        .format(
+            hope_it_helped=mflocales.plstrings_get_postprocessed_translation(f"guide.footer.hope-it-helped.{random.randint(1, 3)}", locale),
+            still_have_questions=mflocales.plstrings_get_postprocessed_translation('guide.footer.still-have-questions', locale)
+        )
+        .format(
+            locale_code=locale, # [Aug 2025] Hack? Do this here to prevent rendering error, since rest of the code doesn't expect English-only docs to contain {locale_code}.
+        )
+    )
 
     return template
 
