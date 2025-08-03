@@ -160,7 +160,7 @@ plstrings: dict[str, mf_localizable_str] = {
     ),
     'localization.translate-prompt': mf_localizable_str(
         mfutils.mfdedent(r"""
-            [Help translate Mac Mouse Fix to different languages!](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)
+            [🌎 Help translate!](https://github.com/noah-nuebling/mac-mouse-fix/discussions/731)
         """),
         hint=mfutils.mfdedent(r"""
             Note: {url} will be replaced by a link. Make sure to type "{url}" exactly like in the original for the text-replacement to work.)

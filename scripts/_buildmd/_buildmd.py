@@ -476,7 +476,7 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
             <summary>󠁧󠁿{current_language}</summary>
             
             {language_list}
-            {help_translate}
+              {help_translate}
             </details>
         """)
 
@@ -575,8 +575,8 @@ def insert_locale_stuff(template: str, document_key: str, locale: str, developme
     #                                   -> This would be quite smooth for localizers, but feels like it might complicate the implementation a lot (haven't thought about it very much).
 
     if (1):
-        if locale != 'en':  template = template.replace('{english_only_tag}', '(🇬🇧 English)')
-        else:               template = template.replace('{english_only_tag}', '')
+        if locale != 'en':  template = template.replace('{only_in_english}', '`🇬🇧 English`')
+        else:               template = template.replace('{only_in_english}', '')
 
     # Return
     return template
