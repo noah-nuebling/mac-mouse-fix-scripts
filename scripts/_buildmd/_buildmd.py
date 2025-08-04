@@ -84,6 +84,7 @@ def main():
         print(f"Working with gumroad api key: {gumroad_api_key}")
     
     # Implement --no_cache_expiration
+    global gumroad_sales_cache_shelf_life
     if no_cache_expiration:
         gumroad_sales_cache_shelf_life = "no_cache_expiration"
 
@@ -674,7 +675,7 @@ def insert_guide_footer(template: str, locale: str):
         ```
         ## Kontakt
 
-        Noch Fragen? [Klicke hier](https://redirect.macmousefix.com/?locale=de&target=mmf-feedback-help-content).
+        Noch Fragen? [Klicke hier](https://redirect.macmousefix.com/?locale=de&target=mmf-support-still-have-questions).
         ```
         I'm not sure why, but I think it works better there
     """
