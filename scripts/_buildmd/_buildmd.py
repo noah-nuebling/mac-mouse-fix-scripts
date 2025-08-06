@@ -775,6 +775,9 @@ def display_name(sale):
     # Special requests & rules
     #   Note: [Jul 2025] Update: We used to use ppls email here (in mac-mouse-fix > markdown_generator.py and in mac-mouse-fix-scripts > _buildmd.py). Don't do that anymore and look into rewriting git history if someone complains.
 
+    if name == "🇺🇦 Github Com/Alex Danilenko": # Added [Aug 2025]
+        name = "🇺🇦 Alex Danilenko"
+
     if name == "🇦🇺 Haodi Wang": # Requested to use Chinese flag
         name = "🇨🇳 Haodi Wang"
     
