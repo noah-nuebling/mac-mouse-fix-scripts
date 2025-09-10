@@ -642,7 +642,7 @@ def insert_docnames(template: str, locale: str) -> str:
     
     # Guides
     template = template.replace('{docname_captured_buttons_mmf3}',          mflocales.plstrings_get_postprocessed_translation('docname.captured-buttons', locale))  # [Aug 3 2025] Used in Support.md (like all the guides) and maybe the mmf2 captured buttons guide.
-    template = template.replace('{docname_captured_scrollwheel}',           mflocales.plstrings_get_postprocessed_translation('docname.captured-scrollwheels', locale)) # Added [Sep 9 2025] 
+    template = template.replace('{docname_captured_scroll_wheels}',           mflocales.plstrings_get_postprocessed_translation('docname.captured-scroll-wheels', locale)) # Added [Sep 9 2025] 
     template = template.replace('{docname_captured_buttons_mmf2}',          'Captured Mouse Buttons')                                                               # [Aug 3 2025] Only linked-to from Support.md
     template = template.replace('{docname_enabling}',                       'Enabling Mac Mouse Fix')                                                               # [Aug 3 2025] Only linked-to from Support.md
     template = template.replace('{docname_ax_access}',                      'Granting Accessibility Access')                                                        # [Aug 3 2025] Only linked-to from Support.md
