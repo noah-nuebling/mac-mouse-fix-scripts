@@ -110,7 +110,7 @@ def main():
 
     # Validate --document
     if len(document_keys) == 0:
-        print(f"Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: {list(all_document_keys)}.\n(Tip: You can use '*' as a wildcard. Wrap the pattern in 'parens' to prevent shell globbing.)")
+        print(f"\nError: Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: \n[\n    - {'\n    - '.join(list(all_document_keys))}\n].\n(Tip: You can use '*' as a wildcard. Wrap the pattern in parens 'like this' to prevent shell globbing.)")
         sys.exit(1)
     
     # Log
@@ -642,6 +642,7 @@ def insert_docnames(template: str, locale: str) -> str:
     
     # Guides
     template = template.replace('{docname_captured_buttons_mmf3}',          mflocales.plstrings_get_postprocessed_translation('docname.captured-buttons', locale))  # [Aug 3 2025] Used in Support.md (like all the guides) and maybe the mmf2 captured buttons guide.
+    template = template.replace('{docname_captured_scrollwheel}',           mflocales.plstrings_get_postprocessed_translation('docname.captured-scrollwheels', locale)) # Added [Sep 9 2025] 
     template = template.replace('{docname_captured_buttons_mmf2}',          'Captured Mouse Buttons')                                                               # [Aug 3 2025] Only linked-to from Support.md
     template = template.replace('{docname_enabling}',                       'Enabling Mac Mouse Fix')                                                               # [Aug 3 2025] Only linked-to from Support.md
     template = template.replace('{docname_ax_access}',                      'Granting Accessibility Access')                                                        # [Aug 3 2025] Only linked-to from Support.md

@@ -121,6 +121,10 @@ Use ./run like this:
 
     ./run [<run_args> --] <subcommand> <subcommand_args>
 
+Known run_args
+
+    --nopip         -> Don't try to install dependencies via pip – Speeds up iteration time
+
 Known subcommands:
 
 {}

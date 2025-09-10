@@ -323,6 +323,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
 
     # Use xcstringstool to sync the .xcstrings file with the .stringsdata
     #   This is the core of what we're trying to do here.
+    #   [Sep 2025] NOTE: If this can't find xcstringstool, make sure that xcode-select is pointing to an Xcode installation.
     result = mfutils.runclt(f"xcrun xcstringstool sync '{xcstrings_path}' --stringsdata '{stringsdata_path}'")
     print(f"syncstrings.py: ran xcstringstool to update '{xcstrings_path}'. Result: '{result}'")
     assert result == ''

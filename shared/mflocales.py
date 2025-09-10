@@ -176,6 +176,7 @@ plstrings: dict[str, mf_localizable_str] = {
     'docname.acknowledgements':             mf_localizable_str("Acknowledgements"),
     'docname.support':                      mf_localizable_str("Support"),
     'docname.captured-buttons':             mf_localizable_str("Captured Mouse Buttons"),
+    'docname.captured-scrollwheels':        mf_localizable_str("Capturing of the Scroll Wheel"),
     'guide.footer.hope-it-helped.1':        mf_localizable_str("I hope this guide was helpful!"),       # 3 variants to make it feel a bit more high-effort and less generic.
     'guide.footer.hope-it-helped.2':        mf_localizable_str("I hope this information was useful!"),
     'guide.footer.hope-it-helped.3':        mf_localizable_str("I hope this guide cleared things up!"),
@@ -346,6 +347,9 @@ def postprocess_template_ui_string(template_ui_string: str):
     #   Discussion: We do this so there's less margin for error for localizers. 
     template_ui_string = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).md_string
 
+    # Remove all <img> images
+    template_ui_string = mfutils.replace_html_images_with_format_specifiers(template_ui_string).md_string
+
     # Return
     return template_ui_string
 
@@ -357,6 +361,10 @@ def postprocess_translated_ui_string(translated_ui_string: str, template_ui_stri
     # Insert urls from the template into the translation
     urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
     translated_ui_string = mfutils.replace_format_specifiers_with_markdown_urls(translated_ui_string, urls_from_template)
+
+    # Insert <img>s from the template into the translation
+    imgs_from_template = mfutils.replace_html_images_with_format_specifiers(template_ui_string).removed_imgs
+    translated_ui_string = mfutils.replace_format_specifiers_with_html_images(translated_ui_string, imgs_from_template)
 
     # Apply the original indentation to the translation
     indent_level, indent_char = mfutils.get_indent(template_ui_string)
