@@ -740,7 +740,7 @@ def replace_html_images_with_format_specifiers(md_string: str):
     '''
 
     # Call helper
-    _result = _replace_captured_strings_with_format_specifiers(md_string, img_regex, "image")
+    _result = _replace_captured_strings_with_format_specifiers(md_string, img_regex, "img") # Use `img` instead of `image` in the format specifier to communicate that localizers shouldn't translate that word. [Sep 2025]
 
     # Convert to expected result format
     @dataclass
@@ -750,7 +750,7 @@ def replace_html_images_with_format_specifiers(md_string: str):
     return Result(_result.result_string, _result.removed_strings)
 
 def replace_format_specifiers_with_html_images(md_string: str, imgs: list[str]) -> str:
-    result = _replace_format_specifiers_with_captured_strings(md_string, imgs, "image")
+    result = _replace_format_specifiers_with_captured_strings(md_string, imgs, "img")
     return result
 
 def replace_markdown_urls_with_format_specifiers(md_string: str):
