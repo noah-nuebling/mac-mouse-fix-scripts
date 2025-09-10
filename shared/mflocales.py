@@ -142,7 +142,9 @@ path_to_xcodeproj = {
 #       The @dataclass is also used by the AI translation of update notes in mac-mouse-fix-update-feed, but the strings for that aren't defined here. 
 #           (The strings defined here are for markdown doc generation in the main mac-mouse-fix repo)
 
-plstrings_xcstrings_path = 'Markdown/Strings/Shared.xcstrings' # [Aug 2025] The xcstrings file that manages the translations for the plstrings
+# [Aug 2025] Define the xcstrings file that manages the translations for the plstrings
+#   Update: [Sep 2025] It's weird that the plstring are defined in the mac-mouse-fix-scripts repo while the xcstrings file is in the mac-mouse-fix repo. Both should be in the same repo.
+plstrings_xcstrings_path = 'Markdown/Strings/Shared.xcstrings' 
 
 @dataclass
 class mf_localizable_str:
