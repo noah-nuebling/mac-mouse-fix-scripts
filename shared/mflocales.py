@@ -138,11 +138,11 @@ path_to_xcodeproj = {
 #
 
 #   Explanation: [Aug 2025] Most of our our localizable strings are defined in .md templates. 
-#       But sometimes we wanna generate part of the documents in code.
-#       The @dataclass is also used by the AI translation of update notes in mac-mouse-fix-update-feed, but the strings for that aren't defined here. 
+#       - But sometimes we wanna generate part of the documents in code.
+#       - The @dataclass is also used by the AI translation of update notes in mac-mouse-fix-update-feed, but the strings for that aren't defined here. 
 #           (The strings defined here are for markdown doc generation in the main mac-mouse-fix repo)
 
-plstrings_xcstrings_path = 'Markdown/Strings/Shared.xcstrings' # [Aug 2025] The xcstrings file that manages the translations for the plstrings
+plstrings_xcstrings_path = 'Markdown/Strings/Shared.xcstrings' # [Aug 2025] The xcstrings file that manages the translations for the plstrings || Update: [Sep 2025] It's weird that the strings are defined here in mflocales.py (which is in the mac-mouse-fix-scripts repo) but the corresponding .xcstrings file is in mac-mouse-fix.
 
 @dataclass
 class mf_localizable_str:
@@ -165,10 +165,7 @@ plstrings: dict[str, mf_localizable_str] = {
         mfutils.mfdedent(r"""
             [🌎 Help translate!](https://redirect.macmousefix.com/?locale={locale_code}&target=mmf-localization-contribution)
         """),
-        hint=mfutils.mfdedent(r"""
-            Note: {url} will be replaced by a link. Make sure to type "{url}" exactly like in the original for the text-replacement to work.)
-            NOTE TO SELF: IIRC this hint was supposed to show up on the first string containing a url that localizers would see. It probably doesn't belong here.
-                              
+        hint=mfutils.mfdedent(r"""                              
             Note: 'Help translate!' should sound like an invitation, not a command. In German I rephrased it a bit to avoid the imperative form (I landed on 'Beim Übersetzen helfen!')
         """)
     ),
