@@ -289,9 +289,6 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     key_of_first_comment_source = None
     comment_source = 'unknown'
     for key, info in xcstrings_obj['strings'].items():
-        
-        if 'restoring' in key:
-            print('BREAKKUUUU')
 
         sourcefile_hint = getattr(next((x for x in extracted_strings if x.key_with_index_prefix == key), None), 'comment', None)        # Optimization idea: [Sep 2025] Create a dict for extracted_strings.
         xcstrings_hint = info.get('comment', None)
