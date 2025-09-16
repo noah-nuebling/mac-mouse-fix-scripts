@@ -266,11 +266,56 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
 
     print(f"syncstrings.py: Created temporary copy of {xcstrings_path_final} at {xcstrings_path}")
 
+
+    #
+    # Load .xcstrings file
+    #
+    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path, allow_empty=True)
+
+    #
+    # Validate that we're not deleting hints defined in the .xcstrings file
+    #
+    #   Background: [Sep 2025] Localizer hints can be defined in 2 places: The source file, and the .xcstrings file. Earlier, we defined localizer hints in the source files. But for some recent docs (e.g. `CapturedButtonsMMF3.md`) we defined the localizer hints in the .xcstrings files directly. (I found it's actually easier to do directly in the .xcstrings file, where you can see everything just like the localizers experience it.)
+    #   Problem: [Sep 2025] When you define something in the source file, that will just silently replace what you hand-wrote in the .xcstrings file.
+    #   Solution: [Sep 2025] Show error when hand-written localizer hints would get replaced.
+    #       Current Implementation: [Sep 2025] We implemented a simple heuristic here: Assert that all the localizer hints of the file are defined in the *same* place. So if there's an .xcstrings file where we defined all the localizer hints and then we added a localizer hint in the source file, we'd get notified here.
+    #           Pitfalls: In some edge cases this heuristic doesn't work: 
+    #               1. If there's only one localizer hint 
+    #               2. If all the localizer hints are defined in the source file and then we try to add one in the xcstrings file (for a key that's already defined in the source file) – that would just get overridden without warning.
+    #               3. Possibly more ...
+    #       Idea for more robust solution: [Sep 2025]
+    #           Create a hash for the localizer hint, consisting of zero-width characters. (See NSString+Steganography.m) Prefix it to localizer hints when extracting them from the source file and inserting them into the xcstrings file. Use that to reliably detect which localizer hints found in .xcstrings files were extracted from source file and which were hand-written.
+
+    key_of_first_comment_source = None
+    comment_source = 'unknown'
+    for key, info in xcstrings_obj['strings'].items():
+        
+        if 'restoring' in key:
+            print('BREAKKUUUU')
+
+        sourcefile_hint = next((x for x in extracted_strings if x.key_with_index_prefix == key), None).__dict__.get('comment', None)        # Optimization idea: [Sep 2025] Create a dict for extracted_strings.
+        xcstrings_hint = info.get('comment', None)
+
+        if (
+            xcstrings_hint and 
+            not sourcefile_hint     # `xcstringstool` will replace hints defined in xcstrings with hints defined in the sourcefile. (That's how xcstrings localizer hints can update when you change the sourefile.)
+        ): 
+            _comment_source = "xcstrings"
+        elif sourcefile_hint:
+            _comment_source = "sourcefile"
+        else:
+            continue                # No localizer hint defined at all for this key.
+
+        if comment_source == 'unknown':
+            comment_source = _comment_source
+            key_of_first_comment_source = key
+        else:
+            assert comment_source == _comment_source, f"The localizer hints for '{xcstrings_path_final}' seem to be defined in different places. '{key}' is defined in '{_comment_source}', while previously processed string '{key_of_first_comment_source}' was defined in '{comment_source}'."
+
     # 
     # Modify .xcstrings file: 
     # 
 
-    xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path, allow_empty=True)
     if not xcstrings_obj:
         # [Jul 2025] File exists, signalling that the user intends there to be an xcstrings file here, but it's empty – so we should fill it up! This way the user can create the xcstrings file via the touch clt and we handle the rest (instead of them having to use Xcode) (Not sure this is worth making the code more complex)
         Path(xcstrings_path).write_text(mflocales.fresh_xcstrings_content(development_locale="en"))
