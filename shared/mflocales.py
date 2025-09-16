@@ -781,7 +781,7 @@ def get_localizable_strings_from_markdown(md_string: str):
             Since, this way, translators will never have to add blank lines above or below their content to make the layout of the .md file work as intended.
             
     Notes:
-    - The block syntax was created in this regex101 project: https://regex101.com/r/R39rXW/2
+    - The block syntax was created in this regex101 project: https://regex101.com/r/R39rXW/3
     - To test, you might want to post the whole .md file on regex101. That way you can see any under or overmatching which might not be obvious when testing a smaller example string.
 
     """
@@ -797,7 +797,6 @@ def get_localizable_strings_from_markdown(md_string: str):
         full_match: str             # The entire substring of the .md file that we extracted the key, value, comment (and condition) from. Replace all full_matches with translated strings to localize the .md file.
 
     # Extract translatable strings with inline syntax
-
     inline_regex = r"\{\{(.*?)\|\|(.*?)\|\|(.*?)\}\}"           # r makes it so \ is treated as a literal character and so we don't have to double escape everything
     inline_matches: re.Iterator[re.Match[str]] = re.finditer(inline_regex, md_string)
     
@@ -805,9 +804,13 @@ def get_localizable_strings_from_markdown(md_string: str):
     block_regex = r"^[^\S\r\n]*?```(?:\n\s*?if:\s*(.*?)\s*)?\n\s*?key:\s*(.*?)\s*\n\s*?```\n\s*(^.*?$)\s*```\n\s*?comment:\s*?(.*?)\s*\n\s*?```"
     block_matches: re.Iterator[re.Match[str]] = re.finditer(block_regex, md_string, re.DOTALL | re.MULTILINE)
 
+    # Get ranges of all HTML comments
+    comment_regex = r"<!--.*?-->"
+    comment_matches: list[re.Match[str]] = list(re.finditer(comment_regex, md_string, re.DOTALL | re.MULTILINE))
+
     # Assemble result
 
-    all_matches = list(map(lambda m: ('inline', m), inline_matches)) + list(map(lambda m: ('block', m), block_matches))
+    all_matches = list(map(lambda m: ('inline', m), inline_matches)) + list(map(lambda m: ('block', m), block_matches)) # 'all' matches doesn't included comments [Sep 2025]
     all_matches.sort(key=lambda match: match[1].start(0)) # Sort by where the match appears in the string
 
     result: list[LocalizedStringData] = []
@@ -829,6 +832,15 @@ def get_localizable_strings_from_markdown(md_string: str):
             condition, key, value, comment = match[1].groups()    
         else: 
             assert False    
+
+        # Filter out HTML comments
+        continue_outer_loop = False
+        for comment_match in comment_matches:
+            if (comment_match.start(0) <= match[1].start(0)) and (match[1].end(0) <= comment_match.end(0)):
+                print(f"syncstrings.py: Skipping localized string '{key}' since it's commented out inside the template.")
+                continue_outer_loop = True
+                break
+        if continue_outer_loop: continue
 
         # Validate
         assert ' ' not in (condition or ''), f'condition contains space: {condition}'
