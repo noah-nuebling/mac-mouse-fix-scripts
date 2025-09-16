@@ -720,18 +720,47 @@ def int_to_LETTER(n: int):
     # Maps 1 -> A, 2 -> B, 3 -> C, ...
     return chr(64 + n)
 
+def replace_html_images_with_format_specifiers(md_string: str):
+
+    # HTML <img> version of `replace_markdown_urls_with_format_specifiers()`
+
+    # Create regex for <img> HTML tags
+    img_regex = r'''(?x)
+    (               # Capture the whole thing in a group.
+        <img
+            [^>]*?  # All the image params
+        (?:       # 3 Different ways of closing an <img> tag
+            >\s*?<\/img>    # This must be first to take precedence over the other options, so it's ever matched [Sep 2025]
+            |
+            >
+            |
+            \>
+        )
+    )
+    '''
+
+    # Call helper
+    _result = _replace_captured_strings_with_format_specifiers(md_string, img_regex, "img") # Use `img` instead of `image` in the format specifier to communicate that localizers shouldn't translate that word. [Sep 2025]
+
+    # Convert to expected result format
+    @dataclass
+    class Result:
+        md_string: str
+        removed_imgs: list[str]
+    return Result(_result.result_string, _result.removed_strings)
+
+def replace_format_specifiers_with_html_images(md_string: str, imgs: list[str]) -> str:
+    result = _replace_format_specifiers_with_captured_strings(md_string, imgs, "img")
+    return result
+
 def replace_markdown_urls_with_format_specifiers(md_string: str):
 
     # Replace the urls of the [markdown](links) inside `md_string` with url<X> format specifiers (Such as '{url1}', '{url2}', etc)
     #       Also returns a list of the removed urls.
     #   Note: We thought about using c-style/IEEE-style format specifiers (e.g. '%2$s') since those are highlighed by Xcode when editing .xcstrings files, and localizers should be used to them from localizing the main app, but python-style specifiers are easier to implement for now. If localizers struggle with this, we could change it.
     #   
-    #   Example:
-    #       Input: 
-    #           "Some [cool](https://google.com) stuff"
-    #       Output: 
-    #           md_string = "Some [cool]({url1}) stuff"
-    #           removed_urls = ["https://google.com"]
+    #   Example: 
+    #       (See the helper function: _replace_captured_strings_with_format_specifiers())
 
     # Define mdlink regex
     #   Matches markdown links. [The](url) is captured in group url1 or url2.
@@ -748,72 +777,110 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
     )\)
     '''
 
-    # Declare result type
+    # Call helper
+    _result = _replace_captured_strings_with_format_specifiers(md_string, mdlink_regex, "url")
+    
+    # Convert to expected result format.
     @dataclass
     class Result:
         md_string: str
         removed_urls: list[str]
+    return Result(_result.result_string, _result.removed_strings)
+
+def replace_format_specifiers_with_markdown_urls(md_string: str, urls: list[str]) -> str:
+
+    # Replace url_<X> format specifiers (such as '{url_1}', '{url_2}', etc) inside `md_string` with the urls from `urls`
+
+    result = _replace_format_specifiers_with_captured_strings(md_string, urls, "url")
+    return result
+
+def _replace_captured_strings_with_format_specifiers(input_string: str, regex_pattern: str, format_specifier_stem: str):
+
+    #   Overview: [Sep 2025]
+    #   Finds matches for `regex_pattern` in `input_string`. 
+    #   Every match is expected to have **exactly 1 non-empty capturing group**.
+    #   This capturing group will be replaced by a format specifier containing `format_specifier_stem`, 
+    #       or containing `format_specifier_stem + "_1"`, `format_specifier_stem + "_2"`, etc. (in case there are multiple matches in the string)
+    #   
+    #   Purpose [Sep 2025]
+    #   This is used as a helper function for our url-replacement and <img>-tag replacement functions which 
+    #       we use to preprocess localized strings to make things easier for localizers. [Sep 2025]
+    #
+    #   Example: [Sep 2025]
+    #       Input: 
+    #           input_string             = "Some [cool](https://google.com) stuff, and a [fruity](https://apple.com) website."
+    #           regex_pattern            = <pattern that matches [markdown](links) and captures the url in its only non-empty capturing group.
+    #           format_specifier_stem    = "url"
+    #       Output: 
+    #           result_string = "Some [cool]({url_1}) stuff, and a [fruity]({url_2}) website."
+    #           removed_strings = ["https://google.com", "https://apple.com"]
+
+    # Declare result type
+    @dataclass
+    class Result:
+        result_string: str
+        removed_strings: list[str]
 
     # Declare vars
-    result_md_string = None
-    removed_urls = []
-    url_ctr = 0
-    url_count = -1
+    result_string = None
+    removed_strings = []
+    found_str_ctr = 0
+    n_occurences_of_pattern = -1
 
     # Declare helper function
     #   For re.sub()
     def get_replacement(match: re.Match) -> str:
-
-        url = match.groupdict()['url1'] or match.groupdict()['url2']
-        assert len(url) > 0, f"Empty url in match '{match.group(0)}'"
-
-        removed_urls.append(url)
-
-        nonlocal url_ctr
-        url_ctr += 1
         
-        placeholder = r'{url}'
-        if url_count != 1:
-            placeholder = f'{{url_{url_ctr}}}'
+        captured_strings = list(match.groups())
+        captured_strings = [x for x in captured_strings if x] # Filter empty matches
+        assert len(captured_strings) == 1, f"Number of non-empty capturing groups in '{match.group(0)}' for pattern '{regex_pattern}' is not 1."
+        captured_string = captured_strings[0]
 
-        replacement = match.group(0).replace(url, placeholder)
+        removed_strings.append(captured_string)
+
+        nonlocal found_str_ctr
+        found_str_ctr += 1
+        
+        placeholder = f'{{{format_specifier_stem}}}'
+        if n_occurences_of_pattern != 1:
+            placeholder = f'{{{format_specifier_stem}_{found_str_ctr}}}'
+
+        replacement = match.group(0).replace(captured_string, placeholder)
 
         return replacement
 
-    # Get url_count
-    url_count = len(re.findall(mdlink_regex, md_string, 0))
+    # Get occurences_of_pattern
+    n_occurences_of_pattern = len(re.findall(regex_pattern, input_string, 0))
 
     # Call re.sub()
-    result_md_string = re.sub(mdlink_regex, get_replacement, md_string, 0, 0)
+    result_string = re.sub(regex_pattern, get_replacement, input_string, 0, 0)
 
     # Return
-    return Result(result_md_string, removed_urls)
+    return Result(result_string, removed_strings)
 
-def replace_format_specifiers_with_markdown_urls(md_string: str, urls: list[str]) -> str:
+def _replace_format_specifiers_with_captured_strings(input_string: str, captured_strings: list[str], format_specifier_stem: str) -> str:
 
-    # Replace url<X> format specifiers (such as '{url1}', '{url2}', etc) inside `md_string` with the urls from `urls`
-    #
-    # Example:
+    # Inverse of _replace_captured_strings_with_format_specifiers()
+    #   
+    #   Example: [Sep 2025]
     #       Input: 
-    #           md_string = "Some [cool]({url1}) stuff"
-    #           urls = ["https://google.com/"]
+    #           input_string          = "Some [cool]({url_1}) stuff, and a [fruity]({url_2}) website."
+    #           captured_strings      = ["https://google.com", "https://apple.com"]
+    #           format_specifier_stem = "url"
     #       Output: 
-    #           "Some [cool](https://google.com) stuff"
-
-    # Get info
-    url_count = len(urls)
+    #           "Some [cool](https://google.com) stuff, and a [fruity](https://apple.com) website."
 
     # Format
-    result = md_string
-    for url_ctr, url in enumerate(urls, 1):
+    result = input_string
+    for i, captured_string in enumerate(captured_strings, 1):
 
-        placeholder = r'{url}'
-        if url_count != 1:
-            placeholder = f'{{url_{url_ctr}}}'
+        placeholder = f'{{{format_specifier_stem}}}'
+        if len(captured_strings) != 1:
+            placeholder = f'{{{format_specifier_stem}_{i}}}'
 
-        assert placeholder in result, f'mfutils: URL placeholder "{placeholder}" not found while trying to insert urls into markdown string:\n{md_string}'
+        assert placeholder in result, f'mfutils: Placeholder "{placeholder}" not found while trying to insert captured strings into string:\n{input_string}'
 
-        result = result.replace(placeholder, url)
+        result = result.replace(placeholder, captured_string)
 
     # Return result
     return result
