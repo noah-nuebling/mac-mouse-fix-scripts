@@ -293,7 +293,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
         if 'restoring' in key:
             print('BREAKKUUUU')
 
-        sourcefile_hint = next((x for x in extracted_strings if x.key_with_index_prefix == key), None).__dict__.get('comment', None)        # Optimization idea: [Sep 2025] Create a dict for extracted_strings.
+        sourcefile_hint = getattr(next((x for x in extracted_strings if x.key_with_index_prefix == key), None), 'comment', None)        # Optimization idea: [Sep 2025] Create a dict for extracted_strings.
         xcstrings_hint = info.get('comment', None)
 
         if (
