@@ -203,6 +203,7 @@ def main():
             
             if 'site-packages'                 in script_path: return False # Ignore downloaded packages inside venvs
             if '__init__.py'                   in script_path: return False # Ignore python package directory markers
+            if 'uvenv/bin/activate_this.py'    in script_path: return False # Not sure what this is [Sep 2025]
             if 'mac-mouse-fix-scripts/z_old'   in script_path: return False # Ignore 'old' scripts
             if 'mac-mouse-fix-scripts/shared'  in script_path: return False # Ignore library files
             if 'mac-mouse-fix-scripts/run.py'  in script_path: return False # Ignore this script
