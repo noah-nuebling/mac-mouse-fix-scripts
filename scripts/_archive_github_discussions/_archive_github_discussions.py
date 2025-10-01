@@ -28,10 +28,12 @@ def fetch_all_discussions(api_key, owner, repo):
     #           - closed status (only a handful of discussions are closed)
     #           - locked status (never locked a discussion) 
     #           - upvote count (Don't think that was used much)
-    #           - urls (Can be inferred from username / discussion number)
+    #           - discussion numbers (Can be inferred from discussion url and vice versa we prefer discussion url for greppability)
+    #           - author urls (Can be inferred from author login name.)
     #           - updatedAt (Just seems not important)
     #       Pro: More human-readable?
     #       Con: Why not include more info in case we end up caring about it after all?
+    #       Goal: One design goal is to easily find discussions based on old reference. E.g. a link like this: `https://github.com/orgs/community/discussions/14287#discussioncomment-12691930`
     #       Also see:
     #           - Available Discussion fields: https://docs.github.com/en/graphql/reference/objects#discussion
     #           - Available DiscussionComment fields: https://docs.github.com/en/graphql/reference/objects#discussioncomment
@@ -64,7 +66,7 @@ def fetch_all_discussions(api_key, owner, repo):
             }}
             nodes {{
               id
-              number
+              url
               publishedAt
               author {{ login }}
               category {{ name }}
