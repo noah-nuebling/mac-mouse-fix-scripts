@@ -17,6 +17,7 @@ import shutil
 import glob
 import argparse
 from pathlib import Path
+from typing import Any
 
 #
 # Import functions from /shared folder
@@ -55,23 +56,11 @@ xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/Localizatio
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
 #
-# Define main
+# Parse args
 #
-    
-def main():
-    
-    # Inital free line to make stuff look nicer
-    print("")
-    
-    # Get repo name
-    repo_path = os.getcwd()
-    repo_name = os.path.basename(repo_path)
-    
-    # Validate
-    assert repo_name == 'mac-mouse-fix' and repo_name != 'mac-mouse-fix-website', 'This script should be ran in the mac-mouse-fix repo'
-    assert os.path.isdir(website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {website_repo} relative to the mac-mouse-fix repo.'
-    
-    # Parse args
+
+args: Any = None
+if 1:
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
     parser.add_argument('--dry_run',                    required=False, action='store_true', help="Prevent uploads/mutations on github. (You can still pass an API key to let the script *download* stuff from github.)")
@@ -80,12 +69,9 @@ def main():
     parser.add_argument('--skip_xcloc_file_creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Localization Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
 
-    dev_language_screenshots = args.dev_language_screenshots
-    is_dry_run = args.dry_run    
-    no_api_key = args.api_key == None or len(args.api_key) == 0
-    
     # Parse args pt 2
-    if is_dry_run:
+    no_api_key = args.api_key == None or len(args.api_key) == 0
+    if args.dry_run:
         print(f"Dry run: Running dry - not uploading to github.\n")
         
         if not no_api_key:
@@ -100,6 +86,25 @@ def main():
             print("No api key provided Use --dry_run if this is intended.\n")
             parser.print_help()
             exit(1)
+
+#
+# Define main
+#
+
+def main():
+    
+    # Inital free line to make stuff look nicer
+    print("")
+    
+    # Get repo name
+    repo_path = os.getcwd()
+    repo_name = os.path.basename(repo_path)
+    
+    # Validate
+    assert repo_name == 'mac-mouse-fix' and repo_name != 'mac-mouse-fix-website', 'This script should be ran in the mac-mouse-fix repo'
+    assert os.path.isdir(website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {website_repo} relative to the mac-mouse-fix repo.'
+
+
 
     # Get temp dirs
     temp_dir = None
@@ -238,7 +243,7 @@ def main():
         if no_api_key:
             print(f"No API key provided, can't interact with GitHub. Stopping the script here")
         else:
-            create_localization_guide(args.api_key, is_dry_run, download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+            create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
         return
 
     # Export xcloc files
@@ -342,7 +347,7 @@ def main():
                 def f():
                     
                     # Preprocess locale
-                    screenshot_locale = development_locale if dev_language_screenshots else locale
+                    screenshot_locale = development_locale if args.dev_language_screenshots else locale
                     
                     # Preprocess xcloc_screenshots_dir
                     output_dir = os.path.abspath(xcloc_screenshots_dir) # (Not sure if abspath is necessary)
@@ -457,11 +462,11 @@ def main():
     if no_api_key:
         print(f"No API key provided, can't interact with GitHub. Stopping the script here")
     else:
-        download_urls = upload_xcloc_files(args.api_key, is_dry_run, zip_files)
-        create_localization_guide(args.api_key, is_dry_run, download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+        download_urls = upload_xcloc_files(zip_files)
+        create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
 
 
-def upload_xcloc_files(gh_api_key, is_dry_run, zip_files) -> dict: # Returns a map from locale -> xcloc_download_url [Oct 2025]
+def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_download_url [Oct 2025]
         
     download_urls = {}
 
@@ -469,14 +474,14 @@ def upload_xcloc_files(gh_api_key, is_dry_run, zip_files) -> dict: # Returns a m
     print(f"Uploading to GitHub ...\n")
     
     # Find GitHub Release
-    response = mfgithub.github_releases_get_release_with_tag(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
+    response = mfgithub.github_releases_get_release_with_tag(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
     release = response.json()
     print(f"Found release { release['name'] }, received response: { mfgithub.response_description(response) }")
     
-    # Delete all Assets 
+    # Delete all Assets
     #   from GitHub Release
     for asset in release['assets']:
-        response = mfgithub.github_releases_delete_asset(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], is_dry_run)
+        response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], args.dry_run)
         print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
     
     # Upload new Assets
@@ -487,7 +492,7 @@ def upload_xcloc_files(gh_api_key, is_dry_run, zip_files) -> dict: # Returns a m
         zip_file_name = value['name']
         zip_file_content = value['content']
         
-        response = mfgithub.github_releases_upload_asset(gh_api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content, is_dry_run)        
+        response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content, args.dry_run)        
         download_urls[zip_file_locale] = response.json()['browser_download_url']
         
         print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
@@ -498,7 +503,7 @@ def upload_xcloc_files(gh_api_key, is_dry_run, zip_files) -> dict: # Returns a m
     # Return
     return download_urls
 
-def create_localization_guide(gh_api_key, is_dry_run, download_urls, translation_locales, localization_progess_all_repos):
+def create_localization_guide(download_urls, translation_locales, localization_progess_all_repos):
     
     # Upload .xcloc files to GitHub file hosting
     
@@ -762,7 +767,7 @@ def create_localization_guide(gh_api_key, is_dry_run, download_urls, translation
     # Update the gh issue
     if 1:    
         # Find the issue
-        gh_graphql_response = mfgithub.github_graphql_request_query(gh_api_key, mfutils.mfdedent("""                                                                                      
+        gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent("""                                                                                      
             repository(owner: "noah-nuebling", name: "mac-mouse-fix") {
                 issue(number: 1584) {
                     id
@@ -774,7 +779,7 @@ def create_localization_guide(gh_api_key, is_dry_run, download_urls, translation
         issue_url = gh_graphql_response['data']['repository']['issue']['url']
 
         # Mutate the document body
-        gh_graphql_response = mfgithub.github_graphql_request_mutation(gh_api_key, is_dry_run, mfutils.mfdedent(f"""                    
+        gh_graphql_response = mfgithub.github_graphql_request_mutation(args.api_key, args.dry_run, mfutils.mfdedent(f"""                    
             updateIssue(input: {{id: "{issue_id}", body: "{new_localization_guide_body}"}}) {{
                 clientMutationId
             }}
