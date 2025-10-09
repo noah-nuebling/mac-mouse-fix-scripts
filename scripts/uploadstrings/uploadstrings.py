@@ -18,6 +18,7 @@ import glob
 import argparse
 from pathlib import Path
 from typing import Any
+import sys
 
 #
 # Import functions from /shared folder
@@ -63,29 +64,24 @@ args: Any = None
 if 1:
     parser = argparse.ArgumentParser()
     parser.add_argument('--api_key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
-    parser.add_argument('--dry_run',                    required=False, action='store_true', help="Prevent uploads/mutations on github. (You can still pass an API key to let the script *download* stuff from github.)")
+    parser.add_argument('--dry_run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
     parser.add_argument('--dev_language_screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
     parser.add_argument('--fresh_screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
     parser.add_argument('--skip_xcloc_file_creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Localization Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
 
-    # Parse args pt 2
-    no_api_key = args.api_key == None or len(args.api_key) == 0
-    if args.dry_run:
-        print(f"Dry run: Running dry - not uploading to github.\n")
-        
-        if not no_api_key:
-            print(f"Dry run: Working with api_key: <>. Will use it to download but not upload/mutate from github.\n")
-        else:
-            print("Dry run: No api key provided. Will not interact with github at all.\n")
-        
-    else:        
-        if not no_api_key:
-            print(f"Working with api_key: <>\n")
-        else:
-            print("No api key provided Use --dry_run if this is intended.\n")
+    # Process dry_run arg
+    
+    if args.dry_run: args.api_key = ""
+    
+    if args.api_key:
+        print(f"Working with api_key: <>\n")
+    else:
+        if not args.dry_run:
+            print("No api key provided. Use --dry_run if this is intended.\n")
             parser.print_help()
             exit(1)
+        print(f"Dry run: Running dry due to missing --api_key or --dry_run flag - not uploading/downloading from github.\n")
 
 #
 # Define main
@@ -112,15 +108,13 @@ def main():
     if 1:
         # Create temp_dir
         temp_dir = tempfile.gettempdir() + '/mmf-uploadstrings'
-        if os.path.isdir(temp_dir):
-            shutil.rmtree(temp_dir)
-        os.mkdir(temp_dir)
+        if os.path.isdir(temp_dir): shutil.rmtree(temp_dir, ignore_errors=True) # Why ignore_errors=True? This sometimes errors and fails to remove the dir, but only a .DS_Store file will be left. Perhaps a race condition with macOS' creation/update of the .DS_Store file [Oct 2025]
+        os.makedirs(temp_dir, exist_ok=True)                                    # Why exist_ok=True? See ignore_errors=True explanation above [Oct 2025]
         
         # Create persistent temp_dir
         #   This temp_dir is intended as a cache that will persist between launches of the script to speed things up.
         temp_dir_persistent = tempfile.gettempdir() + '/mmf-uploadstrings-persistent'
-        if not os.path.isdir(temp_dir_persistent):
-            os.mkdir(temp_dir_persistent)
+        if not os.path.isdir(temp_dir_persistent): os.mkdir(temp_dir_persistent)
 
     # Analyze repos
     
@@ -233,18 +227,9 @@ def main():
     # Skip xcloc creation
     if args.skip_xcloc_file_creation:
         
-        # Hardcode download urls of already-uploaded files
-        download_urls = {}
-        for translation_locale in repo_analysis.all_repos.translation_locales:
-            download_urls[translation_locale] = f"https://github.com/noah-nuebling/mac-mouse-fix-localization-file-hosting/releases/download/arbitrary-tag/MacMouseFixTranslations.{translation_locale}.zip"
-        
         # Skip straight to creating the guide
-        #   Note that the repo_analysis is based on the local files not the uploaded files we're linking to – so they are out-of-sync.
-        if no_api_key:
-            print(f"No API key provided, can't interact with GitHub. Stopping the script here")
-        else:
-            create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
-        return
+        download_urls = fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales) #   Note that the repo_analysis is based on the local files not the uploaded files we're linking to – so they are out-of-sync.
+        create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
 
     # Export xcloc files
     for repo_name in repo_analysis.repo:
@@ -398,6 +383,7 @@ def main():
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
+    #   Also Add "Double Click to Compress Localization.command"
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -421,6 +407,11 @@ def main():
                 
 
             locale_export_dirs.append(target_folder)
+
+            # Move "Double Click to Compress Localization.command"
+            if 1:
+                current_path = sys.path[0]   + '/Double Click to Compress Localizations.command'
+                mfutils.runclt(['cp', '-p', current_path, target_folder]) # -p preserves the exectuable permissions [Oct 2025]
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
@@ -459,49 +450,58 @@ def main():
         print(f"Finished zipping up .xcloc files at {temp_dir}\n")
     
 
-    if no_api_key:
-        print(f"No API key provided, can't interact with GitHub. Stopping the script here")
-    else:
-        download_urls = upload_xcloc_files(zip_files)
-        create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+    # Upload the files and create the guide
+    download_urls = upload_xcloc_files(zip_files) or fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales)
+    create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
 
+
+def fallback_xcloc_download_urls(translation_locales):
+    # In case we skip running `upload_xcloc_files()` we can use this to get fallback values [Oct 2025]
+    download_urls = {}
+    for translation_locale in translation_locales:
+        download_urls[translation_locale] = f"https://github.com/noah-nuebling/mac-mouse-fix-localization-file-hosting/releases/download/arbitrary-tag/MacMouseFixTranslations.{translation_locale}.zip"
+    return download_urls
 
 def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_download_url [Oct 2025]
-        
-    download_urls = {}
 
-    # Log
-    print(f"Uploading to GitHub ...\n")
+    if not args.api_key:
+        print(f"Dry run: Not uploading xcloc files to GitHub.")
+        return {}
+    else:
+        # Log
+        print(f"Uploading to GitHub ...\n")
+        
+        # Find GitHub Release
+        response = mfgithub.github_releases_get_release_with_tag(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
+        release = response.json()
+        print(f"Found release { release['name'] }, received response: { mfgithub.response_description(response) }")
     
-    # Find GitHub Release
-    response = mfgithub.github_releases_get_release_with_tag(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', 'arbitrary-tag') # arbitrary-tag is the tag of the release we want to use, so it is not, in fact, arbitrary
-    release = response.json()
-    print(f"Found release { release['name'] }, received response: { mfgithub.response_description(response) }")
-    
-    # Delete all Assets
-    #   from GitHub Release
-    for asset in release['assets']:
-        response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], args.dry_run)
-        print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
-    
-    # Upload new Assets
-    #   to GitHub Release
 
-    for zip_file_locale, value in zip_files.items():
+        # Delete all Assets
+        #   from GitHub Release
+        for asset in release['assets']:
+            response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+            print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
         
-        zip_file_name = value['name']
-        zip_file_content = value['content']
+        # Upload new Assets
+        #   to GitHub Release
         
-        response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content, args.dry_run)        
-        download_urls[zip_file_locale] = response.json()['browser_download_url']
+        download_urls = {}
+        for zip_file_locale, value in zip_files.items():
+            
+            zip_file_name = value['name']
+            zip_file_content = value['content']
         
-        print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
-    
-    # Log
-    print(f"Finshed Uploading to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
+            response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content)        
+            download_urls[zip_file_locale] = response.json()['browser_download_url']
+            
+            print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
+        
+        # Log
+        print(f"Finshed Uploading to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
 
-    # Return
-    return download_urls
+        # Return
+        return download_urls
 
 def create_localization_guide(download_urls, translation_locales, localization_progess_all_repos):
     
@@ -765,7 +765,9 @@ def create_localization_guide(download_urls, translation_locales, localization_p
         new_localization_guide_body = mfgithub.escape_for_upload(new_localization_guide_body)
     
     # Update the gh issue
-    if 1:    
+    if not args.api_key:
+        print(f"Dry run: Not updating the localization guide on GitHub.")
+    else:
         # Find the issue
         gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent("""                                                                                      
             repository(owner: "noah-nuebling", name: "mac-mouse-fix") {
@@ -779,7 +781,7 @@ def create_localization_guide(download_urls, translation_locales, localization_p
         issue_url = gh_graphql_response['data']['repository']['issue']['url']
 
         # Mutate the document body
-        gh_graphql_response = mfgithub.github_graphql_request_mutation(args.api_key, args.dry_run, mfutils.mfdedent(f"""                    
+        gh_graphql_response = mfgithub.github_graphql_request_mutation(args.api_key, mfutils.mfdedent(f"""                    
             updateIssue(input: {{id: "{issue_id}", body: "{new_localization_guide_body}"}}) {{
                 clientMutationId
             }}
