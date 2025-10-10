@@ -343,7 +343,7 @@ stderr:
     
     return result
     
-def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, prefer_arm64: bool = True) -> str | None:
+def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, prefer_arm64: bool = True) -> str | None:
     
     """
     
@@ -363,14 +363,20 @@ def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = F
     #   -> So that it works similar to as if shell=True (we can pass in the args as a single string, like on the command-line) but yet we can keep shell=False (because that's a security problem)
     #   -> If one of your args contains spaces, you can escape with "with quotes" or with\ backslashes - just like a normal shell (Implemented by shlex)
     
-    commands = None
-    if type(command_arg) is list:
-        commands = command_arg
-    elif type(command_arg) is str:
-        commands = shlex.split(command_arg)
-    
+    commands: list[str] = []
+    if len(command_arg) > 1:
+        commands = list(command_arg) # Syntax sugar for the `is list` case [Oct 2025]
+    else:
+        if type(command_arg[0]) is list:
+            commands = command_arg[0]
+        elif type(command_arg[0]) is str:
+            commands = shlex.split(command_arg[0])
+
     command_name = commands[0]
     
+    # Check commands that shouldn't be run
+    assert commands[0] != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
+
     # Handle non-standard return codes
     success_codes=[0]
     if commands[0] == 'git' and commands[1] == 'diff': 
@@ -433,7 +439,7 @@ def runclt(command_arg: str | list, cwd: str = None, print_live_output: bool = F
                 break
 
     if not print_live_output:
-        assert returncode in success_codes and (stderr == '' or not fail_on_stderr), f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+        assert returncode in success_codes and (stderr == '' or not fail_on_stderr), f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
         if stderr != '':                                                                # If command was successful but there's still an stderr – print it. || Reasoning: [Mar 2025] When running node on .ts files it will work but print to stderr that it's an experimental feature.
             print(f"{command_name}: stderr {{", end='\n')
             print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
