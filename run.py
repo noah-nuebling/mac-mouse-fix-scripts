@@ -354,6 +354,7 @@ def main():
     
     # Log
     print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...\n")
+    print(f"----------------------------------------------------------------------------------------------------------\n")
     
     # Run script
     #   Notes:
