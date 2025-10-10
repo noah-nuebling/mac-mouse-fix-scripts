@@ -56,6 +56,9 @@ xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
+# Localization compression app
+localization_compression_app_path = sys.path[0] + '/localization_compression' + '/Double Click to Compress Localizations.app' # It would probably make more sense if uploadstrings created the `Double Click to Compress Localizations.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
+
 #
 # Parse args
 #
@@ -230,6 +233,7 @@ def main():
         # Skip straight to creating the guide
         download_urls = fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales) #   Note that the repo_analysis is based on the local files not the uploaded files we're linking to – so they are out-of-sync.
         create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+        return
 
     # Export xcloc files
     for repo_name in repo_analysis.repo:
@@ -383,7 +387,7 @@ def main():
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
-    #   Also Add "Double Click to Compress Localization.command"
+    #   Also add the localization_compression_app
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -408,22 +412,22 @@ def main():
 
             locale_export_dirs.append(target_folder)
 
-            # Move "Double Click to Compress Localization.command"
+            # Move localization_compression_app
             if 1:
-                current_path = sys.path[0]   + '/Double Click to Compress Localizations.command'
-                mfutils.runclt(['cp', '-p', current_path, target_folder]) # -p preserves the exectuable permissions [Oct 2025]
+                mfutils.runclt(['cp', '-pr', localization_compression_app_path, target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
     # Zip folders containing .xcloc files 
     if 1:
-        print(f"Zipping up .xcloc files ...\n")
         
         zip_file_format = "MacMouseFixTranslations.{}.zip" # GitHub Releases assets seemingly can't have spaces, that's why we're using this separate format
         
         zip_files = {}
         for l, l_dir in zip(repo_analysis.all_repos.translation_locales, locale_export_dirs):
-            
+
+            print(f"Zipping up .xcloc files at {l_dir} ...")
+
             base_dir = temp_dir
             zippable_dir_path = l_dir
             zippable_dir_name = os.path.basename(os.path.normpath(zippable_dir_path))
@@ -767,6 +771,8 @@ def create_localization_guide(download_urls, translation_locales, localization_p
     # Update the gh issue
     if not args.api_key:
         print(f"Dry run: Not updating the localization guide on GitHub.")
+        print(f"Not uploading markdown:\n")
+        print(new_localization_guide_body)
     else:
         # Find the issue
         gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent("""                                                                                      
