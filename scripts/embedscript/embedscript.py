@@ -1,7 +1,7 @@
 
 """
 - About
-    - This embeds the script inside a notarized .app bundle named.
+    - This embeds the script inside a notarized .app bundle.
     - This is necessary to be able to share the script, since a simple .command file is quarantined after downloading.
     - Also see: 
         - https://scriptingosx.com/2022/04/launching-scripts-2-launching-scripts-from-finder/) 
