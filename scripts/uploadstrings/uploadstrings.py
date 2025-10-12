@@ -50,7 +50,7 @@ import mfgithub
 website_repo = './../mac-mouse-fix-website'
 xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
 
-localization_guide_template_path = sys.path[0] + '/localization_guide_template.md'
+translation_guide_path = sys.path[0] + '/translation_guide.md'
 
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
@@ -58,8 +58,8 @@ xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
-# Localization compression app
-localization_compression_app_path = sys.path[0] + '/localization_compression' + '/Compress Translations.app' # It would probably make more sense if uploadstrings created the `Compress Translations.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
+# `Compress Translations.app`
+compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress Translations.app' # It would probably make more sense if uploadstrings created the `Compress Translations.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
 
 #
 # Parse args
@@ -72,7 +72,7 @@ if 1:
     parser.add_argument('--dry_run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
     parser.add_argument('--dev_language_screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
     parser.add_argument('--fresh_screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
-    parser.add_argument('--skip_xcloc_file_creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Localization Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--skip_xcloc_file_creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
 
     # Process dry_run arg
@@ -234,7 +234,7 @@ def main():
         
         # Skip straight to creating the guide
         download_urls = fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales) #   Note that the repo_analysis is based on the local files not the uploaded files we're linking to – so they are out-of-sync.
-        create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+        create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
         return
 
     # Export xcloc files
@@ -389,7 +389,7 @@ def main():
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
-    #   Also add the localization_compression_app
+    #   Also add the compress_translations_app
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -414,9 +414,9 @@ def main():
 
             locale_export_dirs.append(target_folder)
 
-            # Move localization_compression_app
+            # Move compress_translations_app
             if 1:
-                mfutils.runclt(['cp', '-pr', localization_compression_app_path, target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
+                mfutils.runclt(['cp', '-pr', compress_translations_app_path, target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
@@ -458,7 +458,7 @@ def main():
 
     # Upload the files and create the guide
     download_urls = upload_xcloc_files(zip_files) or fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales)
-    create_localization_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+    create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
 
 
 def fallback_xcloc_download_urls(translation_locales):
@@ -509,7 +509,7 @@ def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_
         # Return
         return download_urls
 
-def create_localization_guide(download_urls, translation_locales, localization_progess_all_repos):
+def create_translation_guide(download_urls, translation_locales, localization_progess_all_repos):
     
     # Upload .xcloc files to GitHub file hosting
     
@@ -530,9 +530,9 @@ def create_localization_guide(download_urls, translation_locales, localization_p
         return f"{r:02x}{g:02x}{b:02x}"
 
     # Create markdown
-    new_localization_guide_body = None
+    new_translation_guide_body = None
     if 1:
-        new_localization_guide_body = Path(localization_guide_template_path).read_text()
+        new_translation_guide_body = Path(translation_guide_path).read_text()
     
         # Insert table
         if 1:
@@ -565,17 +565,17 @@ def create_localization_guide(download_urls, translation_locales, localization_p
                 """)
                 download_table += entry
             
-            print(new_localization_guide_body)
-            new_localization_guide_body = new_localization_guide_body.format(download_table=download_table)
+            print(new_translation_guide_body)
+            new_translation_guide_body = new_translation_guide_body.format(download_table=download_table)
         
         # Escape markdown
-        new_localization_guide_body = mfgithub.escape_for_upload(new_localization_guide_body)
+        new_translation_guide_body = mfgithub.escape_for_upload(new_translation_guide_body)
     
     # Update the gh issue
     if not args.api_key:
-        print(f"Dry run: Not updating the localization guide on GitHub.")
+        print(f"Dry run: Not updating the translation guide on GitHub.")
         print(f"Not uploading markdown:\n")
-        print(new_localization_guide_body)
+        print(new_translation_guide_body)
     else:
         # Find the issue
         gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent("""                                                                                      
@@ -591,14 +591,14 @@ def create_localization_guide(download_urls, translation_locales, localization_p
 
         # Mutate the document body
         gh_graphql_response = mfgithub.github_graphql_request_mutation(args.api_key, mfutils.mfdedent(f"""                    
-            updateIssue(input: {{id: "{issue_id}", body: "{new_localization_guide_body}"}}) {{
+            updateIssue(input: {{id: "{issue_id}", body: "{new_translation_guide_body}"}}) {{
                 clientMutationId
             }}
         """))
         
         # Check for success
-        print(f" Mutate localization guide result:\n{json.dumps(gh_graphql_response, ensure_ascii=False, indent=2)}")
-        print(f" Localization guide available at: { issue_url }")
+        print(f" Mutate translation guide result:\n{json.dumps(gh_graphql_response, ensure_ascii=False, indent=2)}")
+        print(f" Translation guide available at: { issue_url }")
     
     
 #

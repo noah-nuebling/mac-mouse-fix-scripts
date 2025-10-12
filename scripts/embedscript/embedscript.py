@@ -9,7 +9,7 @@
 - Note: Could simplify folder structure inside the .app bundle.
     - We could simply store the script at .app/script instead of ./app/Contents/MacOS/script, but then the stapling of the notarization info doesn't work, which makes it so the user needs internet when opening the script for the first time I think. (Which is not too bad.)
 
-- Example usage: See how we compress localization_compression_script.py [Oct 2025]    
+- Example usage: See how we compress compress_translations.py [Oct 2025]    
     
 """
 

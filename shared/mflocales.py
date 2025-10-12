@@ -118,7 +118,7 @@ language_code_to_emoji_flag_map = {
 
 language_name_override_map = {
     'en': {
-        'zh-HK': 'Chinese (Hong Kong)', # This is used in the table inserted into localization_guide_template.md. Maybe other places [Oct 2025]
+        'zh-HK': 'Chinese (Hong Kong)', # This is used in the table inserted into translation_guide.md. Maybe other places [Oct 2025]
     },
     'zh-HK': {
         'zh-HK': '中文（香港)', # The native Babel name for this locale is way too long. This is name used by Apple.

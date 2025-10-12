@@ -122,17 +122,17 @@ if 1:
         exit(1)    
 
     # Compress .xcloc files using tar (zip doesn't preserve the hardlink deduplication)
-    runclt(['tar', '-czf', 'Compressed Localizations (Upload This).tar.gz', *xcloc_files])
+    runclt(['tar', '-czf', 'Compressed Translations (Upload This).tar.gz', *xcloc_files])
 
     # Log success message 
     show_alert(dedent(f"""\
         Created archive:
-        'Compressed Localizations (Upload This).tar.gz'
+        'Compressed Translations (Upload This).tar.gz'
 
-        Containing localization files:
+        Containing translation files:
         {xcloc_files}
 
-        You can upload the compressed localizations via:
+        You can upload the compressed translations via:
 
         GitHub: 
         https://redirect.macmousefix.com/?target=mmf-localization-contribution
