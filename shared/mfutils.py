@@ -115,6 +115,15 @@ def find_xcode_project_build_schemes(repo_path, project_path):
     return result
 
 
+#
+# MARK: Maths
+#
+
+def scale(x: float, from_range: tuple[float, float], to_range: tuple[float, float]) -> float: # Linear transform or something. We use the same thing in mac-mouse-fix and mac-mouse-fix-website [Oct 2025]
+    x = (x - from_range[0]) / (from_range[1] - from_range[0])
+    x = (x * (to_range[1] - to_range[0])) + to_range[0]
+    return x
+
 # 
 # MARK: Byte -> Human
 #   Convert number of bytes to human-readable representation
