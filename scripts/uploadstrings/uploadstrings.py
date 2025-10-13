@@ -266,18 +266,19 @@ def main():
         #       - I tried every xcodebuild option under the sun to speed things up, including: -sdk macosx15.0 -dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipUnavailableActions -destination 'name=My Mac,arch=arm64' -arch arm64 -configuration Debug -scheme "App" -project "Mouse Fix.xcodeproj"
         #           ... but none of these seemed to help.
         
+        # Get paths
+        project_path = mflocales.path_to_xcodeproj[repo_name]
+        derived_data_path = os.path.join(temp_dir_persistent, xcloc_export_derived_data_temp_dir_subpath, repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
+
         export_localizations_command = ""
         if 1:
 
             # Get any scheme
             #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But xcodebuild still demands a -scheme when using -derivedDataPath.
             #           So we're just using the first scheme we find for the project.
-            project_path = mflocales.path_to_xcodeproj[repo_name]
             build_schemes = mfutils.find_xcode_project_build_schemes(repo_path, project_path)
             any_build_scheme = build_schemes[0]
             
-            # Get derived data path
-            derived_data_path = os.path.join(temp_dir_persistent, xcloc_export_derived_data_temp_dir_subpath, repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
 
             # Assemble command
             export_localizations_command = [
@@ -294,7 +295,10 @@ def main():
         print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while since Xcode will build the whole project) ... \nRunning command: {export_localizations_command}\n")
         
         # Run command
-        mfutils.runclt(export_localizations_command, cwd=repo_path, print_live_output=True)
+        try:
+            mfutils.runclt(export_localizations_command, cwd=repo_path, print_live_output=True)
+        except Exception as e:
+            print(f"-exportLocalizations failed. Try searching the logs for 'error' or cleaning the derived_data_path ({derived_data_path}).\n\nException:\n\n{e}")
         
         # Log
         print(f"Exported .xcloc files using command: {export_localizations_command}\n")
