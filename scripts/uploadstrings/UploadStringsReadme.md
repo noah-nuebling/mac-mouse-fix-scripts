@@ -1,6 +1,8 @@
 Terminology
 
-    We're using 'translate' instead of 'localize' for translator-facing stuff since both kinda mean the same thing and 'translate' is more widely understood. [Oct 2025]
+    We're using 'translate' instead of 'localize' for translator-facing stuff since both kinda mean the same thing and 'translate' is more widely understood. [Oct 2025]  
+      - Con: Xcode uses 'localization' (e.g. .xc*loc*) and localizers will interact with that.
+      - Renamed many things from 'localize' -> 'translate' in commit c3062736eaa44cdb56590d6713a972da3082fc07 [Oct 2025]
 
 
 `compress_translations`
