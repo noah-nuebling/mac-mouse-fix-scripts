@@ -14,6 +14,7 @@ import os
 import glob
 from collections import defaultdict
 import json
+from pathlib import Path
 
 import mflocales
 import mfutils
@@ -23,11 +24,7 @@ import mfutils
 # Constants
 #
 
-quotes_xcstrings_path   = "./locales/strings/Quotes.xcstrings"
-xcstrings_root          = "./locales/strings/repo-root/"
-# main_xcstrings_path     = "./locales/Localizable.xcstrings"
-
-output_path             = "./locales/Localizable.js"
+output_path = "./locales/Localizable.js"
 
 #
 # Main
@@ -44,8 +41,10 @@ def main():
     # Log
     print(f'compile_website_strings: Begin')
     
-    # Find mmf-project locales
+    # Get xcodeproj
     xcodeproj_path = mflocales.path_to_xcodeproj[repo_name]
+
+    # Find mmf-project locales
     source_locale, translation_locales = mflocales.find_xcode_project_locales(xcodeproj_path)
     locales = [source_locale] + translation_locales
     
@@ -57,17 +56,15 @@ def main():
     locales = mflocales.sorted_locales(locales, source_locale)
     
     # Load xcstrings files
-    vue_xcstrings_list = []
-    for xcstrings_path in glob.glob(xcstrings_root + '**/*.xcstrings'):
-        vue_xcstrings_list.append(json.loads(mfutils.read_file(xcstrings_path)))
-    quotes_xcstrings = json.loads(mfutils.read_file(quotes_xcstrings_path))
-    all_xcstrings_list = vue_xcstrings_list + [quotes_xcstrings]
-    
+    #   [Oct 2025] Now using exclusion list approach - all .xcstrings files (including Quotes.xcstrings) are loaded
+    xcstrings_paths = mflocales.get_xcstrings_paths('./')
+    all_xcstrings_list = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
+
     # Get progress
     progress = mflocales.get_localization_progress(all_xcstrings_list, translation_locales)
-    
+
     # Log
-    print(f'compile_website_strings: Loaded vue .xcstrings files at {vue_xcstrings_list}, loaded Quotes.xcstrings from: {quotes_xcstrings_path}')
+    print(f'compile_website_strings: Loaded .xcstrings files (count: {len(all_xcstrings_list)})')
     
     # Compile
     

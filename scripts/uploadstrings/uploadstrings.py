@@ -19,6 +19,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 import sys
+import re
 
 #
 # Import functions from /shared folder
@@ -204,27 +205,13 @@ def main():
                 # Aggregate locales from all projects
                 repo_analysis.all_repos.translation_locales = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
             
-            # Process .xcstrings files
+            # Load .xcstrings files for this repo
+            #       (For localization_progress [Oct 2025])
             if 1:
-
-                # Log
                 print(f"Loading all .xcstring files ...\n")
-                
-                # Load all .xcstrings files
-                xcstring_objects = []
-                xcstring_filenames = None
-                if 1:
-                    glob_pattern = './' + os.path.normpath(f'{repo_path}/**/*.xcstrings') # Not sure normpath is necessary
-                    xcstring_filenames = glob.glob(glob_pattern, recursive=True)
-                    for filename in xcstring_filenames:
-                        with open(filename, 'r') as file_handle:
-                            xcstring_objects.append(json.load(file_handle))
-                
-                # Store stuff for localization_progress
-                xcstring_objects_all_repos += xcstring_objects
-                
-                # Log
-                print(f".xcstring file paths: { json.dumps(xcstring_filenames, ensure_ascii=False, indent=2) }\n")
+                xcstrings_paths = mflocales.get_xcstrings_paths(repo_path)
+                xcstring_objects_all_repos += [json.loads(Path(p).read_text()) for p in xcstrings_paths]
+                print(f".xcstring file paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
     
         # Get combined localization_progress
         repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstring_objects_all_repos, repo_analysis.all_repos.translation_locales)
@@ -306,6 +293,59 @@ def main():
         # Store result
         repo_analysis.repo[repo_name].xcloc_dir = xcloc_dir
 
+    # Validate exclusion list against exported .xcloc files
+    #   [Oct 2025] This ensures our xcstrings_exclusion_list in mflocales.py stays in sync with what -exportLocalizations actually exports
+    if 1:
+        print(f"Validating exclusion list against exported .xcloc files ...\n")
+
+        for repo_name in repo_analysis.repo:
+
+            # Extract
+            repo_path = repo_analysis.repo[repo_name].path
+            xcloc_dir = repo_analysis.repo[repo_name].xcloc_dir
+
+            # Find one .xliff file from any .xcloc bundle
+            #   All .xcloc bundles (one per locale) reference the same source .xcstrings files, so we only need to check one
+            #   Each .xcloc bundle contains one .xliff file
+            xliff_paths = glob.glob(os.path.join(xcloc_dir, '**/*.xliff'), recursive=True)
+
+            if not xliff_paths:
+                print(f"Warning: No .xliff files found in {xcloc_dir} for {repo_name}. Skipping validation for this repo.\n")
+                continue
+
+            # Parse the first .xliff file to find referenced .xcstrings files
+            xliff_path = xliff_paths[0]
+            exported_xcstrings_relpaths = set()
+            with open(xliff_path, 'r') as f:
+                xliff_content = f.read()
+                # Look for original="..." attributes in the XLIFF which reference source files
+                # Paths are relative to repo root (e.g., "App/SupportFiles/InfoPlist.xcstrings")
+                matches = re.findall(r'original="([^"]+\.xcstrings)"', xliff_content)
+                for match in matches:
+                    exported_xcstrings_relpaths.add(match)
+
+            # Get the .xcstrings file paths we actually used for localization progress
+            loaded_xcstrings_relpaths = set(os.path.normpath(p) for p in mflocales.get_xcstrings_paths(repo_path)) # normpath is necessary for comparison (removes leading ./) [Oct 2025]
+
+            # Compare
+            missing_in_loaded = exported_xcstrings_relpaths - loaded_xcstrings_relpaths
+            extra_in_loaded = loaded_xcstrings_relpaths - exported_xcstrings_relpaths
+
+            if missing_in_loaded or extra_in_loaded:
+                error_msg = f"Exclusion list validation failed for {repo_name}:\n"
+                if missing_in_loaded:
+                    error_msg += f"  - Files exported by -exportLocalizations but NOT loaded (should REMOVE from exclusion list):\n"
+                    for path in sorted(missing_in_loaded):
+                        error_msg += f"      {path}\n"
+                if extra_in_loaded:
+                    error_msg += f"  - Files loaded but NOT exported by -exportLocalizations (should ADD to exclusion list):\n"
+                    for path in sorted(extra_in_loaded):
+                        error_msg += f"      {path}\n"
+                error_msg += f"  Update xcstrings_exclusion_list in mflocales.py to fix this.\n"
+                print(error_msg)
+                assert False, error_msg
+
+            print(f"✓ Exclusion list validation passed for {repo_name} ({len(loaded_xcstrings_relpaths)} .xcstrings files)\n")
 
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:
