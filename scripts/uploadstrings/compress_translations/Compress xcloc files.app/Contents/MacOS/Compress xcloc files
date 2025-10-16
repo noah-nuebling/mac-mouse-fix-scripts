@@ -12,11 +12,18 @@ from typing import Any
 import subprocess
 import shlex
 from glob import glob
-from textwrap import dedent
+import textwrap
 
 #
 # Define helper functions
 #
+
+def dedent(s): # See mfutils.mfdedent
+    s = textwrap.dedent(s)
+    if s.startswith('\n'): s = s[1:]
+    if s.endswith('\n'):   s = s[:-1]
+    return s
+
 
 def loadfn(restype, fn, argtypes): # Reduce boilerplate when calling c-functions. [Oct 2025]
     fn.restype = restype
@@ -121,16 +128,18 @@ if 1:
         show_alert(f"Error: Found no .xcloc files in folder:\n{os.getcwd()}")
         exit(1)    
 
+    # Define localizer-facing string
+    archive_name = 'Compressed Translations (Upload This).tar.gz'           # Note how we're calling them 'xcloc files' before archiving and 'translations' after. Not sure this makes sense, but I like it. translation_guide.md also uses both terms [Oct 2025]
+
     # Compress .xcloc files using tar (zip doesn't preserve the hardlink deduplication)
-    runclt(['tar', '-czf', 'Compressed Translations (Upload This).tar.gz', *xcloc_files])
+    runclt(['tar', '-czf', archive_name, *xcloc_files])
 
-    # Log success message 
-    show_alert(dedent(f"""\
-        Created archive:
-        'Compressed Translations (Upload This).tar.gz'
+    # Show success message
+    show_alert(dedent(f"""
+        🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁
 
-        Containing translation files:
-        {xcloc_files}
+        Created file:
+        {archive_name}
 
         You can upload the compressed translations via:
 
@@ -138,5 +147,7 @@ if 1:
         https://redirect.macmousefix.com/?target=mmf-localization-contribution
 
         Email:  
-        https://redirect.macmousefix.com/?target=mailto-noah\
+        https://redirect.macmousefix.com/?target=mailto-noah
+                      
+        🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁
     """))
