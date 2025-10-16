@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # MARK: Imports
 #
@@ -202,6 +204,7 @@ def main():
         def passes_filter(script_path: str) -> bool:
             
             if 'site-packages'                 in script_path: return False # Ignore downloaded packages inside venvs
+            if 'node_modules/'                 in script_path: return False # Ignore node stuff in mac-mouse-fix-website
             if '__init__.py'                   in script_path: return False # Ignore python package directory markers
             if 'uvenv/bin/activate_this.py'    in script_path: return False # Not sure what this is [Sep 2025]
             if 'mac-mouse-fix-scripts/z_old'   in script_path: return False # Ignore 'old' scripts

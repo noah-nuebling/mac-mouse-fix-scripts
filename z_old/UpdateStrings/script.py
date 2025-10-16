@@ -63,7 +63,7 @@ def main():
     
         # Args
         parser = argparse.ArgumentParser()
-        parser.add_argument('--wet_run', required=False, action='store_true', help="Provide this arg to actually modify files. Otherwise it will just log what it would do.", default=False)
+        parser.add_argument('--wet-run', required=False, action='store_true', help="Provide this arg to actually modify files. Otherwise it will just log what it would do.", default=False)
         args = parser.parse_args()
         
         # Constants & stuff

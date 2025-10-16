@@ -54,7 +54,7 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--api-key', required=False, help="If no API key is supplied, the result will be printed to the console instead of uploaded to GitHub || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
-    parser.add_argument('--print_latest_for', required=False, help="Debugging tool. Print the latest changes for each key for each translation file whose path contains this value.")
+    parser.add_argument('--print-latest-for', required=False, help="Debugging tool. Print the latest changes for each key for each translation file whose path contains this value.")
     args = parser.parse_args()
 
 

@@ -26,7 +26,7 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('action', help='`push` or `pull` the subtree')
-    parser.add_argument('--scripts_dir', help='Passed automatically by run.py.')
+    parser.add_argument('--scripts-dir', help='Passed automatically by run.py.')
     args = parser.parse_args()
     action = args.action
     scripts_dir = args.scripts_dir
