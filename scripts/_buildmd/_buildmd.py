@@ -66,10 +66,10 @@ def main():
     
     # Parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument("--api_key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api_key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
+    parser.add_argument("--api-key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api-key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
     parser.add_argument("--document"),                                  # We used to get the document through .getenv, too but that can be confusing I think
-    parser.add_argument("--no_api", action='store_true')                # no_api option is not necessary anymore now since we have caching to make things fast when testing.
-    parser.add_argument("--no_cache_expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
+    parser.add_argument("--no-api", action='store_true')                # no-api option is not necessary anymore now since we have caching to make things fast when testing.
+    parser.add_argument("--no-cache-expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
     args = parser.parse_args()
 
     document_key_search_pattern   = args.document
@@ -77,13 +77,13 @@ def main():
     no_api              = args.no_api
     no_cache_expiration = args.no_cache_expiration
     
-    # Validate --api_key
+    # Validate --api-key
     if gumroad_api_key == None or len(gumroad_api_key) == 0:
         print("No gumroad api key provided.")
     else:
         print(f"Working with gumroad api key: {gumroad_api_key}")
     
-    # Implement --no_cache_expiration
+    # Implement --no-cache-expiration
     global gumroad_sales_cache_shelf_life
     if no_cache_expiration:
         gumroad_sales_cache_shelf_life = "no_cache_expiration"
@@ -1005,7 +1005,7 @@ def get_latest_sales(cache_file, cache_shelf_life, gumroad_api_key, gumroad_api_
 
         # Return cached_sales instead of all_sales in case of no_api
         if no_api:
-            print("Using cached_sales due to no_api flag...")
+            print("Using cached_sales due to --no-api flag...")
             return cache['sales']
         
         # Check cache expiration

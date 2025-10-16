@@ -68,11 +68,11 @@ compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Comp
 args: Any = None
 if 1:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--api_key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
-    parser.add_argument('--dry_run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
-    parser.add_argument('--dev_language_screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
-    parser.add_argument('--fresh_screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
-    parser.add_argument('--skip_xcloc_file_creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--api-key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
+    parser.add_argument('--dry-run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
+    parser.add_argument('--dev-language-screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
+    parser.add_argument('--fresh-screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
+    parser.add_argument('--skip-xcloc-file-creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
 
     # Process dry_run arg
@@ -83,10 +83,10 @@ if 1:
         print(f"Working with api_key: <>\n")
     else:
         if not args.dry_run:
-            print("No api key provided. Use --dry_run if this is intended.\n")
+            print("No api key provided. Use --dry-run if this is intended.\n")
             parser.print_help()
             exit(1)
-        print(f"Dry run: Running dry due to missing --api_key or --dry_run flag - not uploading/downloading from github.\n")
+        print(f"Dry run: Running dry due to missing --api-key or --dry-run flag - not uploading/downloading from github.\n")
 
 #
 # Define main
@@ -314,7 +314,7 @@ def main():
         
         # Delete cache
         if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used when running `dev_language_screenshots` [Oct 2025]
-            Path(localization_screenshot_cache_dir).unlink(missing_ok=True)
+            shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
         
@@ -356,7 +356,7 @@ def main():
                             print(f"Copied cached screenshots from {cache_dir} to {output_dir} (Instead of running another xcuitest to take the screenshots.)\n")
                             return
                     
-                    # Take fresh screenshots
+                    # Take fresh_screenshots
                     if 1:
                         
                         # Create did_build flag
@@ -508,7 +508,7 @@ def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_
             print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
         
         # Log
-        print(f"Finshed Uploading to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
+        print(f"Finshed Uploading xcloc files to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
 
         # Return
         return download_urls
@@ -536,6 +536,8 @@ def create_translation_guide(download_urls, translation_locales, localization_pr
     # Create markdown
     new_translation_guide_body = None
     if 1:
+
+        # Read template
         new_translation_guide_body = Path(translation_guide_path).read_text()
     
         # Insert table
@@ -569,7 +571,6 @@ def create_translation_guide(download_urls, translation_locales, localization_pr
                 """)
                 download_table += entry
             
-            print(new_translation_guide_body)
             new_translation_guide_body = new_translation_guide_body.format(download_table=download_table)
         
         # Escape markdown

@@ -34,7 +34,7 @@ python3 -m pip install -r Localization/Code/StateOfLocalization/requirements.txt
 **Run the script**
 
 ```
-python3 Localization/Code/StateOfLocalization/script.py --api_key <...>
+python3 Localization/Code/StateOfLocalization/script.py --api-key <...>
 ```
 (Use --help for an explanation of the args)
 
