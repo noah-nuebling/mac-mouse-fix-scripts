@@ -4,6 +4,12 @@ Terminology
       - Con: Xcode uses 'localization' (e.g. .xc*loc*) and localizers will interact with that.
       - Renamed many things from 'localize' -> 'translate' in commit c3062736eaa44cdb56590d6713a972da3082fc07 [Oct 2025]
 
+On the localization_guide.md screenshots: [Oct 2025]
+
+Random tips / considerations: (By far not all, not sure why I'm choosing to write these down [Oct 2025])
+    -  Remove the `height=` tag after uploading image to GitHub to preserve aspect ratio. 
+    - For the Finder screenshot I used the 'default' size of a new Finder window I think [Oct 2025]
+    - For the .xcloc editor screenshots I made the window as small as possible so the UI elements would be big in the screenshot [Oct 2025]
 
 `compress_translations`
 
@@ -12,8 +18,8 @@ Terminology
             - We're using this command: [Oct 2025]
                 ```
                 ./run embedscript ./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/compress_translations.py \
-                --app-path "./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/Compress Translations.app/" \
-                --bundle-id "com.nuebling.compresstranslations"
+                --app-path "./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/Compress xcloc files.app/" \
+                --bundle-id "com.nuebling.compress-translations"
                 ```
         - uploadstrings.py will automatically include the .app bundle for translators. (Where it will be sitting next to .xcloc files which it compresses when double-clicking.)
 
@@ -26,17 +32,17 @@ Terminology
             - We used another distribution method like CrowdIn
             - We provided a method for translators to upload translation files that accepts larger file sizes, like a MegaUpload link. (Currently we use Email and GitHub comments which have < 50 MB limits)
         Other benefits of this:
-            - The `Compress Translations.app` shows a little message after compressing, telling translators where they can submit their translations. That's kinda neat.
+            - The `Compress xcloc files.app` shows a little message after compressing, telling translators where they can submit their translations. That's kinda neat.
 
     Testing app-translocation:
 
-        Navigate to the directory of `Compress Translations.app`
+        Navigate to the directory of `Compress xcloc files.app`
             cd ...
 
         Add quarantine flag (simulates downloading from internet)
-            xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" "Compress Translations.app"
+            xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" "Compress xcloc files.app"
 
         Verify quarantine was added
-            xattr -l "Compress Translations.app"
+            xattr -l "Compress xcloc files.app"
 
         Now double-click the app in Finder to test (it should get translocated and then undo the translocation automatically)

@@ -58,8 +58,8 @@ xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
-# `Compress Translations.app`
-compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress Translations.app' # It would probably make more sense if uploadstrings created the `Compress Translations.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
+# `Compress xcloc files.app`
+compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress xcloc files.app' # It would probably make more sense if uploadstrings created the `Compress xcloc files.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
 
 #
 # Parse args

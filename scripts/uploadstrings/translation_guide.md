@@ -64,11 +64,9 @@ Open these files in Xcode and then fill in your translations until the **"State"
 
     Double click one of the `.xcloc` files you downloaded to begin editing it in Xcode.
 
-
-    <img width="978" alt="Image" src="https://github.com/user-attachments/assets/1125918a-97d4-4944-a4fe-b55fbcdd704a" />
-
-    <!--    <img width="607" alt="Screenshot 2024-06-27 at 09 24 39" src="https://github.com/noah-nuebling/mac-mouse-fix/assets/40808343/a70addcf-466f-4a92-8096-eee717ecc9fe"> -->
-
+    <img width="978" alt="Image" src="https://github.com/user-attachments/assets/5297b417-7a09-4f4d-b013-155d71d8bc3c" />
+    <!-- <img width="978" alt="Image" src="https://github.com/user-attachments/assets/1125918a-97d4-4944-a4fe-b55fbcdd704a" /> -->
+    <!-- <img width="607" alt="Screenshot 2024-06-27 at 09 24 39" src="https://github.com/noah-nuebling/mac-mouse-fix/assets/40808343/a70addcf-466f-4a92-8096-eee717ecc9fe"> -->
     <!-- <img width="503" alt="Image" src="https://github.com/user-attachments/assets/a6413310-d322-4bca-bb81-f8032105c970" /> -->
     <!-- <img width="726" alt="Image" src="https://github.com/user-attachments/assets/8dc6665c-8b12-4349-84fc-1fb4a99b7485" /> -->
     <!-- <img width="492" alt="Image" src="https://github.com/user-attachments/assets/ea088455-a645-4c4c-b0a4-3ac9b7f78fb0" /> -->
@@ -135,7 +133,7 @@ Once all your translations have a green checkmark, you can send the translation 
 
 To submit your translations:
 
-1. Compress your `.xcloc` files by opening the `Compress Translations.app` which you will find next to the `.xcloc` files.
+1. Compress your `.xcloc` files by opening the `Compress xcloc files.app` which you will find next to the `.xcloc` files.
 2. Send the compressed translations to me via [email](https://redirect.macmousefix.com/?target=mailto-noah) or in a comment below.
 
 ## Credits
