@@ -19,7 +19,6 @@ import argparse
 from pathlib import Path
 from typing import Any
 import sys
-import re
 
 #
 # Import functions from /shared folder
@@ -48,6 +47,7 @@ import mfgithub
 # Constants
 #
 
+website_repo = './../mac-mouse-fix-website'
 xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
 
 translation_guide_path = sys.path[0] + '/translation_guide.md'
@@ -103,7 +103,9 @@ def main():
     
     # Validate
     assert repo_name == 'mac-mouse-fix' and repo_name != 'mac-mouse-fix-website', 'This script should be ran in the mac-mouse-fix repo'
-    assert os.path.isdir(mflocales.path_to_website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {mflocales.path_to_website_repo} relative to the mac-mouse-fix repo.'
+    assert os.path.isdir(website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {website_repo} relative to the mac-mouse-fix repo.'
+
+
 
     # Get temp dirs
     temp_dir = None
@@ -132,7 +134,6 @@ def main():
         class SpecificRepo:
             path: str
             xcloc_dir: str
-            xcstrings_paths: list[str]
 
         all_repos:  AllRepos
         repo:       dict[str, SpecificRepo] # Map from repo_name -> RepoAnalysis
@@ -146,12 +147,10 @@ def main():
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
                 path='./',
                 xcloc_dir="",
-                xcstrings_paths=[]
             ),
             'mac-mouse-fix-website': RepoAnalysis.SpecificRepo(
-                path=mflocales.path_to_website_repo,
+                path=website_repo,
                 xcloc_dir="",
-                xcstrings_paths=[]
             ),
         }
     )
@@ -164,7 +163,8 @@ def main():
         previous_repo_locales = []
         
         # Store more stuff
-        xcstrings_objects_all_repos = []
+        #   (To get localization progress)
+        xcstring_objects_all_repos = []
 
         for i, repo_name in enumerate(repo_analysis.repo):
             
@@ -208,23 +208,26 @@ def main():
             if 1:
 
                 # Log
-                print(f"Loading exported .xcstrings files ...\n")
+                print(f"Loading all .xcstring files ...\n")
                 
-                # Load .xcstrings files
-                xcstrings_paths = mflocales.find_exported_xcstrings_files(repo_path)
-                xcstrings = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
+                # Load all .xcstrings files
+                xcstring_objects = []
+                xcstring_filenames = None
+                if 1:
+                    glob_pattern = './' + os.path.normpath(f'{repo_path}/**/*.xcstrings') # Not sure normpath is necessary
+                    xcstring_filenames = glob.glob(glob_pattern, recursive=True)
+                    for filename in xcstring_filenames:
+                        with open(filename, 'r') as file_handle:
+                            xcstring_objects.append(json.load(file_handle))
                 
                 # Store stuff for localization_progress
-                xcstrings_objects_all_repos += xcstrings
-                
-                # Store more stuff
-                repo_analysis.repo[repo_name].xcstrings_paths = xcstrings_paths
+                xcstring_objects_all_repos += xcstring_objects
                 
                 # Log
-                print(f".xcstrings file paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
+                print(f".xcstring file paths: { json.dumps(xcstring_filenames, ensure_ascii=False, indent=2) }\n")
     
         # Get combined localization_progress
-        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstrings_objects_all_repos, repo_analysis.all_repos.translation_locales)
+        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstring_objects_all_repos, repo_analysis.all_repos.translation_locales)
     
     # Skip xcloc creation
     if args.skip_xcloc_file_creation:
@@ -303,36 +306,6 @@ def main():
         # Store result
         repo_analysis.repo[repo_name].xcloc_dir = xcloc_dir
 
-
-    # Validate exported xcloc files
-    for repo_name in repo_analysis.repo:
-        
-        # Load xliff from one of the exported .xcloc files.
-        xliff_path = repo_analysis.repo[repo_name].xcloc_dir + '/de.xcloc/Localized Contents/de.xliff' # We arbitrarily choose the German one cause all languages will contain the same paths [Oct 2025]
-        xliff = Path(xliff_path).read_text()
-
-        xcstrings_paths_from_xliffs = []
-        for p in re.findall('original="(.*?)"', xliff):
-            
-            # Get path relative to cwd
-            p = os.path.normpath(repo_analysis.repo[repo_name].path + f'/{p}')
-
-            # Normalize IB files to .xcstrings
-            if p.endswith('.xib') or p.endswith('.storyboard'): 
-                xcs = glob.glob(os.path.normpath(p + f'/../../**/{os.path.splitext(os.path.basename(p))[0]}.xcstrings')) # The IB file is in Base.lproj while the .xcstrings file is in neighboring mul.lproj [Oct 2025]
-                assert len(xcs) == 1
-                p = xcs[0]
-            elif p.endswith('.xcstrings'): pass
-            else: assert False
-
-            # Append
-            xcstrings_paths_from_xliffs.append(p)
-
-        missing_paths = set(xcstrings_paths_from_xliffs)                   - set(repo_analysis.repo[repo_name].xcstrings_paths)
-        extra_paths   = set(repo_analysis.repo[repo_name].xcstrings_paths) - set(xcstrings_paths_from_xliffs)
-
-        assert not len(missing_paths),    f".xcstrings files found by find_exported_xcstrings_files() misses actually exported xcstrings files: {missing_paths}"
-        assert not len(extra_paths),   f".xcstrings files found by find_exported_xcstrings_files() contains not-actually-exported xcstrings files: {extra_paths}. You may have to update `xcstrings_blacklist`."
 
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:

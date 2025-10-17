@@ -223,7 +223,7 @@ def main():
 def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsDataItem|StringsDataItem_NoValue], did_extract_values: bool):
 
     # Validate extracted strings exist
-    assert extracted_strings != None and len(extracted_strings) > 0, f"syncstrings.py: extracted_strings are unexpectedly 'None'. Don't call update_xcstrings if there's nothing to extract. Called for xcstrings_path: {xcstrings_path_final}"
+    assert extracted_strings != None and len(extracted_strings) > 0, f"syncstrings.py: extracted_strings are unexpectedly 'None'. Don't call update_xcstrings if there's nothing to extract. Called for xcstring_path: {xcstrings_path_final}"
 
     # Validate: xcstrings file exists
     assert os.path.exists(xcstrings_path_final), f"syncstrings.py: Tried to update {xcstrings_path_final}, but the file doesn't exist. If you create the file, make sure to add it to some dummy target in Xcode, so that the strings are included in Xcode's .xcloc exports. (But don't add the .xcstrings file to a real target, otherwise it'll be included in the built bundle, where it will be unused and take up some space.)"

@@ -52,6 +52,8 @@ from collections import defaultdict
 import re
 import os
 
+import babel.languages
+import babel.lists
 import mfutils
 
 from dataclasses import dataclass
@@ -60,7 +62,6 @@ import urllib.parse
 from typing import Callable
 
 from pathlib import Path
-import glob
 
 #
 # Constants
@@ -131,19 +132,6 @@ path_to_xcodeproj = {
     'mac-mouse-fix': 'Mouse Fix.xcodeproj', 
     'mac-mouse-fix-website': 'mac-mouse-fix-website-localization.xcodeproj',
 }
-
-# Path from the main repo (where most of these scripts are expected to run) to the website repo
-path_to_website_repo = '../mac-mouse-fix-website/'
-
-# xcstrings_blacklist
-#   hardcoded list of xcstrings files that aren't exported by the `xcodebuild -exportLocalizations` command.
-#       AFAIK preventing xcodebuild from exporting can only be achieved by not including the xcstrings file in any Xcode compilation target – that's how we do it currently.
-#   Alternatives to hardcoding: I tried parsing .pbxproj but that's more complicated. Could run `xcodebuild -exportLocalizations` every time but that's slow.
-#   Validation: We validate this in uploadstrings.py, against the paths found inside the actually exported .xcloc files [Oct 2025]
-
-xcstrings_blacklist = [os.path.normpath(p) for p in [
-    path_to_website_repo + 'locales/old/Localizable.xcstrings',
-]]
 
 #
 # (P)rogram-defined (l)ocalizable (strings) – aka plstrings
@@ -217,7 +205,7 @@ def sorted_locales(locales, source_locale):
     result = sorted(locales, key=lambda l: smallest_char if l == source_locale else locale_to_language_name(l, l, False))
     return result
 
-def get_localization_progress(xcstrings_objects: list[dict], translation_locales: list[str]) -> dict:
+def get_localization_progress(xcstring_objects: list[dict], translation_locales: list[str]) -> dict:
     
     """
     - You pass in a list of xcstrings objects, each of which is the content of an xcstrings parsed using json.load()
@@ -244,8 +232,8 @@ def get_localization_progress(xcstrings_objects: list[dict], translation_locales
     localization_state_counts = defaultdict(lambda: defaultdict(lambda: 0))
     missing_keys: dict[str, list] = defaultdict(lambda: [])
     
-    for xcstrings_object in xcstrings_objects:
-        for key, string_dict in xcstrings_object['strings'].items():
+    for xcstring_object in xcstring_objects:
+        for key, string_dict in xcstring_object['strings'].items():
             
             for locale in translation_locales:
                 
@@ -513,14 +501,7 @@ def undo_make_custom_xcstrings_visible_to_xcodebuild(undo_payload):
     
     # Return
     return
-
-def find_exported_xcstrings_files(repo_root: str) -> list[str]:
-
-    # Use this instead of globbing for .xcstrings files directly [Oct 2025]
-
-    result = [os.path.normpath(p) for p in glob.glob(repo_root + '/**/*.xcstrings', recursive=True)]
-    result = [x for x in result if x not in xcstrings_blacklist]
-    return result
+    
 
 def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     
@@ -1234,6 +1215,9 @@ class mainmdp_DocType(Enum):
     XCSTRINGS = 1
     COMPILED_DOC = 3
 
+import glob
+import pathlib
+
 def mainmdp_get_document_keys():
     
     # Returns the relative filepaths of all files in the 'mainmdp_template_root' folder.
@@ -1291,7 +1275,7 @@ def mainmdp_construct_path(filepath: str, doc_type: mainmdp_DocType, locale: str
             return None
 
 def mainmdp_path_to_repo_root(path):
-    parent_count = len(Path(path).parents)
+    parent_count = len(pathlib.Path(path).parents)
     root_path = '../' * (parent_count-1)
     return root_path
 
@@ -1311,7 +1295,7 @@ def mainmdp_path_to_compiled_doc_root(thisdoc_path: str, locale: str, developmen
     thisdoc_path_relative = thisdoc_path.removeprefix(docroot)
 
     # Construct path from thisdoc to docroot
-    parent_count = len(Path(thisdoc_path_relative).parents)
+    parent_count = len(pathlib.Path(thisdoc_path_relative).parents)
     root_path = '../' * (parent_count-1)
 
     # Return
