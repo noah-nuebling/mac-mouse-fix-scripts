@@ -533,6 +533,27 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     # Return
     return development_locale, translation_locales
 
+# Hardcoded list of xcstrings files that aren't exported by `xcodebuild -exportLocalization`
+# We sometimes remove an .xcstrings file from all build targets to prevent it from being exported. 
+#   We then also want to ignore those files in our scripts. Ideally we could just read the pbxproject, 
+#       but that turns to be pretty hard, so we hardcode a list here.
+#   We validate the hardcoded list against the result of `xcodebuild -exportLocalization` in uploadstrings.py [Oct 2025]
+xcstrings_blacklist = {
+    'mac-mouse-fix': [],
+    'mac-mouse-fix-website': [
+        'locales/old/Localizable.xcstrings'
+    ],
+}
+
+def find_xcstrings_files(repo_root):
+
+    repo_name = os.path.basename(os.path.abspath(repo_root))
+    assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website']
+
+    paths = glob.glob(os.path.normpath(repo_root + '/**/*.xcstrings'), recursive=True)
+    paths = [p for p in paths if os.path.relpath(p, repo_root) not in xcstrings_blacklist[repo_name]]
+    return paths
+
 def locale_to_language_name(locale_str: str, destination_locale_str: str = 'en', include_flag = False):
     
     # Query override map

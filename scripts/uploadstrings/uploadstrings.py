@@ -19,6 +19,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 import sys
+import re
 
 #
 # Import functions from /shared folder
@@ -108,8 +109,8 @@ def main():
 
 
     # Get temp dirs
-    temp_dir = None
-    temp_dir_persistent = None
+    temp_dir: str               = "" # Initialize to str to silence stupid typechecker
+    temp_dir_persistent: str    = ""
     if 1:
         # Create temp_dir
         temp_dir = tempfile.gettempdir() + '/mmf-uploadstrings'
@@ -134,6 +135,7 @@ def main():
         class SpecificRepo:
             path: str
             xcloc_dir: str
+            xcstrings_paths: list[str]
 
         all_repos:  AllRepos
         repo:       dict[str, SpecificRepo] # Map from repo_name -> RepoAnalysis
@@ -147,10 +149,12 @@ def main():
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
                 path='./',
                 xcloc_dir="",
+                xcstrings_paths=[]
             ),
             'mac-mouse-fix-website': RepoAnalysis.SpecificRepo(
                 path=website_repo,
                 xcloc_dir="",
+                xcstrings_paths=[]
             ),
         }
     )
@@ -164,7 +168,7 @@ def main():
         
         # Store more stuff
         #   (To get localization progress)
-        xcstring_objects_all_repos = []
+        xcstrings_all_repos = []
 
         for i, repo_name in enumerate(repo_analysis.repo):
             
@@ -210,24 +214,19 @@ def main():
                 # Log
                 print(f"Loading all .xcstring files ...\n")
                 
-                # Load all .xcstrings files
-                xcstring_objects = []
-                xcstring_filenames = None
-                if 1:
-                    glob_pattern = './' + os.path.normpath(f'{repo_path}/**/*.xcstrings') # Not sure normpath is necessary
-                    xcstring_filenames = glob.glob(glob_pattern, recursive=True)
-                    for filename in xcstring_filenames:
-                        with open(filename, 'r') as file_handle:
-                            xcstring_objects.append(json.load(file_handle))
+                # Load the xcstrings
+                xcstrings_paths = mflocales.find_xcstrings_files(repo_path)
+                xcstrings = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
                 
-                # Store stuff for localization_progress
-                xcstring_objects_all_repos += xcstring_objects
+                # Store stuff
+                xcstrings_all_repos += xcstrings
+                repo_analysis.repo[repo_name].xcstrings_paths = xcstrings_paths
                 
                 # Log
-                print(f".xcstring file paths: { json.dumps(xcstring_filenames, ensure_ascii=False, indent=2) }\n")
+                print(f".xcstrings paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
     
         # Get combined localization_progress
-        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstring_objects_all_repos, repo_analysis.all_repos.translation_locales)
+        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstrings_all_repos, repo_analysis.all_repos.translation_locales)
     
     # Skip xcloc creation
     if args.skip_xcloc_file_creation:
@@ -306,6 +305,33 @@ def main():
         # Store result
         repo_analysis.repo[repo_name].xcloc_dir = xcloc_dir
 
+    # Validate the xcstrings files we found against the contents of the exported xcloc files
+    for repo_name in repo_analysis.repo:
+        
+        found_paths = repo_analysis.repo[repo_name].xcstrings_paths
+        found_paths = [os.path.relpath(p, repo_analysis.repo[repo_name].path) for p in found_paths] # Make found_paths relative to repo_root so we can compare them to exported_paths [Oct 2025]
+
+        exported_paths = []
+        if 1:
+            xliff = Path(repo_analysis.repo[repo_name].xcloc_dir + '/de.xcloc/Localized Contents/de.xliff').read_text() # We arbitrarily pick the German one since all the languages will contain the same file paths.
+            exported_paths = re.findall('original="(.*?)"', xliff)
+            if 1: # Map IB paths to the corresponding .xcstrings paths
+                exported_paths2 = [] 
+                for p in exported_paths:
+                    if p.endswith('.xib') or p.endswith('.storyboard'):
+                        xcs = glob.glob(os.path.normpath(p + f'/../../*.lproj/{os.path.splitext(os.path.basename(p))[0]}.xcstrings'), root_dir=repo_analysis.repo[repo_name].path, recursive=True) # IB files are in Base.lproj while their .xcstrings files are in neighboring mul.lproj folder [Oct 2025]
+                        assert len(xcs) == 1
+                        p = xcs[0]
+                    if p.endswith('.xcstrings'): pass
+                    else:                        assert False
+                    exported_paths2.append(p)
+                exported_paths = exported_paths2
+
+        missing_paths = set(exported_paths) - set(found_paths)
+        extra_paths   = set(found_paths) - set(exported_paths)
+
+        assert not len(missing_paths),  f"Some exported .xcstrings files weren't found: {missing_paths}. (Found by find_xcstrings_files()) (In repo {repo_name})"
+        assert not len(extra_paths), f"Some found .xcstrings files weren't exported: {extra_paths}.      (Found by find_xcstrings_files()) (In repo {repo_name}).You can fix this by adding them to xcstrings_blacklist."
 
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:

@@ -18,13 +18,15 @@ import json
 import mflocales
 import mfutils
 
+from pathlib import Path
+
 
 #
 # Constants
 #
 
-quotes_xcstrings_path   = "./locales/strings/Quotes.xcstrings"
-xcstrings_root          = "./locales/strings/repo-root/"
+# quotes_xcstrings_path   = "./locales/strings/Quotes.xcstrings"
+# xcstrings_root          = "./locales/strings/repo-root/"
 # main_xcstrings_path     = "./locales/Localizable.xcstrings"
 
 output_path             = "./locales/Localizable.js"
@@ -39,7 +41,7 @@ def main():
     repo_name = os.path.basename(os.path.normpath(target_repo))
     
     # Validate
-    assert repo_name == 'mac-mouse-fix-website', f'This script is made for the mac-mouse-fix-website repo. The MarkdownBuild script does string-building for the main repo'
+    assert repo_name == 'mac-mouse-fix-website', f'This script is made for the mac-mouse-fix-website repo. _buildmd.py does string-building for the main repo'
     
     # Log
     print(f'compile_website_strings: Begin')
@@ -57,17 +59,14 @@ def main():
     locales = mflocales.sorted_locales(locales, source_locale)
     
     # Load xcstrings files
-    vue_xcstrings_list = []
-    for xcstrings_path in glob.glob(xcstrings_root + '**/*.xcstrings'):
-        vue_xcstrings_list.append(json.loads(mfutils.read_file(xcstrings_path)))
-    quotes_xcstrings = json.loads(mfutils.read_file(quotes_xcstrings_path))
-    all_xcstrings_list = vue_xcstrings_list + [quotes_xcstrings]
+    xcstrings_paths = mflocales.find_xcstrings_files('./')
+    xcstrings  = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
     
     # Get progress
-    progress = mflocales.get_localization_progress(all_xcstrings_list, translation_locales)
+    progress = mflocales.get_localization_progress(xcstrings, translation_locales)
     
     # Log
-    print(f'compile_website_strings: Loaded vue .xcstrings files at {vue_xcstrings_list}, loaded Quotes.xcstrings from: {quotes_xcstrings_path}')
+    print(f'compile_website_strings: Loaded .xcstrings files at {xcstrings_paths}')
     
     # Compile
     
@@ -95,9 +94,9 @@ def main():
         #       - Note that we enabled fallbacks. This means the resulting Localizable.js file will aleady contain best-effort fallbacks for each string for each language. 
         #           So we don't need extra fallback logic inside the mmf-website code.
         vuestrings[locale] = {}
-        for xcstrings in all_xcstrings_list:
-            for key in xcstrings['strings']:
-                value, locale_of_value = mflocales.get_translation(xcstrings, key, locale, fall_back_to_next_best_language=True)
+        for xcs in xcstrings:
+            for key in xcs['strings']:
+                value, locale_of_value = mflocales.get_translation(xcs, key, locale, fall_back_to_next_best_language=True)
                 assert value != None # Since we enabled fallbacks, there should be a value for every string
                 key = mflocales.remove_index_prefix_from_key(key)
                 vuestrings[locale][key] = value
