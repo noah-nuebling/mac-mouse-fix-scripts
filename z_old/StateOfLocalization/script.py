@@ -59,7 +59,7 @@ def main():
 
 
     repo_root = os.getcwd()
-    website_root = repo_root + '/' + "../mac-mouse-fix-website"
+    website_root = repo_root + "/../mac-mouse-fix-website"
     assert os.path.basename(repo_root) == 'mac-mouse-fix', "Run this script from the 'mac-mouse-fix' repo folder."
     assert os.path.exists(website_root), "Couldn't find mmf website repo at {website_root}"
     
