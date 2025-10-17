@@ -157,7 +157,7 @@ def main():
         # Get translation progress
         translation_progress = mflocales.get_localization_progress(
             [
-                xcstrings,                          # [Oct 2025] Note that localization_progress is per-document, while for _buildstrings_website.py it's for the whole website. Is there a good reason for this?
+                xcstrings, 
                 mflocales.plstrings_get_xcstrings() # [Aug 2025] If some plstrings are not localized, the localization progress of *all* documents will be lowered – even if they don't use that plstring. This is slightly incorrect but ok I think. (Since the goal is mainly to inform people that there are missing translations in their language and that they can help – so even if this *exact* document they're looking at doesn't have missing localizations it's not too bad.)
             ], 
             translation_locales

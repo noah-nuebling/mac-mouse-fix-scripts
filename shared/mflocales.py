@@ -129,7 +129,7 @@ language_name_override_map = {
 
 
 path_to_xcodeproj = {
-    'mac-mouse-fix': 'Mouse Fix.xcodeproj',
+    'mac-mouse-fix': 'Mouse Fix.xcodeproj', 
     'mac-mouse-fix-website': 'mac-mouse-fix-website-localization.xcodeproj',
 }
 
@@ -503,47 +503,6 @@ def undo_make_custom_xcstrings_visible_to_xcodebuild(undo_payload):
     return
     
 
-def get_xcstrings_paths(repo_path: str) -> list[str]:
-    """
-    Get paths to all .xcstrings files in a repo, applying exclusion list.
-
-    Args:
-        repo_path: Path to repository root
-
-    Returns:
-        List of absolute paths to .xcstrings files (with exclusions applied)
-    """
-    
-    # Define blacklist for .xcstrings files that are NOT exported by `xcodebuild -exportLocalizations`
-    #       (Afaik this can only be achieved by not adding them to any Xcode targets)
-    #   This is currently only used to calculate localization_progress in _build.md and other scripts [Oct 2025]
-    #   Validation happens in uploadstrings.py which compares this against actually exported .xcloc files.
-    xcstrings_exclusion_list = {
-        'mac-mouse-fix': [],
-        'mac-mouse-fix-website': ['locales/old/Localizable.xcstrings'],
-    }
-
-    # Infer repo name from path
-    repo_name = os.path.basename(os.path.normpath(repo_path))
-
-    # Glob for any xcstrings files
-    xcstrings_paths = glob.glob(repo_path + '/**/*.xcstrings', recursive=True)
-
-    # Filter using exclusion list
-    exclusion_list = xcstrings_exclusion_list.get(repo_name, [])
-    exclusion_paths_abs = [os.path.normpath(os.path.join(repo_path, excl)) for excl in exclusion_list]
-    xcstrings_paths = [x for x in xcstrings_paths if os.path.normpath(x) not in exclusion_paths_abs]
-
-    return xcstrings_paths
-
-def _load_pbxproj(xcodeproj_path) -> dict:
-    
-    # [Oct 2025] Lots of methods independently load the pbxproj file. 
-    #   They could be passed the pbxproj object instead (that's what this function could be used for) – but the only real benefit would be a speedup we probably don't need.
-
-    return json.loads(mfutils.runclt(f'plutil -convert json -r -o - "{xcodeproj_path}/project.pbxproj"'))    # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
-                                                                                                         # Using this weird method for loading since plistlib doesn't seem to support OPENSTEP plists [Oct 2025]
-
 def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     
     """
@@ -551,7 +510,7 @@ def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
     """
     
     # Load xcodeproj json
-    pbxproject_json = _load_pbxproj(path_to_xcodeproj)
+    pbxproject_json = json.loads(mfutils.runclt(['plutil', '-convert', 'json', '-r', '-o', '-', f'{path_to_xcodeproj}/project.pbxproj']))    # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
     
     # Find locales in xcodeproj
     development_locale = None
