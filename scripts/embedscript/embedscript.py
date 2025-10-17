@@ -7,9 +7,9 @@
         - https://scriptingosx.com/2022/04/launching-scripts-2-launching-scripts-from-finder/) 
 
 - Note: Could simplify folder structure inside the .app bundle.
-    - We could simply store the script at .app/script instead of ./app/Contents/MacOS/script, but then the stapling of the notarization info doesn't work, which makes it so the user needs internet when opening the script for the first time I think. (Which is not too bad.)
+    - We could simply store the script at .app/script instead of ./app/Contents/MacOS/script, (and omit Info.plist) but then the stapling of the notarization info doesn't work, which makes it so the user needs internet when opening the script for the first time I think. (Which is not too bad.)
 
-- Example usage: See how we compress compress_translations.py [Oct 2025]    
+- Example usage: See how we embed compress_translations.m [Oct 2025]    
     
 """
 
@@ -41,13 +41,19 @@ if 1:
     # Validate args
     if not args.app_password and not args.skip_notarization: hfail(parser, "Missing argument: --app-password (or use --skip-notarization for testing)\n")
 
-# Validate script
+# Preprocess & validate script
 if 1:
     script_path = Path(args.script_path)
+    if not script_path.exists():  fail(f"Script not found: {args.script_path}")
 
-    if not script_path.exists():                    fail(f"Script not found: {args.script_path}")
-    if Path(script_path).read_bytes()[:2] != b'#!': fail(f"Script must start with shebang (#!): {args.script_path}")
-    if not os.access(script_path, os.X_OK):         fail(f"Script is not executable: {args.script_path}. Run: chmod +x {args.script_path}")
+    if script_path.suffix == '.m':
+        print(f'Compiling objc script: {script_path}...')
+        tmp = tempfile.NamedTemporaryFile(delete=False).name
+        runclt(f"clang '{script_path}' -O3 -fmodules -arch x86_64 -arch arm64 -o '{tmp}'")
+        args.script_path = tmp
+    else: # Not a file we know how to compile – assume #! shebang'd script
+        if Path(script_path).read_bytes()[:2] != b'#!': fail(f"Script must start with shebang (#!): {args.script_path}")
+        if not os.access(script_path, os.X_OK):         fail(f"Script is not executable: {args.script_path}. Run: chmod +x {args.script_path}")
 
 # Create new app bundle containing the script
 if 1:
@@ -75,14 +81,14 @@ if 1:
 
     print(f'Notarizing and stapling .app bundle at "{args.app_path}"...')
 
-    runclt(f'codesign --force --deep --sign "Developer ID Application: Noah Nuebling (LM5Z78756B)" "{args.app_path}"', fail_on_stderr=False)
+    runclt(f'codesign --force --deep --options runtime --sign "Developer ID Application: Noah Nuebling (LM5Z78756B)" "{args.app_path}"', print_live_output=True) # Python script signing also works without `--options runtime` but objc doesn't [Oct 2025]
 
     zip_path = tempfile.NamedTemporaryFile(suffix=".zip", delete=False).name
 
     try:
-        runclt(f'ditto -c -k --keepParent "{args.app_path}" "{zip_path}"')
-        runclt(f'xcrun notarytool submit "{zip_path}" --apple-id noah.n.developer@gmail.com --team-id LM5Z78756B --password {args.app_password} --wait')
-        runclt(f'xcrun stapler staple "{args.app_path}"')
+        runclt(f'ditto -c -k --keepParent "{args.app_path}" "{zip_path}"', print_live_output=True)
+        runclt(f'xcrun notarytool submit "{zip_path}" --apple-id noah.n.developer@gmail.com --team-id LM5Z78756B --password {args.app_password} --wait', print_live_output=True)
+        runclt(f'xcrun stapler staple "{args.app_path}"', print_live_output=True)
 
         print(f'Notarized and stapled .app bundle at "{args.app_path}"')
     finally:

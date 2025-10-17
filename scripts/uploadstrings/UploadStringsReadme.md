@@ -1,3 +1,5 @@
+# UploadStringsReadme.md
+
 Terminology
 
     We're using 'translate' instead of 'localize' for translator-facing stuff since both kinda mean the same thing and 'translate' is more widely understood. [Oct 2025]  
@@ -13,11 +15,11 @@ Random tips / considerations: (By far not all, not sure why I'm choosing to writ
 
 `compress_translations`
 
-    `compress_translations.py` is a script to help translators compress the .xcloc files before sending them to me.
+    `compress_translations.m` is a script to help translators compress the .xcloc files before sending them to me.
         - Use `embedscript.py` to wrap this script in a notarized .app bundle before distributing to translator.
             - We're using this command: [Oct 2025]
                 ```
-                ./run embedscript ./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/compress_translations.py \
+                ./run embedscript ./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/compress_translations.m \
                 --app-path "./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/Compress xcloc files.app/" \
                 --bundle-id "com.nuebling.compress-translations"
                 ```
@@ -37,7 +39,7 @@ Random tips / considerations: (By far not all, not sure why I'm choosing to writ
     Testing app-translocation:
 
         Navigate to the directory of `Compress xcloc files.app`
-            cd ...
+            cd [...]
 
         Add quarantine flag (simulates downloading from internet)
             xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" "Compress xcloc files.app"
