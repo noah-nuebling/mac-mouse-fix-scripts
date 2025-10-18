@@ -17,7 +17,7 @@ import shutil
 import glob
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import sys
 import re
 
@@ -55,6 +55,7 @@ translation_guide_path = sys.path[0] + '/translation_guide.md'
 
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
+xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
@@ -71,7 +72,7 @@ if 1:
     parser = argparse.ArgumentParser()
     parser.add_argument('--api-key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
     parser.add_argument('--dry-run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
-    parser.add_argument('--dev-language-screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
+    parser.add_argument('--screenshot-locale',          required=False,                      help="Only take localization screenshots in this locale. (The screenshots in this locale are then included into the xcloc files for all locales.) ")
     parser.add_argument('--fresh-screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
     parser.add_argument('--skip-xcloc-file-creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
@@ -130,6 +131,7 @@ def main():
         class AllRepos:
             localization_progress: dict
             translation_locales: list[str]
+            development_locale: str
 
         @dataclass
         class SpecificRepo:
@@ -144,6 +146,7 @@ def main():
         all_repos = RepoAnalysis.AllRepos(
             localization_progress={},
             translation_locales=[],
+            development_locale=""
         ),
         repo={
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
@@ -207,7 +210,8 @@ def main():
                 
                 # Aggregate locales from all projects
                 repo_analysis.all_repos.translation_locales = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
-            
+                repo_analysis.all_repos.development_locale  = development_locale
+
             # Process .xcstrings files
             if 1:
 
@@ -335,11 +339,12 @@ def main():
 
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:
+
         # Get cache dir
         localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshot-cache/"
         
         # Delete cache
-        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used when running `dev_language_screenshots` [Oct 2025]
+        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.screenshot_locale) [Oct 2025]
             shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
@@ -365,11 +370,17 @@ def main():
                 mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
                 
                 # Write localization screenshots
-                def f():
+                def fn():
                     
+                    f: Any = fn
+
                     # Preprocess locale
-                    screenshot_locale = development_locale if args.dev_language_screenshots else locale
-                    
+                    screenshot_locale = locale
+                    if args.screenshot_locale: 
+                        screenshot_locale = args.screenshot_locale
+                    elif repo_analysis.all_repos.localization_progress[screenshot_locale]['percentage'] == 0:
+                        screenshot_locale = repo_analysis.all_repos.development_locale
+
                     # Preprocess xcloc_screenshots_dir
                     output_dir = os.path.abspath(xcloc_screenshots_dir) # (Not sure if abspath is necessary)
                     
@@ -397,7 +408,6 @@ def main():
                             f"xcrun xcodebuild {action}",
                             f"-scheme '{xcode_screenshot_taker_build_scheme}'",
                             f"'-only-testing:{xcode_screenshot_taker_test_case}'",
-                            f"-testLanguage {screenshot_locale}",
                         ])
                                 
                         # Log
@@ -406,6 +416,7 @@ def main():
                         # Set output path for test runner
                         #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
                         os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = output_dir
+                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_locale_variable]     = screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
                             
                         # Run the screenshot-taker test runner
                         mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
@@ -415,7 +426,7 @@ def main():
                         
                         # Update did_build flag
                         f.did_build_test_runner = True
-                f()
+                fn()
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
