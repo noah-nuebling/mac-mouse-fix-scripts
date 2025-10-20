@@ -28,7 +28,7 @@ To contribute translations to Mac Mouse Fix, follow these steps:
 
 ### 2. Download Xcode
 
-[Download](https://apps.apple.com/de/app/xcode/id497799835?l=en-GB&mt=12) Xcode to be able to edit the translation files.
+[Download](https://apps.apple.com/de/app/xcode/id497799835) Xcode to be able to edit the translation files.
 <!-- Note to self: This is obvious, based on the next steps – leaving this out [Oct 2025]
 > [!NOTE] 
 > **Do I need to know programming?**
@@ -41,7 +41,7 @@ The translation files you downloaded have the file extension `.xcloc`.
 
 Open these files in Xcode and then fill in your translations until the **"State"** of every translation shows a green checkmark.
 
-<br>
+<br> <!-- Note to self: Why these <br>s? - In lightmode the screenshot blends with the background to much otherwise [Oct 2025] -->
 
 <img width="758" alt="Image" src="https://github.com/user-attachments/assets/53f394b0-518f-4efd-bdf5-9cbd2f84f87a" />
 
