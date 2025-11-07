@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 import sys
 import re
+import requests
 
 #
 # Import functions from /shared folder
@@ -52,6 +53,7 @@ website_repo = './../mac-mouse-fix-website'
 xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
 
 translation_guide_path = sys.path[0] + '/translation_guide.md'
+how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
 
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
@@ -59,9 +61,6 @@ xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
-
-# `Compress xcloc files.app`
-compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress xcloc files.app' # It would probably make more sense if uploadstrings created the `Compress xcloc files.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
 
 #
 # Parse args
@@ -430,7 +429,7 @@ def main():
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
-    #   Also add the compress_translations_app
+    #   (plus include extra files like `Xcloc Editor.app`
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -438,6 +437,14 @@ def main():
         }
         folder_name_format = "Mac Mouse Fix Translations ({})"
         
+        print(f"Downloading xcloc_editor...")
+        xcloc_editor_path = temp_dir + '/XclocEditor.zip'
+        xcloc_editor_download_url = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
+        xcloc_editor_download = requests.get(xcloc_editor_download_url)
+        assert xcloc_editor_download.status_code == 200, f"xcloc_editor download failed: {xcloc_editor_download.status_code}: {xcloc_editor_download}"
+        Path(xcloc_editor_path).write_bytes(xcloc_editor_download.content)
+        print(f"Downloaded xcloc_editor at {xcloc_editor_path}")
+
         locale_export_dirs = []
         for l in repo_analysis.all_repos.translation_locales:
             
@@ -451,13 +458,16 @@ def main():
                 target_path = os.path.join(target_folder, xcloc_file_names[repo_name])
                 mfutils.runclt(['mkdir', '-p', target_folder]) # -p creates any intermediate parent folders
                 mfutils.runclt(['mv', current_path, target_path])
-                
+                  
 
             locale_export_dirs.append(target_folder)
 
-            # Move compress_translations_app
-            if 1:
-                mfutils.runclt(['cp', '-pr', compress_translations_app_path, target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
+            # Move how_to_submit
+            mfutils.runclt(['cp', how_to_submit_path, target_folder])
+
+            # Move `Xcloc Editor.app`
+            mfutils.runclt(f"unzip '{xcloc_editor_path}' -d '{target_folder}'")
+
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     

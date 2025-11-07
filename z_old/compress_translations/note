@@ -1,0 +1,62 @@
+# About compress_translations
+
+[Nov 2025]
+    We wanted to ship
+    compress_translations.m 
+    in the bundle created by uploadstrings.py.
+
+    Localizers would double-click it and it would compress the xcloc files using hardlinks to deduplicate the duplicated .jpeg files.
+
+    However, we only had to duplicate the .jpeg files due to a bug in Xcode's xcloc editor. 
+    But now we have `Xcloc Editor.app`, which means we don't need the .jpeg duplication, nor the compression anymore!
+[Nov 2025]
+
+Old notes moved from UploadStringReadme.md [Nov 2025]
+
+    `compress_translations`
+
+        `compress_translations.m` is a script to help translators compress the .xcloc files before sending them to me.
+            - Use `embedscript.py` to wrap this script in a notarized .app bundle before distributing to translator.
+                - We're using this command: [Oct 2025]
+                    ```
+                    ./run embedscript ./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/compress_translations.m \
+                    --app-path "./mac-mouse-fix-scripts/scripts/uploadstrings/compress_translations/Compress xcloc files.app/" \
+                    --bundle-id "com.nuebling.compress-translations"
+                    ```
+            - uploadstrings.py will automatically include the .app bundle for translators. (Where it will be sitting next to .xcloc files which it compresses when double-clicking.)
+
+        Why are we doing this / is this worth it? [Oct 2025]
+
+            This is the tail of a series of workarounds for a bug in Xcode, that I wrote more about elsewhere (Forces us to duplicate the .jpeg files.) (Update: See FB20608107)
+            None of this would be necessary if:
+                - Xcode fixed that bug
+                - We didn't include translator screenshots
+                - We used another distribution method like CrowdIn
+                - We provided a method for translators to upload translation files that accepts larger file sizes, like a MegaUpload link. (Currently we use Email and GitHub comments which have < 50 MB limits)
+            Other benefits of this:
+                - The `Compress xcloc files.app` shows a little message after compressing, telling translators where they can submit their translations. That's kinda neat.
+
+        Testing app-translocation:
+
+            Navigate to the directory of `Compress xcloc files.app`
+                cd [...]
+
+            Add quarantine flag (simulates downloading from internet)
+                xattr -w com.apple.quarantine "0081;$(printf '%x' $(date +%s));Safari;" "Compress xcloc files.app"
+
+            Verify quarantine was added
+                xattr -l "Compress xcloc files.app"
+
+            Now double-click the app in Finder to test (it should get translocated and then undo the translocation automatically)
+
+Old code from uploadstrings.py
+
+
+    # `Compress xcloc files.app`
+    compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress xcloc files.app' # It would probably make more sense if uploadstrings created the `Compress xcloc files.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
+
+    ...
+
+    # Move compress_translations_app
+    if 1:
+        mfutils.runclt(['cp', '-pr', "compress_translations_app_path", target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
