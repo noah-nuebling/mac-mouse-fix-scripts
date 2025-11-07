@@ -55,6 +55,8 @@ xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localizatio
 translation_guide_path = sys.path[0] + '/translation_guide.md'
 how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
 
+xcloc_editor_download_url    = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
+
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
 xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
@@ -438,12 +440,11 @@ def main():
         folder_name_format = "Mac Mouse Fix Translations ({})"
         
         print(f"Downloading xcloc_editor...")
-        xcloc_editor_path = temp_dir + '/XclocEditor.zip'
-        xcloc_editor_download_url = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
+        xcloc_editor_zip_path = temp_dir + '/XclocEditor.zip'
         xcloc_editor_download = requests.get(xcloc_editor_download_url)
         assert xcloc_editor_download.status_code == 200, f"xcloc_editor download failed: {xcloc_editor_download.status_code}: {xcloc_editor_download}"
-        Path(xcloc_editor_path).write_bytes(xcloc_editor_download.content)
-        print(f"Downloaded xcloc_editor at {xcloc_editor_path}")
+        Path(xcloc_editor_zip_path).write_bytes(xcloc_editor_download.content)
+        print(f"Downloaded xcloc_editor at {xcloc_editor_zip_path}")
 
         locale_export_dirs = []
         for l in repo_analysis.all_repos.translation_locales:
@@ -466,7 +467,7 @@ def main():
             mfutils.runclt(['cp', how_to_submit_path, target_folder])
 
             # Move `Xcloc Editor.app`
-            mfutils.runclt(f"unzip '{xcloc_editor_path}' -d '{target_folder}'")
+            mfutils.runclt(f"unzip '{xcloc_editor_zip_path}' -d '{target_folder}'")
 
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
