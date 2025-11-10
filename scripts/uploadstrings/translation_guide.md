@@ -50,7 +50,7 @@ Open the `.xcloc` files in `Xcloc Editor.app` and then fill in your translations
 Double click one of the `.xcloc` files you downloaded to begin editing in `Xcloc Editor.app`.
 
 
-<img width="907" height="581" alt="Image" src="https://github.com/user-attachments/assets/33d10af6-6749-40d2-ad6a-5a57c1e0cdf9" />
+<img width="907" alt="Image" src="https://github.com/user-attachments/assets/33d10af6-6749-40d2-ad6a-5a57c1e0cdf9" />
 <!-- <img width="978" alt="Image" src="https://github.com/user-attachments/assets/5297b417-7a09-4f4d-b013-155d71d8bc3c" /> -->
 <!-- <img width="978" alt="Image" src="https://github.com/user-attachments/assets/1125918a-97d4-4944-a4fe-b55fbcdd704a" /> -->
 <!-- <img width="607" alt="Screenshot 2024-06-27 at 09 24 39" src="https://github.com/noah-nuebling/mac-mouse-fix/assets/40808343/a70addcf-466f-4a92-8096-eee717ecc9fe"> -->
