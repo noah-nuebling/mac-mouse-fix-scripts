@@ -614,7 +614,7 @@ def create_translation_guide(download_urls, translation_locales, localization_pr
                     0 if progress < 0.95 else mfutils.scale(progress, (0.95, 1.0), (0.75, 1)) # We don't like interpolating over the whole range, cause the very grayish greens look very ugly. 95%+ is green so everything doesn't become completely grayed out just cause I changed a little string. [Oct 2025]
                 )
                 entry = mfutils.mfdedent(f"""
-                    | {emoji_flag} {language_name} ({locale}) | [{download_name}]({download_url}) | ![Static Badge](https://img.shields.io/badge/{int(100*progress)}%25-Translated-gray?style=flat&labelColor=%23{label_color}) |
+                    | {emoji_flag} {language_name} ({locale}) | [{download_name}]({download_url}) | ![Static Badge](https://img.shields.io/badge/{int(100*progress)}%25-Complete-gray?style=flat&labelColor=%23{label_color}) |
                 
                 """)
                 download_table += entry

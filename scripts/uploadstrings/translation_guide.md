@@ -38,7 +38,7 @@ Open the `.xcloc` files in `Xcloc Editor.app` and then fill in your translations
 <br>
 <img width="749" alt="Image" src="https://github.com/user-attachments/assets/932a520a-5ea7-40ac-826a-d45cb41dc0a8" />
 
-<br>
+<br> <!-- Note to self: Why these <br>s? - In lightmode the screenshot blends with the background to much otherwise [Oct 2025] -->
 
 <details> 
     <summary><em><ins><b>Click here</b></ins> for a more detailed explanation of how to edit <code>.xcloc</code> files with <code>Xcloc Editor.app</code></em></summary>

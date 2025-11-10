@@ -168,7 +168,7 @@ plstrings: dict[str, mf_localizable_str] = {
             [🌎 Help translate!](https://redirect.macmousefix.com/?locale={locale_code}&target=mmf-localization-contribution)
         """),
         hint=mfutils.mfdedent(r"""                              
-            Note: 'Help translate!' should sound like an invitation, not a command. In German I rephrased it a bit to avoid the imperative form (I landed on 'Beim Übersetzen helfen!')
+            Note: 'Help translate!' should sound like an invitation, not a command. In German I rephrased it a bit to avoid the imperative form ('Beim Übersetzen helfen!')
         """)
     ),
     'docname.readme':                       mf_localizable_str("Readme"),
