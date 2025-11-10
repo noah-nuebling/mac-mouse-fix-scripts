@@ -6,9 +6,9 @@ Once you're done editing the .xcloc files,
 you can submit your translations via:
 
 Email: 
-https://redirect.macmousefix.com/?target=mailto-noah
+https://redirect.macmousefix.com/?target=mmf-submit-translations-email
 
 GitHub:
-https://redirect.macmousefix.com/?target=mmf-localization-contribution
+https://redirect.macmousefix.com/?target=mmf-submit-translations-github
 
 🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁🌐🐁
