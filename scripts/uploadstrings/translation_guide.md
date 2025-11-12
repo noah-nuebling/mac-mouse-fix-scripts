@@ -11,9 +11,9 @@
     > **This is a work in progress - do not follow the instructions in this document** 
 -->
 
-# How to Translate Mac Mouse Fix
+<!--  # How to Translate Mac Mouse Fix <<< GitHub Issue already has title [Nov 2025] --> 
 
-Mac Mouse Fix can now be translated into different languages, and you can help! 🌎
+Mac Mouse Fix can now be translated into different languages, and you can help!
 
 To contribute translations, follow these steps:
 
@@ -122,7 +122,8 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
     Click **"All Project Files"**, then type in the filter-bar to search through *all* translations.
 
-    You can search for any text you see in the table: Be it the English **"Original"**, the **"Comment"**, or anything else.
+    <!-- This can help you understand how a term is used in different parts of the app and more. -->
+    <!-- You can search for any text you see in the table: Be it the English **"Original"**, the **"Comment"**, or anything else. -->
 
     <img width="1093" alt="Image" src="https://github.com/user-attachments/assets/64842d54-5d63-45f7-a6ec-2012545cc9a6" />
 
@@ -154,15 +155,19 @@ Once all your translations have a green checkmark, you can send the `.xcloc` fil
 
 You can send the `.xcloc` files to me via [email](https://redirect.macmousefix.com/?target=mmf-submit-translations-email) or in a [comment below](https://redirect.macmousefix.com/?target=mmf-submit-translations-github).
 
-# Credits
+## Credits
 
 If your translations are accepted into the project you will receive a mention in the next update notes and your name will be added as a translator in the [Acknowledgments](https://redirect.macmousefix.com/?target=mmf-acknowledgements-translations).
 
-# Conclusion
+## Conclusion
 
-And that's it! 
-Thanks for your interest in translating Mac Mouse Fix and I hope these tools help you provide great translations for your language.
+And that's it. I hope these tools help you provide great translations!
 If you have any questions, just leave a comment below.
+
+Thank you for helping to bring Mac Mouse Fix to people around the world! 🌎
+
+## Also See
+
 The source code for `Xcloc Editor.app`  is available [here](https://github.com/noah-nuebling/mf-xcloc-editor).
 
 <!--
