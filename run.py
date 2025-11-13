@@ -114,7 +114,7 @@ compound_subcommands = {
     ],       
     "mmf-website_build-strings": [
         lambda run_args, args: f"python3 {__file__} {run_args} -- syncstrings",
-        lambda run_args, args: f"python3 {__file__} {run_args} -- _buildstrings-website {args}"
+        lambda run_args, args: f"python3 {__file__} {run_args} -- _buildstrings_website {args}"
     ],
 }
 
