@@ -59,11 +59,16 @@ gumroad_date_format = '%Y-%m-%dT%H:%M:%SZ' # T means nothing, Z means UTC+0 | Th
 name_blacklist = ['mail', 'paypal', 'banking', 'beratung', 'macmousefix'] # TODO: Add Iam | When gumroad doesn't provide a name we use part of the email as the display name. We use the part of the email before @, unless it contains one of these substrings, in which case we use the part of the email after @ but with the `.com`, `.de` etc. removed
 nbsp = '&nbsp;'  # Non-breaking space. &nbsp; doesn't seem to work on GitHub. (Edit: &nbsp; seems to work on GH now.) Tried '\xa0', too. See https://github.com/github/cmark-gfm/issues/346
 
+repo_name = 'mac-mouse-fix'
+
 #
 # Main
 #
 def main():
     
+    # Validate repo
+    assert os.path.basename(os.path.abspath('./')) == repo_name, f"This script expects to be ran from {repo_name}, was instead run from {os.path.abspath('./')}"
+
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api-key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
@@ -123,6 +128,9 @@ def main():
         
         # Construct paths to .xcstrings file
         xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
+
+        # Validate path
+        assert os.path.relpath(xcstrings_path, './') not in mflocales.xcstrings_blacklist[repo_name], f"xcstrings_path '{xcstrings_path}' is blacklisted. Blacklist: {mflocales.xcstrings_blacklist}" # Not sure if relpath is necessary here. [Oct 2025]
 
         # Load xcstrings file as python object
         do_localize: bool

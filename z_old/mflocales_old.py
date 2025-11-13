@@ -19,7 +19,7 @@ def find_files_with_extensions(exts, excluded_paths):
     
     """
     We used to use a neat glob pattern in our subprocess call `./**/*.{m,c,cpp,mm,swift}`, but that also caught python package .c files, and idk how to exclude them.
-        The .c files didn't actually cause obvious problems (because they don't contain NSLocalizedString() macros anyways) but I hope this will make things a bit faster.
+        The .c files didn't actually cause obvious problems (because they don't contain MFLocalizedString() macros anyways) but I hope this will make things a bit faster.
         (Didn't test if it's actually faster)
     """
     

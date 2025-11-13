@@ -1,0 +1,10 @@
+Once you're done editing the .xcloc files, 
+you can submit your translations via:
+
+Email: 
+https://redirect.macmousefix.com/?target=mmf-submit-translations-email
+
+GitHub:
+https://redirect.macmousefix.com/?target=mmf-submit-translations-github
+
+I may take a while to respond, but I will get back. Thank you for your work on the translations!

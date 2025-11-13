@@ -17,8 +17,10 @@ import shutil
 import glob
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import sys
+import re
+import requests
 
 #
 # Import functions from /shared folder
@@ -51,15 +53,16 @@ website_repo = './../mac-mouse-fix-website'
 xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
 
 translation_guide_path = sys.path[0] + '/translation_guide.md'
+how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
+
+xcloc_editor_download_url    = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
 
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
+xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
-
-# `Compress xcloc files.app`
-compress_translations_app_path = sys.path[0] + '/compress_translations' + '/Compress xcloc files.app' # It would probably make more sense if uploadstrings created the `Compress xcloc files.app` app itself using embedscript so its always up-to-date, but this works for now. [Oct 2025]
 
 #
 # Parse args
@@ -70,7 +73,7 @@ if 1:
     parser = argparse.ArgumentParser()
     parser.add_argument('--api-key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
     parser.add_argument('--dry-run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
-    parser.add_argument('--dev-language-screenshots',   required=False, action='store_true', help="Only take localization screenshots in the development language instead of taking separate screenshots for every translation of the app.")
+    parser.add_argument('--screenshot-locale',          required=False,                      help="Only take localization screenshots in this locale. (The screenshots in this locale are then included into the xcloc files for all locales.) ")
     parser.add_argument('--fresh-screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
     parser.add_argument('--skip-xcloc-file-creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
@@ -108,8 +111,8 @@ def main():
 
 
     # Get temp dirs
-    temp_dir = None
-    temp_dir_persistent = None
+    temp_dir: str               = "" # Initialize to str to silence stupid typechecker
+    temp_dir_persistent: str    = ""
     if 1:
         # Create temp_dir
         temp_dir = tempfile.gettempdir() + '/mmf-uploadstrings'
@@ -129,11 +132,13 @@ def main():
         class AllRepos:
             localization_progress: dict
             translation_locales: list[str]
+            development_locale: str
 
         @dataclass
         class SpecificRepo:
             path: str
             xcloc_dir: str
+            xcstrings_paths: list[str]
 
         all_repos:  AllRepos
         repo:       dict[str, SpecificRepo] # Map from repo_name -> RepoAnalysis
@@ -142,15 +147,18 @@ def main():
         all_repos = RepoAnalysis.AllRepos(
             localization_progress={},
             translation_locales=[],
+            development_locale=""
         ),
         repo={
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
                 path='./',
                 xcloc_dir="",
+                xcstrings_paths=[]
             ),
             'mac-mouse-fix-website': RepoAnalysis.SpecificRepo(
                 path=website_repo,
                 xcloc_dir="",
+                xcstrings_paths=[]
             ),
         }
     )
@@ -164,7 +172,7 @@ def main():
         
         # Store more stuff
         #   (To get localization progress)
-        xcstring_objects_all_repos = []
+        xcstrings_all_repos = []
 
         for i, repo_name in enumerate(repo_analysis.repo):
             
@@ -203,31 +211,27 @@ def main():
                 
                 # Aggregate locales from all projects
                 repo_analysis.all_repos.translation_locales = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
-            
+                repo_analysis.all_repos.development_locale  = development_locale
+
             # Process .xcstrings files
             if 1:
 
                 # Log
                 print(f"Loading all .xcstring files ...\n")
                 
-                # Load all .xcstrings files
-                xcstring_objects = []
-                xcstring_filenames = None
-                if 1:
-                    glob_pattern = './' + os.path.normpath(f'{repo_path}/**/*.xcstrings') # Not sure normpath is necessary
-                    xcstring_filenames = glob.glob(glob_pattern, recursive=True)
-                    for filename in xcstring_filenames:
-                        with open(filename, 'r') as file_handle:
-                            xcstring_objects.append(json.load(file_handle))
+                # Load the xcstrings
+                xcstrings_paths = mflocales.find_xcstrings_files(repo_path)
+                xcstrings = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
                 
-                # Store stuff for localization_progress
-                xcstring_objects_all_repos += xcstring_objects
+                # Store stuff
+                xcstrings_all_repos += xcstrings
+                repo_analysis.repo[repo_name].xcstrings_paths = xcstrings_paths
                 
                 # Log
-                print(f".xcstring file paths: { json.dumps(xcstring_filenames, ensure_ascii=False, indent=2) }\n")
+                print(f".xcstrings paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
     
         # Get combined localization_progress
-        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstring_objects_all_repos, repo_analysis.all_repos.translation_locales)
+        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstrings_all_repos, repo_analysis.all_repos.translation_locales)
     
     # Skip xcloc creation
     if args.skip_xcloc_file_creation:
@@ -306,14 +310,42 @@ def main():
         # Store result
         repo_analysis.repo[repo_name].xcloc_dir = xcloc_dir
 
+    # Validate the xcstrings files we found against the contents of the exported xcloc files
+    for repo_name in repo_analysis.repo:
+        
+        found_paths = repo_analysis.repo[repo_name].xcstrings_paths
+        found_paths = [os.path.relpath(p, repo_analysis.repo[repo_name].path) for p in found_paths] # Make found_paths relative to repo_root so we can compare them to exported_paths [Oct 2025]
+
+        exported_paths = []
+        if 1:
+            xliff = Path(repo_analysis.repo[repo_name].xcloc_dir + '/de.xcloc/Localized Contents/de.xliff').read_text() # We arbitrarily pick the German one since all the languages will contain the same file paths.
+            exported_paths = re.findall('original="(.*?)"', xliff)
+            if 1: # Map IB paths to the corresponding .xcstrings paths
+                exported_paths2 = [] 
+                for p in exported_paths:
+                    if p.endswith('.xib') or p.endswith('.storyboard'):
+                        xcs = glob.glob(os.path.normpath(p + f'/../../*.lproj/{os.path.splitext(os.path.basename(p))[0]}.xcstrings'), root_dir=repo_analysis.repo[repo_name].path, recursive=True) # IB files are in Base.lproj while their .xcstrings files are in neighboring mul.lproj folder [Oct 2025]
+                        assert len(xcs) == 1
+                        p = xcs[0]
+                    if p.endswith('.xcstrings'): pass
+                    else:                        assert False
+                    exported_paths2.append(p)
+                exported_paths = exported_paths2
+
+        missing_paths = set(exported_paths) - set(found_paths)
+        extra_paths   = set(found_paths) - set(exported_paths)
+
+        assert not len(missing_paths),  f"Some exported .xcstrings files weren't found: {missing_paths}. (Found by find_xcstrings_files()) (In repo {repo_name})"
+        assert not len(extra_paths), f"Some found .xcstrings files weren't exported: {extra_paths}.      (Found by find_xcstrings_files()) (In repo {repo_name}).You can fix this by adding them to xcstrings_blacklist."
 
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:
+
         # Get cache dir
         localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshot-cache/"
         
         # Delete cache
-        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used when running `dev_language_screenshots` [Oct 2025]
+        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.screenshot_locale) [Oct 2025]
             shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
@@ -339,11 +371,17 @@ def main():
                 mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
                 
                 # Write localization screenshots
-                def f():
+                def fn():
                     
+                    f: Any = fn
+
                     # Preprocess locale
-                    screenshot_locale = development_locale if args.dev_language_screenshots else locale
-                    
+                    screenshot_locale = locale
+                    if args.screenshot_locale: 
+                        screenshot_locale = args.screenshot_locale
+                    elif repo_analysis.all_repos.localization_progress[screenshot_locale]['percentage'] == 0:
+                        screenshot_locale = repo_analysis.all_repos.development_locale
+
                     # Preprocess xcloc_screenshots_dir
                     output_dir = os.path.abspath(xcloc_screenshots_dir) # (Not sure if abspath is necessary)
                     
@@ -371,7 +409,6 @@ def main():
                             f"xcrun xcodebuild {action}",
                             f"-scheme '{xcode_screenshot_taker_build_scheme}'",
                             f"'-only-testing:{xcode_screenshot_taker_test_case}'",
-                            f"-testLanguage {screenshot_locale}",
                         ])
                                 
                         # Log
@@ -380,6 +417,7 @@ def main():
                         # Set output path for test runner
                         #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
                         os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = output_dir
+                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_locale_variable]     = screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
                             
                         # Run the screenshot-taker test runner
                         mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
@@ -389,11 +427,11 @@ def main():
                         
                         # Update did_build flag
                         f.did_build_test_runner = True
-                f()
+                fn()
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
-    #   Also add the compress_translations_app
+    #   (plus include extra files like `Xcloc Editor.app`
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -401,6 +439,13 @@ def main():
         }
         folder_name_format = "Mac Mouse Fix Translations ({})"
         
+        print(f"Downloading xcloc_editor...")
+        xcloc_editor_zip_path = temp_dir + '/XclocEditor.zip'
+        xcloc_editor_download = requests.get(xcloc_editor_download_url)
+        assert xcloc_editor_download.status_code == 200, f"xcloc_editor download failed: {xcloc_editor_download.status_code}: {xcloc_editor_download}"
+        Path(xcloc_editor_zip_path).write_bytes(xcloc_editor_download.content)
+        print(f"Downloaded xcloc_editor at {xcloc_editor_zip_path}")
+
         locale_export_dirs = []
         for l in repo_analysis.all_repos.translation_locales:
             
@@ -414,13 +459,16 @@ def main():
                 target_path = os.path.join(target_folder, xcloc_file_names[repo_name])
                 mfutils.runclt(['mkdir', '-p', target_folder]) # -p creates any intermediate parent folders
                 mfutils.runclt(['mv', current_path, target_path])
-                
+                  
 
             locale_export_dirs.append(target_folder)
 
-            # Move compress_translations_app
-            if 1:
-                mfutils.runclt(['cp', '-pr', compress_translations_app_path, target_folder]) # -p preserves the exectuable permissions ... not sure this is necessary after moving from .command to .app [Oct 2025]
+            # Move how_to_submit
+            mfutils.runclt(['cp', how_to_submit_path, target_folder])
+
+            # Move `Xcloc Editor.app`
+            mfutils.runclt(f"unzip '{xcloc_editor_zip_path}' -d '{target_folder}'")
+
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
@@ -560,13 +608,19 @@ def create_translation_guide(download_urls, translation_locales, localization_pr
                 emoji_flag = mflocales.locale_to_flag_emoji(locale)
                 language_name = mflocales.locale_to_language_name(locale)
 
-                label_color = interpolate_color(
-                    "aaaaaa",  # nice light gray
-                    "44cc11",  # brightgreen on shields.io
-                    0 if progress < 0.95 else mfutils.scale(progress, (0.95, 1.0), (0.75, 1)) # We don't like interpolating over the whole range, cause the very grayish greens look very ugly. 95%+ is green so everything doesn't become completely grayed out just cause I changed a little string. [Oct 2025]
-                )
+                label_color = "000000"
+                if progress == 0.0:
+                    label_color = "aaaaaa" # Grey, subdued
+                elif progress < 0.95:
+                    label_color = "eeeeee" # White looks nice and sorta honors the work people have put in. || Bright orange ("ff9900") also looks nice but I don't like the negative connotation.
+                else:
+                    label_color = interpolate_color(
+                        "aaaaaa",  # nice light gray
+                        "44cc11",  # brightgreen on shields.io
+                        mfutils.scale(progress, (0.95, 1.0), (0.75, 1)) # We don't like interpolating over the whole range, cause the very grayish greens look very ugly. 95%+ is green so everything doesn't become completely grayed out just cause I changed a little string. [Oct 2025]
+                    )
                 entry = mfutils.mfdedent(f"""
-                    | {emoji_flag} {language_name} ({locale}) | [{download_name}]({download_url}) | ![Static Badge](https://img.shields.io/badge/{int(100*progress)}%25-Translated-gray?style=flat&labelColor=%23{label_color}) |
+                    | {emoji_flag} {language_name} ({locale}) | [{download_name}]({download_url}) | ![Static Badge](https://img.shields.io/badge/{int(100*progress)}%25-Complete-gray?style=flat&labelColor=%23{label_color}) |
                 
                 """)
                 download_table += entry
