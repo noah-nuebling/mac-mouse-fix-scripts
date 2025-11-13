@@ -59,16 +59,11 @@ gumroad_date_format = '%Y-%m-%dT%H:%M:%SZ' # T means nothing, Z means UTC+0 | Th
 name_blacklist = ['mail', 'paypal', 'banking', 'beratung', 'macmousefix'] # TODO: Add Iam | When gumroad doesn't provide a name we use part of the email as the display name. We use the part of the email before @, unless it contains one of these substrings, in which case we use the part of the email after @ but with the `.com`, `.de` etc. removed
 nbsp = '&nbsp;'  # Non-breaking space. &nbsp; doesn't seem to work on GitHub. (Edit: &nbsp; seems to work on GH now.) Tried '\xa0', too. See https://github.com/github/cmark-gfm/issues/346
 
-repo_name = 'mac-mouse-fix'
-
 #
 # Main
 #
 def main():
     
-    # Validate repo
-    assert os.path.basename(os.path.abspath('./')) == repo_name, f'_buildmd expects to be run from the main mac-mouse-fix repo. Was instead run from {os.path.abspath('./')}'
-
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api-key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
@@ -78,10 +73,10 @@ def main():
     args = parser.parse_args()
 
     document_key_search_pattern   = args.document
-    gumroad_api_key               = args.api_key
-    no_api                        = args.no_api
-    no_cache_expiration           = args.no_cache_expiration
-
+    gumroad_api_key     = args.api_key
+    no_api              = args.no_api
+    no_cache_expiration = args.no_cache_expiration
+    
     # Validate --api-key
     if gumroad_api_key == None or len(gumroad_api_key) == 0:
         print("No gumroad api key provided.")
@@ -128,10 +123,6 @@ def main():
         
         # Construct paths to .xcstrings file
         xcstrings_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.XCSTRINGS)
-
-        # Validate
-        # We don't use `mflocales.find_exported_xcstrings_files()` to glob for xcstrings here, so we manually validate against `xcstrings_blacklist`. [Oct 2025]
-        assert os.path.normpath(xcstrings_path) not in mflocales.xcstrings_blacklist, f"{xcstrings_path} is part of xcstrings_blacklist" 
 
         # Load xcstrings file as python object
         do_localize: bool
