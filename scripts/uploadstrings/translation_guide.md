@@ -31,9 +31,9 @@ To contribute translations, follow these steps:
 
 ## 2. Edit the Translation Files
 
-The downloaded folder contains `.xcloc` files and the `Xcloc Editor.app`.
+The downloaded folder contains `.xcloc` files and the `Xcloc Editor` app.
 
-Open the `.xcloc` files in `Xcloc Editor.app` and then fill in your translations until the **"State"** of every translation shows a green checkmark.
+Open the `.xcloc` files in `Xcloc Editor` and then fill in your translations until the `State` of every translation shows a green checkmark.
 
 <br>
 <img width="749" alt="Image" src="https://github.com/user-attachments/assets/932a520a-5ea7-40ac-826a-d45cb41dc0a8" />
@@ -41,13 +41,13 @@ Open the `.xcloc` files in `Xcloc Editor.app` and then fill in your translations
 <br> <!-- Note to self: Why these <br>s? - In lightmode the screenshot blends with the background to much otherwise [Oct 2025] -->
 
 <details> 
-    <summary><em><ins><b>Click here</b></ins> for a more detailed explanation of how to edit <code>.xcloc</code> files with <code>Xcloc Editor.app</code></em></summary>
+    <summary><em><ins><b>Click here</b></ins> for a more detailed explanation of how to edit <code>.xcloc</code> files with <code>Xcloc Editor</code></em></summary>
 
 
 
 ### **1. Open Your Translation Files**
 
-Double click one of the `.xcloc` files you downloaded to begin editing in `Xcloc Editor.app`.
+Double click one of the `.xcloc` files you downloaded to begin editing in `Xcloc Editor`.
 
 
 <img width="907" alt="Image" src="https://github.com/user-attachments/assets/33d10af6-6749-40d2-ad6a-5a57c1e0cdf9" />
@@ -61,26 +61,26 @@ Double click one of the `.xcloc` files you downloaded to begin editing in `Xcloc
     
 ### **2. Navigate the UI**
 
-In `Xcloc Editor.app`, browse the different sections in the **Navigator** on the left, then translate the text using the **Editor** on the right.
+In `Xcloc Editor`, browse the different sections in the `Navigator` on the left, then translate the text using the `Editor` on the right.
 
 <img width="1087" alt="Image" src="https://github.com/user-attachments/assets/02ef0379-7153-4632-b95b-eb536d1712fc" />
 
 ### **3. Find Translations That Need Work**
 
-Click the **"State"** column on the very right to sort the translatable text by state.
+Click the `State` column on the very right to sort the translatable text by state.
 Text that doesn't have a green checkmark as its state needs to be reviewed.
 
 <img width="1153" alt="Image" src="https://github.com/user-attachments/assets/6b9e85f4-ab3c-402f-8f62-3c80be06ccdd" />
 
 ### **4. Edit Translations**
 
-Click a cell in the **"Translation"** column to edit the translation.
+Click a cell in the `Translation` column to edit the translation.
 
-After you edit a translation, the **"State"** will automatically turn into a green checkmark, signaling that the translation has been reviewed and approved.
+After you edit a translation, the `State` will automatically turn into a green checkmark, signaling that the translation has been reviewed and approved.
 
 <img width="1069" alt="Image" src="https://github.com/user-attachments/assets/65e21315-a49b-4ee0-bb6c-9c3f63ea48f0" />
 
-**Tip:** Press `Command-R` to change the **"State"** manually.
+**Tip:** Press `Command-R` to change the `State` manually.
 
 <!--
     
@@ -120,14 +120,14 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
 2. Tip: **Search through all translations**
 
-    Click **"All Project Files"**, then type in the filter-bar to search through *all* translations.
+    Click `All Project Files`, then type in the filter-bar to search through *all* translations.
 
     <!-- This can help you understand how a term is used in different parts of the app and more. -->
     <!-- You can search for any text you see in the table: Be it the English **"Original"**, the **"Comment"**, or anything else. -->
 
     <img width="1093" alt="Image" src="https://github.com/user-attachments/assets/64842d54-5d63-45f7-a6ec-2012545cc9a6" />
 
-    **Keyboard shortcut:** `Command-J` (Jump to 'All Project Files') followed by `Command-F` (Filter)
+    **Keyboard shortcut:** `Command-J` (Show in 'All Project Files') followed by `Command-F` (Filter)
     <!--
     This helps you understand how a term is used in different contexts and keep the translations consistent!
     This lets you instantly look up how a term has been translated in different parts of the app.
@@ -140,7 +140,7 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
 3. Tip: **Keyboard controls**
 
-    The entire `Xcloc Editor.app` is usable just with the keyboard! Try the `Arrow Keys`, `Return`, `Escape`, and the keyboard shortcuts mentioned above.
+    The `Xcloc Editor` can be used without lifting your hands off the keyboard! Try the `Arrow Keys`, `Return`, `Escape`, and the keyboard shortcuts mentioned above.
     <!-- - While editing a translation you can jump the next translation using `Return`, you can enter a linebreak using `Shift-Return` or `Option-Return` and you can jump to the previous translation using `Shift-Option-Return`. Using `Return` to go to the next translation will also automatically change the **"State"** to a green checkmark. -->
 
 </details>
@@ -168,14 +168,14 @@ Thank you for helping to bring Mac Mouse Fix to people around the world! 🌎
 
 ## Also See
 
-The source code for `Xcloc Editor.app`  is available [here](https://github.com/noah-nuebling/mf-xcloc-editor).
+The source code for `Xcloc Editor`  is available [here](https://github.com/noah-nuebling/mf-xcloc-editor).
 
 <!--
 ---
 
 **References**
 
-- Source code for `Xcloc Editor.app`  is available [here](google.com).
+- Source code for `Xcloc Editor`  is available [here](google.com).
 
 (if your contribution was more than 10 strings or sth?)    
 -->

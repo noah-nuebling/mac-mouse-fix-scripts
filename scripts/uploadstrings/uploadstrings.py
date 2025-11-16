@@ -57,6 +57,8 @@ how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
 
 xcloc_editor_download_url    = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
 
+translation_guide_github_issue_id = "1638"
+
 # Screenshots
 xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
 xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
@@ -637,13 +639,13 @@ def create_translation_guide(download_urls, translation_locales, localization_pr
         print(new_translation_guide_body)
     else:
         # Find the issue
-        gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent("""                                                                                      
-            repository(owner: "noah-nuebling", name: "mac-mouse-fix") {
-                issue(number: 1584) {
+        gh_graphql_response = mfgithub.github_graphql_request_query(args.api_key, mfutils.mfdedent(f"""                                                                                      
+            repository(owner: "noah-nuebling", name: "mac-mouse-fix") {{
+                issue(number: {translation_guide_github_issue_id}) {{
                     id
                     url
-                }
-            }
+                }}
+            }}
         """))
         issue_id  = gh_graphql_response['data']['repository']['issue']['id']
         issue_url = gh_graphql_response['data']['repository']['issue']['url']
