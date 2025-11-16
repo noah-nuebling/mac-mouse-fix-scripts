@@ -153,7 +153,7 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
 Once all your translations have a green checkmark, you can send the `.xcloc` files back to me and I will add them to Mac Mouse Fix.
 
-You can send the `.xcloc` files to me via [email](https://redirect.macmousefix.com/?target=mmf-submit-translations-email) or in a [comment below](https://redirect.macmousefix.com/?target=mmf-submit-translations-github).
+You can send the `.xcloc` files to me via [email](https://redirect.macmousefix.com/?target=mmf-submit-translations-email) or in a comment below.
 
 ## Credits
 
