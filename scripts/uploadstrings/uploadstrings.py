@@ -21,6 +21,8 @@ from typing import Any, cast
 import sys
 import re
 import requests
+import plistlib
+import copy
 
 #
 # Import functions from /shared folder
@@ -73,11 +75,12 @@ xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc 
 args: Any = None
 if 1:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--api-key',                    required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
-    parser.add_argument('--dry-run',                    required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
-    parser.add_argument('--screenshot-locale',          required=False,                      help="Only take localization screenshots in this locale. (The screenshots in this locale are then included into the xcloc files for all locales.) ")
-    parser.add_argument('--fresh-screenshots',          required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
-    parser.add_argument('--skip-xcloc-file-creation',   required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--api-key',                      required=False, default=os.getenv("GH_API_KEY"), help="The API key is used to interact with GitHub || You can also set the api key to the GH_API_KEY env variable (in the VSCode Terminal to use with VSCode) || To find the API key, see Apple Note 'MMF Localization Script Access Token'")
+    parser.add_argument('--dry-run',                      required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
+    parser.add_argument('--only-en-screenshots',          required=False, action='store_true', help="Only take/include English screenshots in the xcloc files.")
+    parser.add_argument('--no-additional-en-screenshots', required=False, action='store_true', help="By default we take/include English screenshots in addition to translated screenshots in the xcloc files [Nov 2025]")
+    parser.add_argument('--fresh-screenshots',            required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
+    parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
 
     # Process dry_run arg
@@ -347,7 +350,7 @@ def main():
         localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshot-cache/"
         
         # Delete cache
-        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.screenshot_locale) [Oct 2025]
+        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Oct 2025]
             shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
@@ -360,40 +363,59 @@ def main():
             # Extract
             repo_path = repo_analysis.repo[repo_name].path
 
-            for locale in repo_analysis.all_repos.translation_locales:
+            for locale in (
+                repo_analysis.all_repos.translation_locales            
+                if args.no_additional_en_screenshots else 
+                (['en'] + repo_analysis.all_repos.translation_locales)
+            ):
+
+                # Get the screenshots_dir paths inside the xcloc files. 
+                def get_xcloc_screenshots_dir(locale: str, create: bool):
+                    
+                    # Get xcloc_dir
+                    #   ...which was created through xcodebuild in the previous step
+                    xcloc_dir = os.path.join(repo_analysis.repo[repo_name].xcloc_dir, f'{locale}.xcloc') # We just know xcodebuild put em here
+                    
+                    # Create screenshots path inside .xcloc file
+                    xcloc_screenshots_dir = os.path.join(xcloc_dir, xcloc_screenshots_subdir)
+                    if create:
+                        if os.path.isdir(xcloc_screenshots_dir):
+                            shutil.rmtree(xcloc_screenshots_dir) # Delete if theres already something there (Not sure this is possible)
+                        mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
+                    else: 
+                        assert os.path.isdir(xcloc_screenshots_dir)
+                    
+                    xcloc_screenshots_dir = os.path.abspath(xcloc_screenshots_dir) # abspath (Not sure if necessary)
+                    
+                    return xcloc_screenshots_dir
                 
-                # Get xcloc_dir
-                #   ...which was created through xcodebuild in the previous step
-                xcloc_dir = os.path.join(repo_analysis.repo[repo_name].xcloc_dir, f'{locale}.xcloc') # We just know xcodebuild put em here
-                
-                # Create screenshots path inside .xcloc file
-                xcloc_screenshots_dir = os.path.join(xcloc_dir, xcloc_screenshots_subdir)
-                if os.path.isdir(xcloc_screenshots_dir):
-                    shutil.rmtree(xcloc_screenshots_dir) # Delete if theres already something there (Not sure this is possible)
-                mfutils.runclt(['mkdir', '-p', xcloc_screenshots_dir]) # -p creates any intermediate parent folders
-                
+                xcloc_screenshots_dir = get_xcloc_screenshots_dir(locale, create=True)
+
                 # Write localization screenshots
                 def fn():
                     
                     f: Any = fn
 
-                    # Preprocess locale
-                    screenshot_locale = locale
-                    if args.screenshot_locale: 
-                        screenshot_locale = args.screenshot_locale
-                    elif repo_analysis.all_repos.localization_progress[screenshot_locale]['percentage'] == 0:
-                        screenshot_locale = repo_analysis.all_repos.development_locale
-
-                    # Preprocess xcloc_screenshots_dir
-                    output_dir = os.path.abspath(xcloc_screenshots_dir) # (Not sure if abspath is necessary)
+                    # Get screenshot_locale
                     
+                    screenshot_locale = locale
+                    if 1:
+
+                        if screenshot_locale == 'en': 
+                            assert not args.no_additional_en_screenshots
+                        else:
+                            if args.only_en_screenshots: 
+                                screenshot_locale = 'en'
+                            if repo_analysis.all_repos.localization_progress[locale]['percentage'] == 0:
+                                screenshot_locale = 'en'
+
                     # Use cache
                     cache_dir = localization_screenshot_cache_dir + '/' + screenshot_locale
                     if 1:
                         mfutils.runclt(['mkdir', '-p', cache_dir]) # -p creates any intermediate parent folders
                         if os.listdir(cache_dir):
-                            shutil.copytree(src=cache_dir, dst=output_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
-                            print(f"Copied cached screenshots from {cache_dir} to {output_dir} (Instead of running another xcuitest to take the screenshots.)\n")
+                            shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
+                            print(f"Copied cached screenshots from {cache_dir} to {xcloc_screenshots_dir} (Instead of running another xcuitest to take the screenshots.)\n")
                             return
                     
                     # Take fresh_screenshots
@@ -418,14 +440,54 @@ def main():
                                 
                         # Set output path for test runner
                         #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
-                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = output_dir
+                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = xcloc_screenshots_dir
                         os.environ['TEST_RUNNER_' + xcode_screenshot_taker_locale_variable]     = screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
                             
                         # Run the screenshot-taker test runner
-                        mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)
-                        
+                        mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)        
+
+                        # Log
+                        print(f"Finished running test-runner")
+
+                        # Also copy the additional English screenshots over
+                        if not args.no_additional_en_screenshots and not locale == 'en':
+                            
+                            def get_name_for_additional_en_screenshot(p):
+                                return os.path.splitext(os.path.basename(p))[0] + " (en).jpeg"
+
+                            for screenshotp in glob.glob("*.jpeg", root_dir=get_xcloc_screenshots_dir('en', create=False), recursive=False): 
+                                screenshotp_en    = os.path.join(get_xcloc_screenshots_dir('en', create=False),   screenshotp)
+                                screenshotp_trans = os.path.join(xcloc_screenshots_dir, get_name_for_additional_en_screenshot(screenshotp))
+                                shutil.copy(screenshotp_en, screenshotp_trans)
+                            
+                            # Modify `localizedStringData.plist` to include the " (en).jpeg" screenshots
+                            strdata_en:    list = plistlib.loads(Path(get_xcloc_screenshots_dir('en', create=False) + "/localizedStringData.plist").read_bytes())
+                            strdata_trans: list = plistlib.loads(Path(xcloc_screenshots_dir + "/localizedStringData.plist").read_bytes())
+                            
+                            for i_en in range(len(strdata_en)):
+                                
+                                i_trans = [
+                                    k for k in range(len(strdata_trans)) 
+                                    if strdata_trans[k]["stringKey"] == strdata_en[i_en]["stringKey"]
+                                ]
+                                
+                                if not i_trans: # This can happen for the thanks.xx messages on the About Tab which are randomized [Nov 2025]
+                                    strdata_trans.append(strdata_en[i_en])
+                                else:
+                                    i_trans = i_trans[0]
+
+                                    # Merge strdata_en screenshots into strdata_trans
+                                    for screenshot_en in strdata_en[i_en]["screenshots"]:
+                                        screenshot_en["name"] = get_name_for_additional_en_screenshot(screenshot_en["name"])
+                                        strdata_trans[i_trans]["screenshots"].append(screenshot_en)
+
+                                    # Sort to get the strdata_en screenshots to be alternating with corresponding strdata_trans ones for easy comparison in `Xcloc Editor.app`
+                                    strdata_trans[i_trans]["screenshots"].sort(key=lambda x: x["name"], reverse=True)
+
+                            Path(xcloc_screenshots_dir + "/localizedStringData.plist").write_bytes(plistlib.dumps(strdata_trans))
+
                         # Fill cache
-                        shutil.copytree(src=output_dir, dst=cache_dir, dirs_exist_ok=True)
+                        shutil.copytree(src=xcloc_screenshots_dir, dst=cache_dir, dirs_exist_ok=True)
                         
                         # Update did_build flag
                         f.did_build_test_runner = True
