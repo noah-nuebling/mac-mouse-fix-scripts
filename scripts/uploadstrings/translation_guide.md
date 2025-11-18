@@ -100,7 +100,9 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
     <img width="1023" alt="Image" src="https://github.com/user-attachments/assets/d72f4332-afb3-4a5e-819d-dcf4466e759e" />
 
-    **Keyboard shortcut:** Press `Space` 
+    **Keyboard shortcuts:** 
+    - Press `Space` to see the screenshots.
+    - Use `Left Arrow` and `Right Arrow` to switch between localized and English screenshots, or press `Return` to see them side-by-side.
 
     <!--
     <img width="1196" alt="Image2" src="https://github.com/user-attachments/assets/40196bf0-54a8-4332-8f38-ad0dbc756bd6" />
