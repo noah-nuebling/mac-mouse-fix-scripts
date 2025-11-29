@@ -189,7 +189,7 @@ def main():
     assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website' or cwd_name == 'mac-mouse-fix-update-feed'
     
     # Log
-    print(f"Invoking run.py with cwd: {os.getcwd()}")
+    print(f"run.py: Invoking run.py with cwd: {os.getcwd()}")
     
     # Find 'subcommands'
     def fill_subcommand_map():
@@ -357,7 +357,7 @@ def main():
     
     # DEBUG
     print(textwrap.dedent(f"""
-    Setting env_vars with 
+    run.py: Setting env_vars with 
     
     dotenv_vars: 
     {dotenv_vars}
@@ -376,7 +376,7 @@ def main():
     # Run script
     #   Notes:
     #   - We're passing env= here. If we don't do that, os.environ is automatically passed to the subprocess.
-    script_result = subprocess.run([python_interpreter, script_path, *subcommand_args], env=env_vars)
+    script_result = subprocess.run([python_interpreter, script_path, *subcommand_args], env=env_vars, cwd=os.getcwd())
     
     # Log 
     #   Log the script output verbatim 
