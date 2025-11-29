@@ -367,7 +367,7 @@ def main():
 
     resulting env_vars: 
     {env_vars}
-    """));
+    """), flush=True);
 
     # Log
     print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...\n")
