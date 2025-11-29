@@ -289,7 +289,7 @@ def main():
     else:
         
         # Get python path for the venv
-        venv_python_path = os.path.join(venv_path, 'bin/python')
+        venv_python_path = os.path.join(venv_path, 'bin/python3')
 
         # Define helper
         def create_venv(reuse_existing = True):
