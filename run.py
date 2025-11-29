@@ -342,6 +342,7 @@ def main():
     
     # Load environment variables defined in the .env file
     dotenv_vars = load_dotenv()
+
     
     # Analyze dotenv overlap
     overlapping_env_var_keys = [k for k in dotenv_vars.keys() if k in os.environ.keys()]
@@ -353,8 +354,11 @@ def main():
         print(f"\nrun.py: WARN: .env defines vars that are already in the environment -.env will override - \nenv: {json.dumps(dotenv_overlap, ensure_ascii=False, indent=2)}\nos: {json.dumps(dict(os_overlap), ensure_ascii=False, indent=2)}")
 
     # Combine env_vars
-    env_vars = os.environ | dotenv_vars
+    env_vars = dotenv_vars | os.environ
     
+    # HACK: Make PYTHONPATH absolute
+    env_vars['PYTHONPATH'] = os.path.abspath(env_vars['PYTHONPATH'])
+
     # DEBUG
     print(textwrap.dedent(f"""
     run.py: Setting env_vars with 
@@ -367,7 +371,7 @@ def main():
 
     resulting env_vars: 
     {env_vars}
-    """), flush=True);
+    """), flush=False);
 
     # Log
     print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...\n")
