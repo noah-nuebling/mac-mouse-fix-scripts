@@ -5,6 +5,8 @@ This script compiles markdown documents which are translatable or which have dyn
 
 """
 
+
+
 #
 # Imports
 #
@@ -23,6 +25,12 @@ import os
 import math
 from pprint import pprint # For debugging
 import json
+
+# DEBUG
+
+print(f"_buildmd.py: Current working directory: {os.getcwd()}")
+print(f"_buildmd.py: PYTHONPATH in env_vars: {os.environ.get('PYTHONPATH', '')}")
+print(f"_buildmd.py: PYTHONPATH exists: {os.path.exists(os.environ.get('PYTHONPATH', ''))}")
 
 import mfutils
 import mflocales
