@@ -189,7 +189,7 @@ def main():
     assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website' or cwd_name == 'mac-mouse-fix-update-feed'
     
     # Log
-    print(f"run.py: Invoking run.py with cwd: {os.getcwd()}")
+    print(f"Invoking run.py with cwd: {os.getcwd()}")
     
     # Find 'subcommands'
     def fill_subcommand_map():
@@ -289,7 +289,7 @@ def main():
     else:
         
         # Get python path for the venv
-        venv_python_path = os.path.join(venv_path, 'bin/python3')
+        venv_python_path = os.path.join(venv_path, 'bin/python')
 
         # Define helper
         def create_venv(reuse_existing = True):
@@ -342,7 +342,6 @@ def main():
     
     # Load environment variables defined in the .env file
     dotenv_vars = load_dotenv()
-
     
     # Analyze dotenv overlap
     overlapping_env_var_keys = [k for k in dotenv_vars.keys() if k in os.environ.keys()]
@@ -352,27 +351,10 @@ def main():
     # Validate
     if len(overlapping_env_var_keys) > 0:
         print(f"\nrun.py: WARN: .env defines vars that are already in the environment -.env will override - \nenv: {json.dumps(dotenv_overlap, ensure_ascii=False, indent=2)}\nos: {json.dumps(dict(os_overlap), ensure_ascii=False, indent=2)}")
-
+    
     # Combine env_vars
-    env_vars = dotenv_vars | os.environ
+    env_vars = os.environ | dotenv_vars
     
-    # HACK: Make PYTHONPATH absolute
-    env_vars['PYTHONPATH'] = os.path.abspath(env_vars['PYTHONPATH'])
-
-    # DEBUG
-    print(textwrap.dedent(f"""
-    run.py: Setting env_vars with 
-    
-    dotenv_vars: 
-    {dotenv_vars}
-    
-    os.environ: 
-    {os.environ}
-
-    resulting env_vars: 
-    {env_vars}
-    """), flush=False);
-
     # Log
     print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...\n")
     print(f"----------------------------------------------------------------------------------------------------------\n")
@@ -380,7 +362,7 @@ def main():
     # Run script
     #   Notes:
     #   - We're passing env= here. If we don't do that, os.environ is automatically passed to the subprocess.
-    script_result = subprocess.run([python_interpreter, script_path, *subcommand_args], env=env_vars, cwd=os.getcwd())
+    script_result = subprocess.run([python_interpreter, script_path, *subcommand_args], env=env_vars)
     
     # Log 
     #   Log the script output verbatim 
