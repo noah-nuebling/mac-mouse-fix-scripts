@@ -435,14 +435,17 @@ def main():
                             f"'-only-testing:{xcode_screenshot_taker_test_case}'",
                         ])
                                 
-                        # Log
-                        print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\n")
-                                
-                        # Set output path for test runner
+                        # Set env vars for the testrunner
                         #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
-                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable] = xcloc_screenshots_dir
-                        os.environ['TEST_RUNNER_' + xcode_screenshot_taker_locale_variable]     = screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
-                            
+                        envvars = {
+                            'TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable : xcloc_screenshots_dir,
+                            'TEST_RUNNER_' + xcode_screenshot_taker_locale_variable     : screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
+                        }
+                        os.environ.update(envvars)
+
+                        # Log
+                        print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\nenvvars: {envvars}")
+
                         # Run the screenshot-taker test runner
                         mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)        
 
