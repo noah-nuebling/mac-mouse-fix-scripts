@@ -93,10 +93,14 @@ def main():
     if no_cache_expiration:
         gumroad_sales_cache_shelf_life = "no_cache_expiration"
 
+    # Get document keys
+    all_document_keys = mflocales.mainmdp_get_document_keys()
+    document_keys_helpstr = f"[\n    - {'\n    - '.join(list(all_document_keys))}\n]\n(Tip: You can use '*' as a wildcard. Wrap the pattern in parens 'like this' to prevent shell globbing.)"
+    
     # Guard --document exists
     document_search_pattern_was_provided = isinstance(document_key_search_pattern, str) and document_key_search_pattern != ''
     if not document_search_pattern_was_provided:
-        print("No document search pattern provided. Provide one using the '--document' command line argument")
+        print(f"No document search pattern provided. Provide one using the '--document' command line argument.\nKnown document keys: {document_keys_helpstr}")
         sys.exit(1)
 
     # Adjust capitalization of --document
@@ -107,15 +111,12 @@ def main():
                 document_key = k
                 break
     
-    # Get document keys
-    all_document_keys = mflocales.mainmdp_get_document_keys()
-    
     # Filter documents that match the provided pattern
     document_keys = fnmatch.filter(all_document_keys, document_key_search_pattern) # [Aug 2025] fnmatch doesn't support the `**` glob syntax from what I read. That might be useful.
 
     # Validate --document
     if len(document_keys) == 0:
-        print(f"\nError: Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: \n[\n    - {'\n    - '.join(list(all_document_keys))}\n].\n(Tip: You can use '*' as a wildcard. Wrap the pattern in parens 'like this' to prevent shell globbing.)")
+        print(f"\nError: Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: {document_keys_helpstr}")
         sys.exit(1)
     
     # Log
