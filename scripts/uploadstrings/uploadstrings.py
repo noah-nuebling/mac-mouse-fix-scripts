@@ -113,8 +113,6 @@ def main():
     assert repo_name == 'mac-mouse-fix' and repo_name != 'mac-mouse-fix-website', 'This script should be ran in the mac-mouse-fix repo'
     assert os.path.isdir(website_repo), f'To run this script, the mac-mouse-fix-website repo should be placed at {website_repo} relative to the mac-mouse-fix repo.'
 
-
-
     # Get temp dirs
     temp_dir: str               = "" # Initialize to str to silence stupid typechecker
     temp_dir_persistent: str    = ""
@@ -128,6 +126,10 @@ def main():
         #   This temp_dir is intended as a cache that will persist between launches of the script to speed things up.
         temp_dir_persistent = tempfile.gettempdir() + '/mmf-uploadstrings-persistent'
         if not os.path.isdir(temp_dir_persistent): os.mkdir(temp_dir_persistent)
+
+    # Update strings
+    #   `./run syncstrings` updates the Markdown strings. The Xcode-managed strings are sync automatically by `xcodebuild -exportLocalizations` down below (I believe) [Dec 2025]
+    mfutils.runclt("./run syncstrings", print_live_output=True)
 
     # Analyze repos
     
