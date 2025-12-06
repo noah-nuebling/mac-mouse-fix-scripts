@@ -73,7 +73,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-key", default=os.getenv("GUMROAD_API_KEY"), help="Provide a Gumroad API key using the `--api-key` command line argument or by setting the GUMROAD_API_KEY environment variable. You can retrieve your Access Token in the GitHub Secrets or in the Gumroad Settings under Advanced.")
     parser.add_argument("--document"),                                  # We used to get the document through .getenv, too but that can be confusing I think
-    parser.add_argument("--no-api", action='store_true')                # no-api option is not necessary anymore now since we have caching to make things fast when testing.
+    parser.add_argument("--no-api", action='store_true')                # no-api option is not as useful anymore now since we have caching to make things fast when testing.
     parser.add_argument("--no-cache-expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
     args = parser.parse_args()
 
@@ -95,7 +95,23 @@ def main():
 
     # Get document keys
     all_document_keys = mflocales.mainmdp_get_document_keys()
-    document_keys_helpstr = f"[\n    - {'\n    - '.join(list(all_document_keys))}\n]\n(Tip: You can use '*' as a wildcard. Wrap the pattern in parens 'like this' to prevent shell globbing.)"
+    document_keys_helpstr = mfutils.mfdedent(f"""
+    [
+    - {'\n    - '.join(list(all_document_keys))}
+    ]
+    Tips:
+    - --document arg:
+        - Use 
+            ./run _buildmd --document '.*'
+            to build all the documents
+            [Dec 2025]
+        - Use 
+            ./run _buildmd --document '.*(?<!Acknowledgements\.md)$' 
+            to build all documents that don't end with "Acknowledgements.md"
+            [Dec 2025]
+    - 'Old' documents
+        - Docs in the /Old folder should still be built for users of older MMF versions / older macOS versions, we just don't make the effort of translating them. [Dec 2025]
+    """)
     
     # Guard --document exists
     document_search_pattern_was_provided = isinstance(document_key_search_pattern, str) and document_key_search_pattern != ''
@@ -112,7 +128,7 @@ def main():
                 break
     
     # Filter documents that match the provided pattern
-    document_keys = fnmatch.filter(all_document_keys, document_key_search_pattern) # [Aug 2025] fnmatch doesn't support the `**` glob syntax from what I read. That might be useful.
+    document_keys = [k for k in all_document_keys if re.match(document_key_search_pattern, k, flags=re.MULTILINE)]
 
     # Validate --document
     if len(document_keys) == 0:
@@ -120,7 +136,7 @@ def main():
         sys.exit(1)
     
     # Log
-    print(f"Will generate documents with keys: {document_keys}")
+    print(f"Will generate documents with {len(document_keys)} keys:\n{json.dumps(document_keys, indent=4)}\n\n")
 
     for document_key in document_keys:
 
@@ -214,7 +230,10 @@ def main():
                 template = mfutils.conditional_render_with_jinja_if_blocks(template, render_condition_dict)
 
             # Log
-            print('buildmd.py: Inserting translations into template at path {}...'.format(template_path))
+            print(mfutils.mfdedent('''
+                buildmd.py: Inserting translations into template at path {}
+                                using xcstrings file at path {}...
+            '''.format(template_path, xcstrings_path)))
 
             # Decare loop state
             missing_translations = []
@@ -224,6 +243,9 @@ def main():
 
                 # Get the translated value
                 translation, best_locale = mflocales.get_translation(xcstrings, st.key, locale)
+
+                # Log
+                print(f"buildmd.py: Inserting translations for locale '{locale}' (best_locale: '{best_locale}'), key '{st.key}'")
 
                 # Postprocess
                 translation = mflocales.postprocess_translated_ui_string(translation, template_ui_string=st.value)
