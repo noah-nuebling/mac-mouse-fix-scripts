@@ -198,17 +198,20 @@ def main():
         
         # Iterate locales
         for locale in iterated_locales:
-            
+
+            # NOTE: Not skipping locales with 0% translation_progress, because: [Dec 2025]
+            #   - That would break our redirect.macmousefix.com links, I think.
+            #   - We can encourage users to add missing translations (See show_localization_progress)
+
             # Get document root
             #   The folder that the output files for this locale go into
-            # document_root = get_destination_root(locale, development_locale)
+            if False: document_root = get_destination_root(locale, development_locale)
             
             # Get document subpath
-            # document_subpath = document_key_to_filename_map[document_key]
+            if False: document_subpath = document_key_to_filename_map[document_key]
             
             # Get src and dst paths
-
-            template_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
+            template_path    = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.TEMPLATE)
             destination_path = mflocales.mainmdp_construct_path(document_key, mflocales.mainmdp_DocType.COMPILED_DOC, locale, development_locale)
             
             # Load template
