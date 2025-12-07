@@ -334,7 +334,7 @@ def deptracked(deptracker_archive_path:str, source_hashes_or_paths:list[str], ta
 # MARK: Command line tools
 #
 
-def clt_result_description(returncode, stdout, stderr) -> str:
+def clt_result_description(returncode, stdout=None, stderr=None) -> str:
     
     result = f"""\
         
