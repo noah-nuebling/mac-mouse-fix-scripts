@@ -11,9 +11,12 @@ import json
 def response_description(response: requests.Response | None) -> str:
     
     # Notes:
-    # - We return the status, the headers, and the body of the response
-    # - For the body we try to parse it as json. If that doesn't work we return plain text instead.
-    #   - `text`, `content`, and `json` are all different representations for the main body of the response as far as I understand. According to ChatGPT, if only part of the body is parsable as json, then .json() would not be None, but yet, `text` or `content` could contain extra info. In that case we're missing this extra info. I don't think this will matter.
+    #   Implementation: 
+    #       - We return the status, the headers, and the body of the response
+    #       - For the body we try to parse it as json. If that doesn't work we return plain text instead.
+    #           - `text`, `content`, and `json` are all different representations for the main body of the response as far as I understand. According to ChatGPT, if only part of the body is parsable as json, then .json() would not be None, but yet, `text` or `content` could contain extra info. In that case we're missing this extra info. I don't think this will matter.
+    #   Location:
+    #       TODO: Move out of mfgithub – it's useful for any use of the requests lib [Dec 2025]
     
     if not response: return "(NoneResponse)"
 
