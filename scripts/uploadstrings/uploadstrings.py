@@ -78,9 +78,9 @@ if 1:
     parser.add_argument('--dry-run',                      required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
     parser.add_argument('--only-en-screenshots',          required=False, action='store_true', help="Only take/include English screenshots in the xcloc files.")
     parser.add_argument('--no-additional-en-screenshots', required=False, action='store_true', help="By default we take/include English screenshots in addition to translated screenshots in the xcloc files [Nov 2025]")
-    parser.add_argument('--only-update-locale',           required=False,                      help="Only update the xcloc files for this particular locale. Omit this to update all locales. Some stuff, like ./run syncstrings will still run for all locales. [Dec 2025]")
-    parser.add_argument('--fresh-screenshots',            required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
+    parser.add_argument('--recycle-screenshots',          required=False, action='store_true', help="Use localization screenshots taken during previous runs of the script. || Formerly --fresh-screenshots")
     parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--only-update-locale',           required=False,                      help="Only update the xcloc files for this particular locale. Omit this to update all locales. Some stuff, like ./run syncstrings will run for all locales either way. [Dec 2025]")
     args = parser.parse_args()
 
     # Process dry_run arg
@@ -374,7 +374,7 @@ def main():
 
         # Delete cache
         if 0: # We no longer delete the entire cache, only the subfolders of locales that we're taking new screenshots for. Not sure why. Feels right? [Dec 2025]
-            if args.fresh_screenshots:
+            if not args.recycle_screenshots:
                 shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
         
         # Log
@@ -441,7 +441,7 @@ def main():
                         use_cache = (
                             os.listdir(cache_dir)
                             and 
-                            (not args.fresh_screenshots or (cache_dir in fresh_cache_dirs)) # Don't use screenshots from previous runs of the script if args.fresh_screenshots is set. But still use caches that were 'freshly' created during this run of the script – That's useful when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Dec 2025]
+                            (args.recycle_screenshots or (cache_dir in fresh_cache_dirs)) # Use screenshots from previous runs of the script if args.recycle_screenshots is set. But even if it's not set, we still use caches that were 'freshly' created during this run of the script – That's useful when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Dec 2025]
                         )
                         if use_cache:
                             shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
