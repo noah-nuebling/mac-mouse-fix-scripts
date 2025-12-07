@@ -22,7 +22,6 @@ import sys
 import re
 import requests
 import plistlib
-import copy
 
 #
 # Import functions from /shared folder
@@ -79,6 +78,7 @@ if 1:
     parser.add_argument('--dry-run',                      required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
     parser.add_argument('--only-en-screenshots',          required=False, action='store_true', help="Only take/include English screenshots in the xcloc files.")
     parser.add_argument('--no-additional-en-screenshots', required=False, action='store_true', help="By default we take/include English screenshots in addition to translated screenshots in the xcloc files [Nov 2025]")
+    parser.add_argument('--only-update-locale',           required=False,                      help="Only update the xcloc files for this particular locale. Omit this to update all locales. Some stuff, like ./run syncstrings will still run for all locales. [Dec 2025]")
     parser.add_argument('--fresh-screenshots',            required=False, action='store_true', help="Don't use localization screenshots taken during previous runs of the script")
     parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
     args = parser.parse_args()
@@ -138,8 +138,9 @@ def main():
         @dataclass
         class AllRepos:
             localization_progress: dict
-            translation_locales: list[str]
             development_locale: str
+            translation_locales: list[str]
+            translation_locales_unfiltered: list[str] # We filter the translation locales for the sake of `--only-update-locale`. But then when generating the translation_guide, we end up needing the unfiltered locales. (Cause we're regenerating it from scratch, not just updating part of it.) [Dec 2025]
 
         @dataclass
         class SpecificRepo:
@@ -153,8 +154,9 @@ def main():
     repo_analysis = RepoAnalysis(
         all_repos = RepoAnalysis.AllRepos(
             localization_progress={},
+            development_locale="",
             translation_locales=[],
-            development_locale=""
+            translation_locales_unfiltered=[],
         ),
         repo={
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
@@ -193,18 +195,16 @@ def main():
             # Process locales
             if 1:
 
-                # Get locales for this project
+                # Extract locales for this repo
                 development_locale, translation_locales = mflocales.find_xcode_project_locales(xcodeproj_path)
-                repo_locales = [development_locale] + translation_locales
-                
+
                 # Log
-                print(f"Extracted locales from .xcodeproject at {xcodeproj_path}: {repo_locales}\n")
-                
-                # Validate locales
-                # We want all repos of the mmf project to have the same locales
+                print(f"Extracted locales from .xcodeproject at {xcodeproj_path}: {[development_locale] + translation_locales}\n")
+            
+                # Validate that all repos have the same locales
                 if 1:
+                    repo_locales = [development_locale] + translation_locales;
                     if i > 0:
-                            
                         missing_locales = set(previous_repo_locales).difference(set(repo_locales))
                         additional_locales = set(repo_locales).difference(set(previous_repo_locales))
                         
@@ -216,9 +216,11 @@ def main():
                     previous_xcodeproj_path = xcodeproj_path
                     previous_repo_locales = repo_locales
                 
-                # Aggregate locales from all projects
-                repo_analysis.all_repos.translation_locales = translation_locales # Since we assert that the translation_locales are the same for all repos, this works
-                repo_analysis.all_repos.development_locale  = development_locale
+                # Store the locales in repo_analysis
+                if 1:
+                    repo_analysis.all_repos.development_locale              = development_locale # Since we assert that the locales are the same for all repos, storing in repo_analysis.all_repos works.
+                    repo_analysis.all_repos.translation_locales             = translation_locales
+                    repo_analysis.all_repos.translation_locales_unfiltered  = translation_locales
 
             # Process .xcstrings files
             if 1:
@@ -236,20 +238,32 @@ def main():
                 
                 # Log
                 print(f".xcstrings paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
-    
+        
+        # Apply args.only_update_locale
+        if args.only_update_locale:
+            
+            assert args.only_update_locale in repo_analysis.all_repos.translation_locales, f"--only-update-locale is set to '{ args.only_update_locale }', but that locale is not found in the repo's translation locales: { repo_analysis.all_repos.translation_locales }"
+            
+            repo_analysis.all_repos.translation_locales = [args.only_update_locale] # Note that `repo_analysis.all_repos.translation_locales_unfiltered` stays the same [Dec 2025]
+            
+            print(f"--only-update-locale is set to '{ args.only_update_locale }'. Ignoring all project locales except: { repo_analysis.all_repos.translation_locales + [repo_analysis.all_repos.development_locale] }")
+        
         # Get combined localization_progress
-        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstrings_all_repos, repo_analysis.all_repos.translation_locales)
-    
+        print(f"Getting combined localization progress...")
+        repo_analysis.all_repos.localization_progress = mflocales.get_localization_progress(xcstrings_all_repos, repo_analysis.all_repos.translation_locales_unfiltered)
+
     # Skip xcloc creation
     if args.skip_xcloc_file_creation:
         
         # Skip straight to creating the guide
-        download_urls = fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales) #   Note that the repo_analysis is based on the local files not the uploaded files we're linking to – so they are out-of-sync.
-        create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+        download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=True)
+        create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
         return
 
     # Export xcloc files
     for repo_name in repo_analysis.repo:
+
+        print(f"Begin exporting .xcloc files...")
 
         # Extract
         repo_path = repo_analysis.repo[repo_name].path
@@ -281,15 +295,16 @@ def main():
         project_path = mflocales.path_to_xcodeproj[repo_name]
         derived_data_path = os.path.join(temp_dir_persistent, xcloc_export_derived_data_temp_dir_subpath, repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
 
+        # Assemble -exportLocalizations command
+        print(f"Assembling -exportLocalizations command...")
         export_localizations_command = ""
         if 1:
 
             # Get any scheme
             #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But xcodebuild still demands a -scheme when using -derivedDataPath.
             #           So we're just using the first scheme we find for the project.
-            build_schemes = mfutils.find_xcode_project_build_schemes(repo_path, project_path)
+            build_schemes = mfutils.find_xcode_project_build_schemes(repo_path, project_path) # This is slow. Could hardcode instead [Dec 2025]
             any_build_scheme = build_schemes[0]
-            
 
             # Assemble command
             export_localizations_command = [
@@ -301,6 +316,7 @@ def main():
                 *[f"-exportLanguage {l}" for l in repo_analysis.all_repos.translation_locales]
             ]
             export_localizations_command = " ".join(export_localizations_command)
+        print(f"Finished assembling -exportLocalizations command.")
 
         # Log
         print(f"Exporting .xcloc files in {repo_name} for each translations_locale (might take a while since Xcode will build the whole project) ... \nRunning command: {export_localizations_command}\n")
@@ -317,7 +333,7 @@ def main():
         # Store result
         repo_analysis.repo[repo_name].xcloc_dir = xcloc_dir
 
-    # Validate the xcstrings files we found against the contents of the exported xcloc files
+    # Validate the .xcstrings files in the repo against the contents of the .xcloc files that xcodebuild exported [Dec 2025]
     for repo_name in repo_analysis.repo:
         
         found_paths = repo_analysis.repo[repo_name].xcstrings_paths
@@ -325,7 +341,8 @@ def main():
 
         exported_paths = []
         if 1:
-            xliff = Path(repo_analysis.repo[repo_name].xcloc_dir + '/de.xcloc/Localized Contents/de.xliff').read_text() # We arbitrarily pick the German one since all the languages will contain the same file paths.
+            first_locale = repo_analysis.all_repos.translation_locales[0] # We arbitrarily pick the first locale one since all the languages will contain the same file paths.
+            xliff = Path(repo_analysis.repo[repo_name].xcloc_dir + f'/{first_locale}.xcloc/Localized Contents/{first_locale}.xliff').read_text() 
             exported_paths = re.findall('original="(.*?)"', xliff)
             if 1: # Map IB paths to the corresponding .xcstrings paths
                 exported_paths2 = [] 
@@ -354,6 +371,7 @@ def main():
         # Delete cache
         if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Oct 2025]
             shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
+            
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
         
@@ -367,8 +385,8 @@ def main():
 
             for locale in (
                 repo_analysis.all_repos.translation_locales            
-                if args.no_additional_en_screenshots else 
-                (['en'] + repo_analysis.all_repos.translation_locales)
+                if args.no_additional_en_screenshots 
+                else (['en'] + repo_analysis.all_repos.translation_locales)
             ):
 
                 # Get the screenshots_dir paths inside the xcloc files. 
@@ -501,6 +519,7 @@ def main():
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
     #   (plus include extra files like `Xcloc Editor.app`
+    locale_export_dirs = []
     if 1:
         xcloc_file_names = {
             'mac-mouse-fix': 'Mac Mouse Fix.xcloc',
@@ -515,7 +534,6 @@ def main():
         Path(xcloc_editor_zip_path).write_bytes(xcloc_editor_download.content)
         print(f"Downloaded xcloc_editor at {xcloc_editor_zip_path}")
 
-        locale_export_dirs = []
         for l in repo_analysis.all_repos.translation_locales:
             
             language_name = mflocales.locale_to_language_name(l)
@@ -544,8 +562,6 @@ def main():
     # Zip folders containing .xcloc files 
     if 1:
         
-        zip_file_format = "MacMouseFixTranslations.{}.zip" # GitHub Releases assets seemingly can't have spaces, that's why we're using this separate format
-        
         zip_files = {}
         for l, l_dir in zip(repo_analysis.all_repos.translation_locales, locale_export_dirs):
 
@@ -554,7 +570,7 @@ def main():
             base_dir = temp_dir
             zippable_dir_path = l_dir
             zippable_dir_name = os.path.basename(os.path.normpath(zippable_dir_path))
-            zip_file_name = zip_file_format.format(l)
+            zip_file_name = xcloc_zip_file_name(l)
             zip_file_path = os.path.join(base_dir, zip_file_name)
             
             if os.path.exists(zip_file_path):
@@ -577,19 +593,42 @@ def main():
         print(f"Finished zipping up .xcloc files at {temp_dir}\n")
     
 
-    # Upload the files and create the guide
-    download_urls = upload_xcloc_files(zip_files) or fallback_xcloc_download_urls(repo_analysis.all_repos.translation_locales)
-    create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales, repo_analysis.all_repos.localization_progress)
+    # Upload the xcloc files
+    upload_xcloc_files(zip_files, delete_all_existing = (not args.only_update_locale))
+    
+    # Get xcloc download urls
+    download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=True)
 
+    # Create the guide
+    create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
 
-def fallback_xcloc_download_urls(translation_locales):
-    # In case we skip running `upload_xcloc_files()` we can use this to get fallback values [Oct 2025]
-    download_urls = {}
-    for translation_locale in translation_locales:
-        download_urls[translation_locale] = f"https://github.com/noah-nuebling/mac-mouse-fix-localization-file-hosting/releases/download/arbitrary-tag/MacMouseFixTranslations.{translation_locale}.zip"
+def xcloc_zip_file_name(locale):
+    return f"MacMouseFixTranslations.{locale}.zip" # GitHub Releases assets seemingly can't have spaces, that's why we're using this separate format
+
+def xcloc_download_urls(locales, validate: bool):
+    
+    # Get urls
+    download_urls = {locale: xcloc_download_url(locale) for locale in locales}
+    
+    # Validate
+    if validate:
+        print(f"Validating .xcloc download urls...")
+        for locale, download_url in download_urls.items():
+            print(f"Validating .xcloc download url: {download_url}...")
+            response = requests.head(download_url, allow_redirects=True)
+            assert 200 <= response.status_code < 300, f"Download url '{download_url}' (which we planned to include in the translation_guide) seems invalid. Received error response for HEAD request: {mfgithub.response_description(response)}"
+        print(f"Finish validating .xcloc download urls.")
+
     return download_urls
 
-def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_download_url [Oct 2025]
+def xcloc_download_url(locale):
+    # - Purpose: [Dec 2025] Used to get download-urls of *existing*, uploaded .xcloc files,
+    #       when we skip skip, regenerating/uploading the .xcloc files for iteration speed.
+    # - ! Keep in-sync with `upload_xcloc_files()` [Dec 2025]
+    
+    return f"https://github.com/noah-nuebling/mac-mouse-fix-localization-file-hosting/releases/download/arbitrary-tag/MacMouseFixTranslations.{locale}.zip"
+
+def upload_xcloc_files(zip_files: dict[str, dict[str, Any]], delete_all_existing: bool) -> dict: # Returns a map from locale -> xcloc_download_url [Oct 2025]
 
     if not args.api_key:
         print(f"Dry run: Not uploading xcloc files to GitHub.")
@@ -606,26 +645,39 @@ def upload_xcloc_files(zip_files) -> dict: # Returns a map from locale -> xcloc_
 
         # Delete all Assets
         #   from GitHub Release
-        for asset in release['assets']:
-            response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
-            print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
+        if delete_all_existing:
+            for asset in release['assets']:
+                response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+                print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
+                
         
         # Upload new Assets
         #   to GitHub Release
-        
         download_urls = {}
         for zip_file_locale, value in zip_files.items():
             
-            zip_file_name = value['name']
+            zip_file_name    = value['name']
             zip_file_content = value['content']
-        
-            response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content)        
-            download_urls[zip_file_locale] = response.json()['browser_download_url']
+            
+            # Delete
+            for asset in release['assets']:
+                if asset['name'] == zip_file_name:
+                    response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+                    print(f"Deleted asset { asset['name'] } before uploading new asset with same name. Received response: { mfgithub.response_description(response) }")
+
+            # Upload
+            response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content)
             
             print(f"Uploaded asset { zip_file_name }, received response: { mfgithub.response_description(response) }")
+
+            download_urls[zip_file_locale] = response.json()['browser_download_url']
         
         # Log
         print(f"Finshed Uploading xcloc files to GitHub. Download urls: { json.dumps(download_urls, ensure_ascii=False, indent=2) }")
+
+        # Validate xcloc_download_url()
+        for locale, url in download_urls.items():
+            assert url == xcloc_download_url(locale)
 
         # Return
         return download_urls
