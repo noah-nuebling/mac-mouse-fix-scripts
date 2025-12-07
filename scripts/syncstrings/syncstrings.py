@@ -270,6 +270,7 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     #
     # Load .xcstrings file
     #
+    
     xcstrings_obj = mfutils.read_xcstrings_file(xcstrings_path, allow_empty=True)
 
     #
@@ -400,6 +401,12 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
         # Move content from key -> key_with_index_prefix
         xcstrings_obj['strings'][item.key_with_index_prefix] = xcstrings_obj['strings'][item.key]
         del xcstrings_obj['strings'][item.key]
+
+    # 3. Modification: Sort alphabetically
+    #   [Dec 2025] 
+    #       This prevents git-churn because it makes the stale (non-prefixed) keys be sorted last instead of first. And this matches the sorting after you edit the .xcstrings file with Xcode.
+    #       I don't know why the stale keys are sorted first without this. [Dec 2025]
+    xcstrings_obj['strings'] = { k:v for k,v in sorted(xcstrings_obj['strings'].items(), key=lambda item: item[0]) }
 
     # Write modified .xcstrings obj to the destination
     mfutils.write_xcstrings_file(xcstrings_path_final, xcstrings_obj)
