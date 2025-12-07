@@ -750,6 +750,10 @@ def insert_guide_footer(template: str, locale: str):
         I'm not sure why, but I think it works better there
     """
 
+    # Random seed
+    #   To prevent git churn due to random changes when re-building the docs with `./run _buildmd`
+    random.seed(template+locale)
+
     template = template.replace('{guide_footer}', 
         mfutils.mfdedent(r"""
             
