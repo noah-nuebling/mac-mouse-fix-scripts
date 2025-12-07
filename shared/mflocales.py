@@ -270,7 +270,7 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
     # Return
     return localization_progress
 
-def fresh_xcstrings_content(development_locale: str) -> dict[str, str]:
+def fresh_xcstrings_content(development_locale: str) -> str:
     # [Jul 2025] 
     #   This is the content that Xcode 26.0 Beta 3 fills a fresh xcstrings file up with [Jul 2025] ... Actually, Xcode uses version 1.1 instead of 1.0 – but our scripts are built with 1.0 (not sure what the difference is)
     return mfutils.mfdedent( 
