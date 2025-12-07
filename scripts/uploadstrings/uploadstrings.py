@@ -368,10 +368,15 @@ def main():
         # Get cache dir
         localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshot-cache/"
         
+        # Track caches that we've freshly created during this run of the script.
+        #   This contains locale-specific subfolders of localization_screenshot_cache_dir [Dec 2025]
+        fresh_cache_dirs = []
+
         # Delete cache
-        if args.fresh_screenshots: # Don't use screenshots from previous runs of the script. The cache will still be used during this run of the script when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Oct 2025]
-            shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
-            
+        if 0: # We no longer delete the entire cache, only the subfolders of locales that we're taking new screenshots for. Not sure why. Feels right? [Dec 2025]
+            if args.fresh_screenshots:
+                shutil.rmtree(localization_screenshot_cache_dir, ignore_errors=True)
+        
         # Log
         print(f"Take localization screenshots and copy them into the .xcloc files\n")
         
@@ -410,10 +415,10 @@ def main():
                     return xcloc_screenshots_dir
                 
                 xcloc_screenshots_dir = get_xcloc_screenshots_dir(locale, create=True)
-
+                
                 # Write localization screenshots
                 def fn():
-                    
+
                     f: Any = fn
 
                     # Get screenshot_locale
@@ -432,8 +437,13 @@ def main():
                     # Use cache
                     cache_dir = localization_screenshot_cache_dir + '/' + screenshot_locale
                     if 1:
-                        mfutils.runclt(['mkdir', '-p', cache_dir]) # -p creates any intermediate parent folders
-                        if os.listdir(cache_dir):
+                        mfutils.runclt(['mkdir', '-p', cache_dir]) # -p creates any intermediate parent folders || Prevents os.listdir() from erroring I think [Dec 2025]
+                        use_cache = (
+                            os.listdir(cache_dir)
+                            and 
+                            (not args.fresh_screenshots or (cache_dir in fresh_cache_dirs)) # Don't use screenshots from previous runs of the script if args.fresh_screenshots is set. But still use caches that were 'freshly' created during this run of the script – That's useful when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Dec 2025]
+                        )
+                        if use_cache:
                             shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
                             print(f"Copied cached screenshots from {cache_dir} to {xcloc_screenshots_dir} (Instead of running another xcuitest to take the screenshots.)\n")
                             return
@@ -510,7 +520,9 @@ def main():
                             Path(xcloc_screenshots_dir + "/localizedStringData.plist").write_bytes(plistlib.dumps(strdata_trans))
 
                         # Fill cache
+                        shutil.rmtree(cache_dir, ignore_errors=True) # Delete all existing cached files for the screenshot_locale || Might make things easier to debug [Dec 2025]
                         shutil.copytree(src=xcloc_screenshots_dir, dst=cache_dir, dirs_exist_ok=True)
+                        fresh_cache_dirs.append(cache_dir)
                         
                         # Update did_build flag
                         f.did_build_test_runner = True
