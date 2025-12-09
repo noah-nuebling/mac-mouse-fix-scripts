@@ -256,7 +256,7 @@ def main():
     if args.skip_xcloc_file_creation:
         
         # Skip straight to creating the guide
-        download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=True)
+        download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run))
         create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
         return
 
@@ -609,7 +609,7 @@ def main():
     upload_xcloc_files(zip_files, delete_all_existing = (not args.only_update_locale))
     
     # Get xcloc download urls
-    download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=True)
+    download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run))
 
     # Create the guide
     create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
@@ -659,7 +659,7 @@ def upload_xcloc_files(zip_files: dict[str, dict[str, Any]], delete_all_existing
         #   from GitHub Release
         if delete_all_existing:
             for asset in release['assets']:
-                response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+                response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], dbgname=asset['name'])
                 print(f"Deleted asset { asset['name'] }, received response: { mfgithub.response_description(response) }")
                 
         
@@ -674,7 +674,7 @@ def upload_xcloc_files(zip_files: dict[str, dict[str, Any]], delete_all_existing
             # Delete
             for asset in release['assets']:
                 if asset['name'] == zip_file_name:
-                    response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'])
+                    response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], dbgname=asset['name'])
                     print(f"Deleted asset { asset['name'] } before uploading new asset with same name. Received response: { mfgithub.response_description(response) }")
 
             # Upload

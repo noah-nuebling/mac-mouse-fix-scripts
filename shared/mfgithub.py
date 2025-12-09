@@ -69,10 +69,10 @@ def github_releases_list_assets_for_release(api_key, owner_and_repo, release_id)
     response = requests.get(f'https://api.github.com/repos/{owner_and_repo}/releases/{release_id}/assets', headers=github_rest_api_headers(api_key))
     return response
 
-def github_releases_delete_asset(api_key, owner_and_repo, asset_id):
+def github_releases_delete_asset(api_key, owner_and_repo, asset_id, dbgname):
     
     response = requests.delete(f'https://api.github.com/repos/{owner_and_repo}/releases/assets/{asset_id}', headers=github_rest_api_headers(api_key))
-    assert 200 <= response.status_code < 300, f'GitHub Release asset deletion failed. Code: { response.status_code }, JSON: { response.json() }'
+    assert 200 <= response.status_code < 300, f'GitHub Release asset deletion failed. Asset dbgname: { dbgname }, Code: { response.status_code }, JSON: { response.json() }'
     return response
 
 def github_releases_upload_asset(api_key, owner_and_repo, release_id, asset_name, asset_binary_data):
