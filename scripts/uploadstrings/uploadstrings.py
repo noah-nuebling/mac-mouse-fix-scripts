@@ -482,45 +482,66 @@ def main():
                         # Log
                         print(f"Finished running test-runner")
 
-                        # Also copy the additional English screenshots over
                         if not args.no_additional_en_screenshots and not locale == 'en':
-                            
-                            def get_name_for_additional_en_screenshot(p):
-                                return os.path.splitext(os.path.basename(p))[0] + " (en).jpeg"
 
-                            for screenshotp in glob.glob("*.jpeg", root_dir=get_xcloc_screenshots_dir('en', create=False), recursive=False): 
-                                screenshotp_en    = os.path.join(get_xcloc_screenshots_dir('en', create=False),   screenshotp)
-                                screenshotp_trans = os.path.join(xcloc_screenshots_dir, get_name_for_additional_en_screenshot(screenshotp))
-                                shutil.copy(screenshotp_en, screenshotp_trans)
+                            # Helper fn
+                            def append_locale_suffix_to_screenshot_path(p, locale): # E.g. `Cool Screenshot.jpg` -> `Cool Screenshot (en).jpg`
+                                return os.path.splitext(p)[0] + f" ({locale}).jpeg"
                             
-                            # Modify `localizedStringData.plist` to include the " (en).jpeg" screenshots
-                            strdata_en:    list = plistlib.loads(Path(get_xcloc_screenshots_dir('en', create=False) + "/localizedStringData.plist").read_bytes())
-                            strdata_trans: list = plistlib.loads(Path(xcloc_screenshots_dir + "/localizedStringData.plist").read_bytes())
-                            
-                            for i_en in range(len(strdata_en)):
+                            # Rename all the screenshots with a locale-suffix like " (de).jpeg"
+                            #   This prevents conflicts with the English screenshots (see below) and allows for alternating English/translated screenshots when sorting by name. [Dec 2025]
+                            print(f"Renaming translated screenshots...");
+                            if 1:
+                                for p in glob.glob(xcloc_screenshots_dir + "/*.jpeg", recursive=False):
+                                    assert not p.endswith(f" ({locale}).jpeg"), f"The file '{p}' already seems to have a locale-suffix."
+                                    newp = append_locale_suffix_to_screenshot_path(p, locale)
+                                    shutil.move(p, newp)
+
+                            # Copy the additional English screenshots over
+                            print(f"Copying over additional English screenshots...")
+                            if 1:
+                                for screenshotp in glob.glob("*.jpeg", root_dir=get_xcloc_screenshots_dir('en', create=False), recursive=False): 
+                                    screenshotp_en    = os.path.join(get_xcloc_screenshots_dir('en', create=False),   screenshotp)
+                                    screenshotp_trans = os.path.join(xcloc_screenshots_dir,                           append_locale_suffix_to_screenshot_path(screenshotp, "en"))
+                                    shutil.copy(screenshotp_en, screenshotp_trans)
                                 
-                                i_trans = [
-                                    k for k in range(len(strdata_trans)) 
-                                    if strdata_trans[k]["stringKey"] == strdata_en[i_en]["stringKey"]
-                                ]
-                                
-                                if not i_trans: # This can happen for the thanks.xx messages on the About Tab which are randomized [Nov 2025]
-                                    strdata_trans.append(strdata_en[i_en])
-                                else:
-                                    i_trans = i_trans[0]
+                            # Modify `localizedStringData.plist` to include the " (en).jpeg" and " (xx).jpeg" screenshots
+                            print(f"Modifying localizedStringData.plist...")
+                            if 1:
+                                strdata_en:          list = plistlib.loads(Path(get_xcloc_screenshots_dir('en', create=False) + "/localizedStringData.plist").read_bytes())
+                                strdata_translation: list = plistlib.loads(Path(xcloc_screenshots_dir + "/localizedStringData.plist").read_bytes())
 
-                                    # Merge strdata_en screenshots into strdata_trans
-                                    for screenshot_en in strdata_en[i_en]["screenshots"]:
-                                        screenshot_en["name"] = get_name_for_additional_en_screenshot(screenshot_en["name"])
-                                        strdata_trans[i_trans]["screenshots"].append(screenshot_en)
+                                # Modify strdata_translation with locale-suffixes (like " (de).jpeg")
+                                for i in range(len(strdata_translation)):
+                                    for screenshot in strdata_translation[i]["screenshots"]:
+                                        screenshot["name"] = append_locale_suffix_to_screenshot_path(screenshot["name"], locale)
 
-                                    # Sort to get the strdata_en screenshots to be alternating with corresponding strdata_trans ones for easy comparison in `Xcloc Editor.app`
-                                    strdata_trans[i_trans]["screenshots"].sort(key=lambda x: x["name"], reverse=True)
+                                # Modify strdata_en with " (en).jpeg" suffixes and merge it into strdata_translation
+                                for i_en in range(len(strdata_en)):
+                                    
+                                    i_trans = [
+                                        k for k in range(len(strdata_translation)) 
+                                        if strdata_translation[k]["stringKey"] == strdata_en[i_en]["stringKey"]
+                                    ]
+                                    
+                                    if not i_trans: # This can happen for the thanks.xx messages on the About Tab which are randomized [Nov 2025]
+                                        strdata_translation.append(strdata_en[i_en])
+                                    else:
+                                        i_trans = i_trans[0]
 
-                            Path(xcloc_screenshots_dir + "/localizedStringData.plist").write_bytes(plistlib.dumps(strdata_trans))
+                                        # Merge strdata_en screenshots into strdata_trans
+                                        for screenshot_en in strdata_en[i_en]["screenshots"]:
+                                            screenshot_en["name"] = append_locale_suffix_to_screenshot_path(screenshot_en["name"], "en")
+                                            strdata_translation[i_trans]["screenshots"].append(screenshot_en)
+
+                                        # Sort to get the strdata_en screenshots alphabetically so they are alternating with corresponding strdata_trans screenshots for easy comparison inside `Xcloc Editor.app`
+                                        strdata_translation[i_trans]["screenshots"].sort(key=lambda x: x["name"], reverse=True)
+
+                                # Write the modified strdata_translation
+                                Path(xcloc_screenshots_dir + "/localizedStringData.plist").write_bytes(plistlib.dumps(strdata_translation))
 
                         # Fill cache
-                        shutil.rmtree(cache_dir, ignore_errors=True) # Delete all existing cached files for the screenshot_locale || Might make things easier to debug [Dec 2025]
+                        shutil.rmtree(cache_dir, ignore_errors=True) # Delete all existing cached files for the screenshot_locale || Might make things easier to debug? [Dec 2025]
                         shutil.copytree(src=xcloc_screenshots_dir, dst=cache_dir, dirs_exist_ok=True)
                         fresh_cache_dirs.append(cache_dir)
                         
