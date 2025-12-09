@@ -485,8 +485,9 @@ def main():
                         if not args.no_additional_en_screenshots and not locale == 'en':
 
                             # Helper fn
-                            def append_locale_suffix_to_screenshot_path(p, locale): # E.g. `Cool Screenshot.jpg` -> `Cool Screenshot (en).jpg`
-                                return os.path.splitext(p)[0] + f" ({locale}).jpeg"
+                            def append_locale_suffix_to_screenshot_path(p, locale): # E.g. `Cool Screenshot.jpg` -> `Cool Screenshot (2, en).jpg`
+                                order = 2 if locale == 'en' else 1 # Sort English screenshots after translated ones. [Dec 2025]
+                                return os.path.splitext(p)[0] + f" ({order}, {locale}).jpeg"
                             
                             # Rename all the screenshots with a locale-suffix like " (de).jpeg"
                             #   This prevents conflicts with the English screenshots (see below) and allows for alternating English/translated screenshots when sorting by name. [Dec 2025]
@@ -534,8 +535,8 @@ def main():
                                             screenshot_en["name"] = append_locale_suffix_to_screenshot_path(screenshot_en["name"], "en")
                                             strdata_translation[i_trans]["screenshots"].append(screenshot_en)
 
-                                        # Sort to get the strdata_en screenshots alphabetically so they are alternating with corresponding strdata_trans screenshots for easy comparison inside `Xcloc Editor.app`
-                                        strdata_translation[i_trans]["screenshots"].sort(key=lambda x: x["name"], reverse=True)
+                                        # Sort alphabetically to get the strdata_en screenshots to be alternating with corresponding strdata_trans screenshots for easy comparison inside `Xcloc Editor.app`
+                                        strdata_translation[i_trans]["screenshots"].sort(key=lambda x: x["name"])
 
                                 # Write the modified strdata_translation
                                 Path(xcloc_screenshots_dir + "/localizedStringData.plist").write_bytes(plistlib.dumps(strdata_translation))
