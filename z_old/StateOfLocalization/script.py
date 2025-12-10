@@ -3,11 +3,11 @@ This script creates the "🌏 State of Localization 🌎" comment on discussion 
 
 Checklist:
 
-- [x] Why isn’t website stuff showing up? -> Forgot to turn debug stuff off
-- [x] Why unchanged translations not showing ‘Mac Mouse Fix’? -> they were actually changed, with non-breaking spaces
+- [x] Why isn't website stuff showing up? -> Forgot to turn debug stuff off
+- [x] Why unchanged translations not showing 'Mac Mouse Fix'? -> they were actually changed, with non-breaking spaces
 
-- [x] Add ‘empty_translations’ section
-- [x] Add ‘untranslated files’ section
+- [x] Add 'empty_translations' section
+- [x] Add 'untranslated files' section
 
 - [x] Write tutorial for updating existing translations.
 - [x] Test if this correctly tracks changes through renames of different file types (.js and .strings files, IB files, .stringsdict and .md files)
