@@ -694,10 +694,11 @@ def upload_xcloc_files(zip_files: dict[str, dict[str, Any]], delete_all_existing
             zip_file_content = value['content']
             
             # Delete
-            for asset in release['assets']:
-                if asset['name'] == zip_file_name:
-                    response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], dbgname=asset['name'])
-                    print(f"Deleted asset { asset['name'] } before uploading new asset with same name. Received response: { mfgithub.response_description(response) }")
+            if not delete_all_existing:
+                for asset in release['assets']:
+                    if asset['name'] == zip_file_name:
+                        response = mfgithub.github_releases_delete_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', asset['id'], dbgname=asset['name'])
+                        print(f"Deleted asset { asset['name'] } before uploading new asset with same name. Received response: { mfgithub.response_description(response) }")
 
             # Upload
             response = mfgithub.github_releases_upload_asset(args.api_key, 'noah-nuebling/mac-mouse-fix-localization-file-hosting', release['id'], zip_file_name, zip_file_content)
