@@ -102,7 +102,7 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
     **Keyboard shortcuts:** 
     - Press `Space` to see the screenshots.
-    - Use `Left Arrow` and `Right Arrow` to switch between localized and English screenshots, or press `Return` to see them side-by-side.
+    - Use `Left Arrow` and `Right Arrow` to switch between translated and English screenshots, or press `Return` to see them side-by-side.
 
     <!--
     <img width="1196" alt="Image2" src="https://github.com/user-attachments/assets/40196bf0-54a8-4332-8f38-ad0dbc756bd6" />
@@ -122,14 +122,14 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
 2. Tip: **Search through all translations**
 
-    Click `All Project Files`, then type in the filter-bar to search through *all* translations.
+    Click `All Project Files`, then type in the filter-field to search through *all* translations.
 
     <!-- This can help you understand how a term is used in different parts of the app and more. -->
     <!-- You can search for any text you see in the table: Be it the English **"Original"**, the **"Comment"**, or anything else. -->
 
     <img width="1093" alt="Image" src="https://github.com/user-attachments/assets/64842d54-5d63-45f7-a6ec-2012545cc9a6" />
 
-    **Keyboard shortcut:** `Command-J` (Show in 'All Project Files') followed by `Command-F` (Filter)
+    **Keyboard shortcut:** `Command-J` (Go to 'All Project Files') followed by `Command-F` (Filter)
     <!--
     This helps you understand how a term is used in different contexts and keep the translations consistent!
     This lets you instantly look up how a term has been translated in different parts of the app.
@@ -140,7 +140,20 @@ And that's all you need to do to to translate an `.xcloc` file! To be even more 
 
     ---
 
-3. Tip: **Keyboard controls**
+3. Tip: **Search using Regular Expressions**
+
+    Use Regular Expressions to apply more complex search rules.
+    
+    For example, the `click and \*?drag` Regular Expression used in the screenshot below finds both `Click and Drag` as well as `Click and *Drag*`.
+
+    <img width="1062" alt="Image" src="https://github.com/user-attachments/assets/96fe595a-357b-48dd-8662-f96895f636e6" />
+
+    **Keyboard shortcut:** Press `Command-Option-R` to turn Regular Expressions on or off.
+
+    **Documentation:** The full Regular Expression syntax is documented [here](https://developer.apple.com/documentation/foundation/nsregularexpression?language=objc#Regular-Expression-Syntax).
+
+
+4. Tip: **Keyboard controls**
 
     The `Xcloc Editor` can be used without lifting your hands off the keyboard! Try the `Arrow Keys`, `Return`, `Escape`, and the keyboard shortcuts mentioned above.
     <!-- - While editing a translation you can jump the next translation using `Return`, you can enter a linebreak using `Shift-Return` or `Option-Return` and you can jump to the previous translation using `Shift-Option-Return`. Using `Return` to go to the next translation will also automatically change the **"State"** to a green checkmark. -->
