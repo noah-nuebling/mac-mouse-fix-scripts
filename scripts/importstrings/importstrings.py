@@ -83,7 +83,7 @@ def main():
 
     _stderr = ""
     if 1:
-        cmd = f"xcodebuild -importLocalizations -localizationPath '{args.xcloc_path}'"
+        cmd = f"xcodebuild -importLocalizations -localizationPath '{args.xcloc_path}'" # TODO: Consider setting the build-directory to a temp dir like in `uploadstrings.py`. I think that prevents nuking the build-cache. [Dec 2025]
         
         print(f"\n--------------------------------------------------------")
         print(f"\nimportstrings.py: Running: {cmd}")
