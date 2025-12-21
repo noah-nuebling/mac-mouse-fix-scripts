@@ -194,7 +194,7 @@ That would be awesome! You will get full credits along with the original transla
 Yes, you are welcome to. \
 Please leave a short note about which parts are still incomplete and whether you plan to finish them.
 
-If your translations are added to the project, you will get full credits alongside the translator that finished your work. 
+If your translations are added to the project, you will get full credits alongside the translator who finished your work. 
 
 **Can I directly edit the source code instead?**
 
