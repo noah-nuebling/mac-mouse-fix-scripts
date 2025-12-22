@@ -13,9 +13,11 @@ import json
 import os
 import argparse
 import glob
+from functools import cmp_to_key
 
 import mfutils
 import mflocales
+import mfobjc
 from pathlib import Path
 
 from dataclasses import dataclass, astuple
@@ -406,7 +408,8 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     #   [Dec 2025] 
     #       This prevents git-churn because it makes the stale (non-prefixed) keys be sorted last instead of first. And this matches the sorting after you edit the .xcstrings file with Xcode.
     #       I don't know why the stale keys are sorted first without this. [Dec 2025]
-    xcstrings_obj['strings'] = { k:v for k,v in sorted(xcstrings_obj['strings'].items(), key=lambda item: item[0]) }
+    #       Update: [Dec 2025, macOS 26 Tahoe] There was still churn. Now using NSString_localizedStandardCompare() to Xcode sorting and prevent git-churn.
+    xcstrings_obj['strings'] = { k:v for k,v in sorted(xcstrings_obj['strings'].items(), key=cmp_to_key(lambda a, b: mfobjc.NSString_localizedStandardCompare(a[0], b[0]))) } 
 
     # Write modified .xcstrings obj to the destination
     mfutils.write_xcstrings_file(xcstrings_path_final, xcstrings_obj)
