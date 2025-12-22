@@ -408,7 +408,8 @@ def update_xcstrings(xcstrings_path_final: str, extracted_strings: list[StringsD
     #   [Dec 2025] 
     #       This prevents git-churn because it makes the stale (non-prefixed) keys be sorted last instead of first. And this matches the sorting after you edit the .xcstrings file with Xcode.
     #       I don't know why the stale keys are sorted first without this. [Dec 2025]
-    #       Update: [Dec 2025, macOS 26 Tahoe] There was still churn. Now using NSString_localizedStandardCompare() to Xcode sorting and prevent git-churn.
+    #       Update: [Dec 2025, macOS 26 Tahoe] There was still churn. Now using `NSString_localizedStandardCompare()` to match Xcode sorting and prevent git-churn.
+    #           (Specifically, I observed Xcode sorting as: quotes.0, quotes.1, quotes.2, ..., while native Python sorting was: quotes.0, quotes.1, quotes.10, quotes.11, ...)
     xcstrings_obj['strings'] = { k:v for k,v in sorted(xcstrings_obj['strings'].items(), key=cmp_to_key(lambda a, b: mfobjc.NSString_localizedStandardCompare(a[0], b[0]))) } 
 
     # Write modified .xcstrings obj to the destination
