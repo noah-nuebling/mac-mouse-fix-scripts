@@ -954,10 +954,11 @@ def write_xcstrings_file(xcstrings_path: str, xcstrings_obj: dict):
     #   1. ensure_ascii=False --> Makes the output utf-8 instead of ascii. (Otherwise emojis will be ascii encoded and stuff)
     #   2. separators=(',', ' : ') --> Changes the separators used in the resulting json file to look exactly like Xcode formats them.
     #   3. + '\n' --> Trailing newline to match how Xcode formats .xcstrings files after you edit them. (Prevents git churn) [Dec 2025]
+    #       Update: [Dec 27 2025] Now Xcode doesn't add '\n' anymore? – I removed that code.
     
     write_file(
         xcstrings_path, 
-        json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : ')) + '\n'
+        json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : '))
     )
 
 def convert_utf16_file_to_utf8(file_path):
