@@ -44,7 +44,7 @@
 #       - BCP 47 latest specification at time of writing: https://datatracker.ietf.org/doc/html/rfc5646
 
 # pip imports
-import babel
+#import babel # Don't import this here so the scripts using this don't all need to depend on babel
 
 # stdlib & local imports
 import json
@@ -52,8 +52,6 @@ from collections import defaultdict
 import re
 import os
 
-import babel.languages
-import babel.lists
 import mfutils
 
 from dataclasses import dataclass

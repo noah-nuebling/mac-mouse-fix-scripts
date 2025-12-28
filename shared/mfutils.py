@@ -793,7 +793,7 @@ def replace_markdown_urls_with_format_specifiers(md_string: str):
     '''
 
     # Call helper
-    _result = _replace_captured_strings_with_format_specifiers(md_string, mdlink_regex, "url")
+    _result = _replace_captured_strings_with_format_specifiers(md_string, mdlink_regex, "url") # Replace with {url_xx}
     
     # Convert to expected result format.
     @dataclass
