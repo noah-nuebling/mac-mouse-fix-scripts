@@ -209,16 +209,14 @@ Yes. If you have some technical experience, you may prefer to:
 2. Directly translate the `.xcstrings` files found inside
 3. Open a [pull request](https://github.com/noah-nuebling/mac-mouse-fix/pulls)
 
-**Can I use other translation software instead of Xcloc Editor?**
+**Can I use other translation software instead of `Xcloc Editor`?**
 
-The `.xcloc` files and `Xcloc Editor` are designed to work together:
-`Xcloc Editor` cleans up noisy comments inside the `.xcloc` files, it shows you screenshots when you press Space, and more.
+You could, but I haven't tested how well it works.
 
-<!-- You could edit the `.xcloc` files using another editor (such as Xcode), but there aren't many, and none of the ones I'm aware of are better than `Xcloc Editor`. (As of December 2025) -->
+The `.xcloc` files contain industry standard `.xliff` files that you could edit with other software. You'd be missing out on the screenshots (by pressing Space) and some other nice things.
 
-The `.xcloc` files contain standard `.xliff` files. You could theoretically edit the `.xliff` files directly using other software – but I don't know how well that works.
+If you [let me know](https://redirect.macmousefix.com/?target=mailto-noah&subject=Translation%20Workflow) about the translation workflow / software you have in mind, I'll look into supporting that better.
 
-If you have a workflow you'd prefer, [tell me about it](https://redirect.macmousefix.com/?target=mailto-noah&subject=Translation%20Workflow) and I'll look into supporting it properly.
 
 <!--
 
