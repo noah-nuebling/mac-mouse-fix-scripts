@@ -44,7 +44,7 @@
 #       - BCP 47 latest specification at time of writing: https://datatracker.ietf.org/doc/html/rfc5646
 
 # pip imports
-#import babel # Don't import this here so the scripts using this don't all need to depend on babel
+#import babel # Don't import babel up here so the scripts using mflocales don't all need to depend on babel – instead we use `import babel` locally inside functions that use it. Alternative solution: split mflocales into babel-dependent and babel-independent functions [Dec 2025]
 
 # stdlib & local imports
 import json
@@ -298,6 +298,8 @@ def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_
         I thought that nuxt-i18n had this? But I think we still decided to use the fall_back_to_next_best_language option for that. Not sure why anymore.
     """
     
+    import babel
+
     assert xcstrings['version'] == '1.0' # Maybe we should also assert this in other places where we parse .xcstrings files
     
     source_locale = xcstrings['sourceLanguage']
@@ -554,6 +556,8 @@ def find_xcstrings_files(repo_root):
 
 def locale_to_language_name(locale_str: str, destination_locale_str: str = 'en', include_flag = False):
     
+    import babel
+
     # Query override map
     language_name = language_name_override_map.get(destination_locale_str, {}).get(locale_str)
     
@@ -579,6 +583,8 @@ def locale_to_language_name(locale_str: str, destination_locale_str: str = 'en',
 
 def locale_to_country_code(locale: str) -> str:
     
+    import babel
+
     # Get locale obj
     locale_obj = babel.Locale.parse(locale, sep='-')
 
@@ -605,6 +611,8 @@ def flag_to_country_code(emoji_flag):
 
 def locale_to_flag_emoji(locale_str: str):
     
+    import babel
+
     # Parse locale_str
     locale = babel.Locale.parse(locale_str, sep='-')
     
@@ -641,6 +649,7 @@ def all_continent_codes():
 def continent_code_to_continent_name(continent_code: str, destination_locale_str='en') -> str:
 
     assert False # Unused
+    import babel
 
     # Declare result
     _name = None
