@@ -231,17 +231,37 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
     missing_keys: dict[str, list] = defaultdict(lambda: [])
     
     for xcstring_object in xcstring_objects:
-        for key, string_dict in xcstring_object['strings'].items():
+        for key in xcstring_object['strings']:
             
             for locale in translation_locales:
                 
                 # Get state
                 s = None
-                if not string_dict.get('shouldTranslate', True):
+                if not xcstring_object['strings'][key].get('shouldTranslate', True):
                     s = 'mmf_dont_translate'
                 else:                
-                    s = string_dict.get('localizations', {}).get(locale, {}).get('stringUnit', {}).get('state', 'mmf_indeterminate')
-                    
+                    s = xcstring_object['strings'][key].get('localizations', {}).get(locale, {}).get('stringUnit', {}).get('state', 'mmf_indeterminate')
+                
+                    # Define state of pluralizable strings in terms of their variants
+                    #   (Matches mf-xcloc-editor [Dec 2025]
+                    if (1):
+
+                        def _mfkeypath(dict, kp): # Local helper [Dec 2025]
+                            result = dict
+                            for key in kp.split('/'):
+                                result = result.get(key, {})
+                            return result
+
+                        quantifiers = _mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys() # quantifiers are strings like 'one', 'few', 'many' [Dec 2025]
+                        if len(quantifiers): # is a pluralizable string
+                            combined_state = 'translated'
+                            for quantifier in quantifiers:
+                                variant_state = _mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{quantifier}/stringUnit/state")
+                                if variant_state != 'translated':
+                                    combined_state = 'needs_review' # IFF all plural variants are 'translated', we consider the top level string 'translated', otherwise we consider it 'needs_review'
+                                    break
+                            s = combined_state
+
                 # Validate
                 assert(s in all_states)    
 
@@ -263,7 +283,7 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
     for locale, state_counts in localization_state_counts.items():
         translated_count = sum([state_counts.get(s, 0) for s in is_translated_states])
         to_translate_count = sum([state_counts.get(s, 0) for s in (is_translated_states + should_translate_states)])
-        localization_progress[locale] = {'translated': translated_count, 'to_translate': to_translate_count, 'percentage': translated_count/to_translate_count, 'missing_keys:': missing_keys }
+        localization_progress[locale] = {'translated': translated_count, 'to_translate': to_translate_count, 'percentage': translated_count/to_translate_count, 'missing_keys': missing_keys[locale] }
 
     # Return
     return localization_progress
