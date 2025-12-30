@@ -24,6 +24,8 @@ import math
 from pprint import pprint # For debugging
 import json
 
+import textwrap
+
 import mfutils
 import mflocales
 
@@ -66,6 +68,13 @@ repo_name = 'mac-mouse-fix'
 #
 def main():
     
+    # Helpers
+    def mfabort(msg): # Reason to create this: I wasted time in the debugger because I ignored the error somehow – this tries to make error more visible. Maybe I should become smarter. [Dec 2025]
+        RED = "\033[91m"
+        CLEAR = "\033[0m"
+        print(f"{RED}ABORT:{CLEAR} " + msg)
+        exit(1)
+
     # Validate repo
     assert os.path.basename(os.path.abspath('./')) == repo_name, f"This script expects to be ran from {repo_name}, was instead run from {os.path.abspath('./')}"
 
@@ -291,22 +300,41 @@ def main():
             
             # Validate that template is completely filled out
             #   Note: Having this crash might be annoying for writing documents. If there's an issue we have to understand these weird errors instead of just seeing the problems in the resulting document.
+            unresolved_format_specifiers = []
             try:
-                template_parse_result = list(string.Formatter().parse(template))
+                template_parse_result = list(string.Formatter().parse(template)) # Returns tuples of the form (literal_text, field_name, format_spec, conversion)       || Notes on this API: (because the source comments are dogwater) The literal_text of each tuple concatenated seems to result in the input string. Except for format specifiers which are removed from the literal_text and stored in the format_spec field. I don't know why or where the literal_text is split (aside from the format specifier splits) -> Just ignore everything except for the format_spec field (tup[1]).
+                unresolved_format_specifiers = [tup[1] for tup in template_parse_result if tup[1] is not None]
             except Exception as e:
                 # Debug-printing
                 # [Jul 2025] `string.Formatter().parse()` will throw parsing errors if there are mismatched unescaped '{' / '}' characters. However, it won't tell you _where_ the mismatch occurred, so we do some additional printing here to help debugging.
-                print(f"Exception while formatting: {e}") 
-                index_unescaped_open  = re.search(r'[^\{]\{[^\{]', template)
-                index_unescaped_close = re.search(r'[^\}]\}[^\}]', template)
-                if index_unescaped_open:  print(f"Unescaped '{{' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_open.start() -100: index_unescaped_open.start() +100])}\n\"\n")
-                if index_unescaped_close: print(f"Unescaped '}}' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_close.start()-100: index_unescaped_close.start()+100])}\n\"\n")
-                sys.exit(1)
-            template_fields = [tup[1] for tup in template_parse_result if tup[1] is not None]
-            is_fully_formatted = len(template_fields) == 0
-            if not is_fully_formatted:
-                print(f"Something went wrong. Template at '{template_path}' still has format field(s) after inserting: {template_fields}\n    (destination_path: {destination_path})\n    (xcstrings_path: {xcstrings_path})")
-                sys.exit(1)
+                diagnostic_str = ""
+                if (1):
+                    index_unescaped_open  = re.search(r'[^\{]\{[^\{]', template)
+                    index_unescaped_close = re.search(r'[^\}]\}[^\}]', template)
+                    if index_unescaped_open:  diagnostic_str = f"Unescaped '{{' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_open.start() -100: index_unescaped_open.start() +100])}\n\"\n"
+                    if index_unescaped_close: diagnostic_str = f"Unescaped '}}' found here: \n\"\n{mfutils.add_indent(template[index_unescaped_close.start()-100: index_unescaped_close.start()+100])}\n\"\n"
+                mfabort(mfutils.mfdedent(f"""
+                    Exception while formatting: {e}
+                    {diagnostic_str}
+                """))
+            
+            if len(unresolved_format_specifiers):
+                
+                CTX_SIZE = 50
+                ctx = ''.join(['Context for 1. unresolved fmtspec:\n\n...' + template[
+                    max(0,             template.index(f"{{{fmtspec}}}") - CTX_SIZE) : 
+                    min(len(template), template.index(f"{{{fmtspec}}}") + len(f"{{{fmtspec}}}") + CTX_SIZE)
+                ] + '...\n' for fmtspec in unresolved_format_specifiers])
+
+                mfabort(mfutils.mfdedent(f"""
+                    Something went wrong. Template at '{template_path}' still has format specifier(s) after inserting: {[f'{{{fmtspec}}}' for fmtspec in unresolved_format_specifiers]}
+                        (destination_path: {destination_path})
+                        (xcstrings_path: {xcstrings_path})")
+                    
+                    Context:
+
+
+                """) + ctx)
             
             # Add comment to the top of the document which says that it is autogenerated
             template = "<!--\nTHIS FILE IS AUTOMATICALLY GENERATED - EDITS WILL BE OVERRIDDEN\n-->\n" + template
