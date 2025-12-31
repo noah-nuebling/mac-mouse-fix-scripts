@@ -14,9 +14,12 @@ from difflib import SequenceMatcher
 import subprocess
 import shlex
 import argparse
+
+import tempfile
+
 import os
 
-import io
+import mflocales
 
 # ANSI colors
 RED = '\033[91m'
@@ -75,15 +78,30 @@ def parse_generic(warning: str) -> tuple | None:
 
 def main(): 
 
+    # Parse repo
+    repo_path = os.getcwd()
+    repo_name = os.path.basename(repo_path)
+
+    # Validate repo
+    assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website'], f"Script expects to be ran from mac-mouse-fix or mac-mouse-fix-website repo. (I think). Was run from: {repo_path}"
 
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument('--xcloc-path', required=True, help="Path to the xcloc file you'd like to import.")
     args = parser.parse_args()
 
+    # Get temp dir
+    temp_dir_persistent = tempfile.gettempdir() + '/mmf-importstrings-persistent'
+    if not os.path.isdir(temp_dir_persistent): os.mkdir(temp_dir_persistent)
+
     _stderr = ""
     if 1:
-        cmd = f"xcodebuild -importLocalizations -localizationPath '{args.xcloc_path}'" # TODO: Consider setting the build-directory to a temp dir like in `uploadstrings.py`. I think that prevents nuking the build-cache. [Dec 2025]
+        cmd = ' '.join([ ""
+            ,f"xcrun xcodebuild -importLocalizations" # TODO: Consider setting the build-directory to a temp dir like in `uploadstrings.py`. I think that prevents nuking the build-cache. [Dec 2025]
+            ,f"-scheme '{mflocales.xcodebuild_any_build_scheme(repo_path)}'"
+            ,f"-derivedDataPath '{mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name)}'" # Using separate derivedData should speed up workflow. Same reason as for our `xcodebuild -exportLocalizations` usage inside uploadstrings.py [Dec 2025] || Idea: Could maybe use same temp dir as uploadstrings.py to speed things up in some cases.
+            ,f"-localizationPath '{args.xcloc_path}'"
+        ])
         
         print(f"\n--------------------------------------------------------")
         print(f"\nimportstrings.py: Running: {cmd}")

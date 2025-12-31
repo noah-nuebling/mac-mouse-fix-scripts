@@ -62,7 +62,7 @@ from typing import Callable
 from pathlib import Path
 
 #
-# Constants
+# MARK: Constants
 #
 
 language_code_to_emoji_flag_map = { 
@@ -126,13 +126,14 @@ language_name_override_map = {
 # project_locales = ['en', 'de', 'zh-HK', 'zh-Hans', 'zh-Hant', 'vi', 'ko']   # This is used to check if the locales of the website and the main app are in-sync. Update: Now validating locales inside uploadstrings.py instead.
 
 
-path_to_xcodeproj = {
+path_to_xcodeproj = { # Get the path from the repo_root to the .xcodeproj given the repo_name
     'mac-mouse-fix': 'Mouse Fix.xcodeproj', 
     'mac-mouse-fix-website': 'mac-mouse-fix-website-localization.xcodeproj',
 }
 
 #
-# (P)rogram-defined (l)ocalizable (strings) – aka plstrings
+# MARK: plstrings
+#   Aka (P)rogram-defined (l)ocalizable (strings) 
 #
 
 #   Explanation: [Aug 2025] Most of our our localizable strings are defined in .md templates. 
@@ -191,17 +192,8 @@ def plstrings_get_postprocessed_translation(key: str, locale: str):
     return translation
 
 #
-# Language stuff
+# MARK: xcstrings
 #
-def sorted_locales(locales, source_locale):
-    
-    """
-    - Sorts all the locales alphabetically by their display name, but puts the development aka source_locale (en) as the first language.
-    - We plan to use this sorting whenever there's a language picker. (On the website and in the markdown language pickers)
-    """
-    smallest_char = "\u0000"
-    result = sorted(locales, key=lambda l: smallest_char if l == source_locale else locale_to_language_name(l, l, False))
-    return result
 
 def get_localization_progress(xcstring_objects: list[dict], translation_locales: list[str]) -> dict:
     
@@ -343,55 +335,80 @@ def get_translation(xcstrings: dict, key: str, preferred_locale: str, fall_back_
     
     return translation, translation_locale
 
-def postprocess_template_ui_string(template_ui_string: str):
+# 
+# MARK: Xcode project
+#
 
-    # [Aug 2025] After a string is extracted from the template, and before it is inserted into the xcstrings file by syncstrings.py, we make some modifications to make the string easier to edit for translators.
+def xcodebuild_derived_data_path(temp_dir, repo_name):
+    """
+    We use a separate derivedData path for running xcodebuild, to speed up our workflow. 
+        Explanation: See `Problem: This is slow` above the usage of this function inside uploadstrings.py [Dec 2025]
+    """
+    project_path = path_to_xcodeproj[repo_name]
 
-    # [ ] TODO: Maybe rename to prepare_string_for_translation() and invert_prepare_string_for_translation()
-
-    # Remove indentation from ui_string 
-    #   (Otherwise translators have to manually add indentation to every indented line)
-    #   (When we insert the translated strings back into the .md we have to add the indentation back in.)
-
-    old_template_ui_string = template_ui_string
-    old_indent_level, old_indent_char = mfutils.get_indent(template_ui_string)
-    template_ui_string = mfutils.set_indent(template_ui_string, 0, ' ')
-    new_indent_level, new_indent_char = mfutils.get_indent(template_ui_string)
+    result = os.path.join(temp_dir, 'xcode-derived-data', repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
     
-    if old_indent_level != new_indent_level:
-        print(f'syncstrings.py: [Changed {old_template_ui_string} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
+    return result
 
-    # Remove all mdlink urls from extracted strings
-    #       And replace with {url1}, {url2}, etc.
-    #   Discussion: We do this so there's less margin for error for localizers. 
-    template_ui_string = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).md_string
+def xcodebuild_any_build_scheme(repo_path):
+    # Get any scheme
+    #   Note: I don't think the scheme matters (At least for current usage of xcodebuild -exportLocalizations in uploadstrings.py [Dec 2025]), since xcodebuild -exportLocalizations builds all targets anyways. But xcodebuild still demands a -scheme when using -derivedDataPath.
+    #   So we're just using the first scheme we find for the project.
+    
+    project_path = path_to_xcodeproj[os.path.basename(os.path.abspath(repo_path))]
+    return mfutils.find_xcode_project_build_schemes(repo_path, project_path)[0] # This is slow. Could hardcode the build_scheme instead [Dec 2025]
 
-    # Remove all <img> images
-    template_ui_string = mfutils.replace_html_images_with_format_specifiers(template_ui_string).md_string
 
+def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
+    
+    """
+    Returns the development locale of the xcode project as the first argument and the list of translation locales as the second argument
+    """
+    
+    # Load xcodeproj json
+    pbxproject_json = json.loads(mfutils.runclt(['plutil', '-convert', 'json', '-r', '-o', '-', f'{path_to_xcodeproj}/project.pbxproj']))    # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
+    
+    # Find locales in xcodeproj
+    development_locale = None
+    locales = None
+    for obj in pbxproject_json['objects'].values():
+        if obj['isa'] == 'PBXProject':
+            locales = obj['knownRegions']
+            development_locale = obj['developmentRegion']
+            break
+    
+    # Filter out 'Base' locale
+    locales = [l for l in locales if l != 'Base']
+    
+    # Filter out development_locale
+    translation_locales = [l for l in locales if l != development_locale]
+    
+    # Validate
+    assert(development_locale != None and locales != None and len(locales) >= 1)
+    
     # Return
-    return template_ui_string
+    return development_locale, translation_locales
 
-def postprocess_translated_ui_string(translated_ui_string: str, template_ui_string: str): 
+# Hardcoded list of xcstrings files that aren't exported by `xcodebuild -exportLocalization`
+# We sometimes remove an .xcstrings file from all build targets to prevent it from being exported. 
+#   We then also want to ignore those files in our scripts. Ideally we could just read the pbxproject, 
+#       but that turns to be pretty hard, so we hardcode a list here.
+#   We validate the hardcoded list against the result of `xcodebuild -exportLocalization` in uploadstrings.py [Oct 2025]
+xcstrings_blacklist = {
+    'mac-mouse-fix': [],
+    'mac-mouse-fix-website': [
+        'locales/old/Localizable.xcstrings'
+    ],
+}
 
-    # [Aug 2025] Inverse of postprocess_template_ui_string()
-    #   Before _buildmd.py inserts a translated string into the document, it needs to undo the modifications done by postprocess_template_ui_string() (Add indentation back and insert real urls)
+def find_xcstrings_files(repo_root):
 
-    # Insert urls from the template into the translation
-    urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
-    translated_ui_string = mfutils.replace_format_specifiers_with_markdown_urls(translated_ui_string, urls_from_template)
+    repo_name = os.path.basename(os.path.abspath(repo_root))
+    assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website']
 
-    # Insert <img>s from the template into the translation
-    imgs_from_template = mfutils.replace_html_images_with_format_specifiers(template_ui_string).removed_imgs
-    translated_ui_string = mfutils.replace_format_specifiers_with_html_images(translated_ui_string, imgs_from_template)
-
-    # Apply the original indentation to the translation
-    indent_level, indent_char = mfutils.get_indent(template_ui_string)
-    assert indent_char == ' ' or indent_char == None
-    translated_ui_string = mfutils.set_indent(translated_ui_string, indent_level, ' ')
-
-    # Return 
-    return translated_ui_string
+    paths = glob.glob(os.path.normpath(repo_root + '/**/*.xcstrings'), recursive=True)
+    paths = [p for p in paths if os.path.relpath(p, repo_root) not in xcstrings_blacklist[repo_name]]
+    return paths
 
 def make_custom_xcstrings_visible_to_xcodebuild(path_to_xcodeproj: str, custom_xcstrings_paths: list) -> dict:
     
@@ -521,58 +538,20 @@ def undo_make_custom_xcstrings_visible_to_xcodebuild(undo_payload):
     
     # Return
     return
-    
 
-def find_xcode_project_locales(path_to_xcodeproj) -> tuple[str, list[str]]:
+#
+# MARK: Locales & countries
+#
+
+def sorted_locales(locales, source_locale):
     
     """
-    Returns the development locale of the xcode project as the first argument and the list of translation locales as the second argument
+    - Sorts all the locales alphabetically by their display name, but puts the development aka source_locale (en) as the first language.
+    - We plan to use this sorting whenever there's a language picker. (On the website and in the markdown language pickers)
     """
-    
-    # Load xcodeproj json
-    pbxproject_json = json.loads(mfutils.runclt(['plutil', '-convert', 'json', '-r', '-o', '-', f'{path_to_xcodeproj}/project.pbxproj']))    # -r puts linebreaks into the json which makes it human readable, but is unnecessary here. `-o -` returns to stdout, instead of converting in place
-    
-    # Find locales in xcodeproj
-    development_locale = None
-    locales = None
-    for obj in pbxproject_json['objects'].values():
-        if obj['isa'] == 'PBXProject':
-            locales = obj['knownRegions']
-            development_locale = obj['developmentRegion']
-            break
-    
-    # Filter out 'Base' locale
-    locales = [l for l in locales if l != 'Base']
-    
-    # Filter out development_locale
-    translation_locales = [l for l in locales if l != development_locale]
-    
-    # Validate
-    assert(development_locale != None and locales != None and len(locales) >= 1)
-    
-    # Return
-    return development_locale, translation_locales
-
-# Hardcoded list of xcstrings files that aren't exported by `xcodebuild -exportLocalization`
-# We sometimes remove an .xcstrings file from all build targets to prevent it from being exported. 
-#   We then also want to ignore those files in our scripts. Ideally we could just read the pbxproject, 
-#       but that turns to be pretty hard, so we hardcode a list here.
-#   We validate the hardcoded list against the result of `xcodebuild -exportLocalization` in uploadstrings.py [Oct 2025]
-xcstrings_blacklist = {
-    'mac-mouse-fix': [],
-    'mac-mouse-fix-website': [
-        'locales/old/Localizable.xcstrings'
-    ],
-}
-
-def find_xcstrings_files(repo_root):
-
-    repo_name = os.path.basename(os.path.abspath(repo_root))
-    assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website']
-
-    paths = glob.glob(os.path.normpath(repo_root + '/**/*.xcstrings'), recursive=True)
-    paths = [p for p in paths if os.path.relpath(p, repo_root) not in xcstrings_blacklist[repo_name]]
-    return paths
+    smallest_char = "\u0000"
+    result = sorted(locales, key=lambda l: smallest_char if l == source_locale else locale_to_language_name(l, l, False))
+    return result
 
 def locale_to_language_name(locale_str: str, destination_locale_str: str = 'en', include_flag = False):
     
@@ -648,8 +627,62 @@ def locale_to_flag_emoji(locale_str: str):
     # Fallback to Unicode 'Replacement Character' (Missing emoji symbol/questionmark-in-rectangle symbol)
     return "�" 
 
+# 
+# MARK: String Postprocessing
 #
-# Continent stuff
+
+def postprocess_template_ui_string(template_ui_string: str):
+
+    # [Aug 2025] After a string is extracted from the template, and before it is inserted into the xcstrings file by syncstrings.py, we make some modifications to make the string easier to edit for translators.
+
+    # [ ] TODO: Maybe rename to prepare_string_for_translation() and invert_prepare_string_for_translation()
+
+    # Remove indentation from ui_string 
+    #   (Otherwise translators have to manually add indentation to every indented line)
+    #   (When we insert the translated strings back into the .md we have to add the indentation back in.)
+
+    old_template_ui_string = template_ui_string
+    old_indent_level, old_indent_char = mfutils.get_indent(template_ui_string)
+    template_ui_string = mfutils.set_indent(template_ui_string, 0, ' ')
+    new_indent_level, new_indent_char = mfutils.get_indent(template_ui_string)
+    
+    if old_indent_level != new_indent_level:
+        print(f'syncstrings.py: [Changed {old_template_ui_string} indentation from {old_indent_level}*"{old_indent_char or ''}" -> {new_indent_level}*"{new_indent_char or ''}"]\n')
+
+    # Remove all mdlink urls from extracted strings
+    #       And replace with {url1}, {url2}, etc.
+    #   Discussion: We do this so there's less margin for error for localizers. 
+    template_ui_string = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).md_string
+
+    # Remove all <img> images
+    template_ui_string = mfutils.replace_html_images_with_format_specifiers(template_ui_string).md_string
+
+    # Return
+    return template_ui_string
+
+def postprocess_translated_ui_string(translated_ui_string: str, template_ui_string: str): 
+
+    # [Aug 2025] Inverse of postprocess_template_ui_string()
+    #   Before _buildmd.py inserts a translated string into the document, it needs to undo the modifications done by postprocess_template_ui_string() (Add indentation back and insert real urls)
+
+    # Insert urls from the template into the translation
+    urls_from_template = mfutils.replace_markdown_urls_with_format_specifiers(template_ui_string).removed_urls # We could cache the urls between languages but it doesn't seem to produce noticable slowdown
+    translated_ui_string = mfutils.replace_format_specifiers_with_markdown_urls(translated_ui_string, urls_from_template)
+
+    # Insert <img>s from the template into the translation
+    imgs_from_template = mfutils.replace_html_images_with_format_specifiers(template_ui_string).removed_imgs
+    translated_ui_string = mfutils.replace_format_specifiers_with_html_images(translated_ui_string, imgs_from_template)
+
+    # Apply the original indentation to the translation
+    indent_level, indent_char = mfutils.get_indent(template_ui_string)
+    assert indent_char == ' ' or indent_char == None
+    translated_ui_string = mfutils.set_indent(translated_ui_string, indent_level, ' ')
+
+    # Return 
+    return translated_ui_string
+
+#
+# MARK: Continents
 #
 
 def all_continent_codes():
@@ -693,7 +726,7 @@ def country_code_to_continent_code(country_code: str) -> str:
 
 
 #
-# Sourcefile parsing 
+# MARK: Sourcefiles
 #   (Extracting localizable strings from .markdown/.vue files.)
 #
 
@@ -1047,7 +1080,7 @@ def get_localizable_strings_from_website_source_code(source_code: str):
     return result
 
 #
-# URL Localization
+# MARK: URL Localization
 #
 
 # Discussion [Mar 2025] 
@@ -1221,7 +1254,8 @@ def _modify_query_params_in_url(param_modifier: Callable[[dict[str, list[str]]],
         return new_url
 
 #
-# MainRepo document paths
+# MARK: mainmdp
+#   - Aka (main)-repo .(md) document (p)aths
 #
 # Naming:
 #   [Jul 2025] We use prefix `mainmdp_` which stands for: Functions for obtaining file [p]aths involved in compiling and translating .[md] files in the [main] repo (The 'main' repo is mac-mouse-fix)

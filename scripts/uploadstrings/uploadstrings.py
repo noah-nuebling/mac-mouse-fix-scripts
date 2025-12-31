@@ -51,7 +51,6 @@ import mfgithub
 #
 
 website_repo = './../mac-mouse-fix-website'
-xcloc_export_derived_data_temp_dir_subpath = 'xcode-derived-data-for-localization-export'
 
 translation_guide_path = sys.path[0] + '/translation_guide.md'
 how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
@@ -274,44 +273,37 @@ def main():
             shutil.rmtree(xcloc_dir) # Delete if theres already something there (I think this is impossible since we freshly create the temp_dir)
         os.mkdir(xcloc_dir)
         
-        # Build -exportLocalizations command
-        # Notes:
-        #   - This python list comprehension syntax is confusing. I feel like the `l in` and `arg in` sections should be swapped
-        #   - We used to use the '-includeScreenshots' option here, but that doesn't seem to work, so now we have a custom XCUITest-runner that takes localization screenshots below
+        # Build `xcodebuild -exportLocalizations` command
+        #   Notes:
+        #       - We used to use the '-includeScreenshots' option here, but that doesn't seem to work, so now we have a custom XCUITest-runner that takes localization screenshots below
         #   
         #   Problem: This is slow
         #       `xcodebuild -exportLocalizations` builds the whole project from scratch, ignoring build-cache, .apps it produces are broken. Also, deletes build cache for subsequent normal builds.
         #       So when we run the XCUITest-Runner down below, we need to build the whole project from scratch again. (Tested this on Xcode 16 Beta 3)
         #
-        #   Solution:
-        #       Set a separate -derivedDataPath for -exportLocalizations, where it can build its broken products without deleting the cache for other builds.
+        #       Solution:
+        #           Set a separate -derivedDataPath for -exportLocalizations, where it can build its broken products without deleting the cache for other builds.
         #       
-        #   Notes:
-        #       - Exporting localizations doesn't seem to be as slow when using the Xcode GUI. Not sure why.
-        #       - I tried every xcodebuild option under the sun to speed things up, including: -sdk macosx15.0 -dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipUnavailableActions -destination 'name=My Mac,arch=arm64' -arch arm64 -configuration Debug -scheme "App" -project "Mouse Fix.xcodeproj"
-        #           ... but none of these seemed to help.
+        #       Notes:
+        #           - Exporting localizations doesn't seem to be as slow when using the Xcode GUI. Not sure why.
+        #           - I tried every xcodebuild option under the sun to speed things up, including: -sdk macosx15.0 -dry-run -skipPackageSignatureValidation -skipMacroValidation -skipPackagePluginValidation -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipUnavailableActions -destination 'name=My Mac,arch=arm64' -arch arm64 -configuration Debug -scheme "App" -project "Mouse Fix.xcodeproj"
+        #               ... but none of these seemed to help.
         
         # Get paths
         project_path = mflocales.path_to_xcodeproj[repo_name]
-        derived_data_path = os.path.join(temp_dir_persistent, xcloc_export_derived_data_temp_dir_subpath, repo_name, os.path.splitext(project_path)[0]) # Splitext removes the .xcodeproj
+        derived_data_path = mflocales.xcodebuild_derived_data_path(temp_dir, repo_name)
 
         # Assemble -exportLocalizations command
         print(f"Assembling -exportLocalizations command...")
         export_localizations_command = ""
         if 1:
 
-            # Get any scheme
-            #   Note: I don't think the scheme matters, since xcodebuild -exportLocalizations builds all targets anyways. But xcodebuild still demands a -scheme when using -derivedDataPath.
-            #           So we're just using the first scheme we find for the project.
-            build_schemes = mfutils.find_xcode_project_build_schemes(repo_path, project_path) # This is slow. Could hardcode instead [Dec 2025]
-            any_build_scheme = build_schemes[0]
-
             # Assemble command
             export_localizations_command = [
                 f"xcrun xcodebuild -exportLocalizations",
-                f"-scheme '{any_build_scheme}'",
+                f"-scheme '{mflocales.xcodebuild_any_build_scheme(repo_path)}'",
                 f"-derivedDataPath '{derived_data_path}'",
-                f"-project '{project_path}'",
+                f"-project '{project_path}'", # Not sure this arg is necessary [Dec 2025]
                 f"-localizationPath '{xcloc_dir}'",
                 *[f"-exportLanguage {l}" for l in repo_analysis.all_repos.translation_locales]
             ]
