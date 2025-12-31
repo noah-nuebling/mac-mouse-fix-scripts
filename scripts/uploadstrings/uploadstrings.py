@@ -303,7 +303,7 @@ def main():
                 f"xcrun xcodebuild -exportLocalizations",
                 f"-scheme '{mflocales.xcodebuild_any_build_scheme(repo_path)}'",
                 f"-derivedDataPath '{derived_data_path}'",
-                f"-project '{project_path}'", # Not sure this arg is necessary [Dec 2025]
+                f"-project '{project_path}'", # Not sure this arg is necessary / useful, we're not using it in the xcodebuild invocation inside importstrings.py [Dec 2025]
                 f"-localizationPath '{xcloc_dir}'",
                 *[f"-exportLanguage {l}" for l in repo_analysis.all_repos.translation_locales]
             ]
