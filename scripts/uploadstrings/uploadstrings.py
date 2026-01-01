@@ -617,7 +617,13 @@ def main():
                 rm_result = mfutils.runclt(['rm', '-R', zip_file_path]) # We first remove any existing zip_file, because otherwise the `zip` CLT will combine the existing archive with the new data we're archiving which is weird. (If I understand the `zip` man correctly`)
                 print(f'Zip file of same name already existed. Calling rm on the zip_file returned: { mfutils.clt_result_description(rm_result) }')
                 
-            zip_result = mfutils.runclt(['zip', '-r', '--symlinks', zip_file_name, zippable_dir_name], cwd=base_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why. || [Jan 2026] --symlinks is necessary to work with app_screenshots_link_name
+            # Get all files in directory and sort alphabetically
+
+            # Build list of file paths for zip command
+            #   We sort these alphabetically, so that they are extracted in this order, which affects the 'Date Added' sorting in Finder that Translators might be using (We expect them to view this in their Downloads folder)
+            files_to_zip = [os.path.join(zippable_dir_name, f) for f in sorted(os.listdir(zippable_dir_path))]
+
+            zip_result = mfutils.runclt(['zip', '-r', '--symlinks', zip_file_name] + files_to_zip, cwd=base_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why. || [Jan 2026] --symlinks is necessary to work with app_screenshots_link_name
             # print(f'zip clt returned: { zip_result }')
             
             with open(zip_file_path, 'rb') as zip_file:
