@@ -1,0 +1,10 @@
+Open the 'App Screenshots' folder to see translated screenshots of the app. 
+These cover almost the entire app! And they let you see the English and Translated screens side-by-side. 
+
+This is a good way to spot issues with the translations
+(which you can then resolve by editing 'Mac Mouse Fix.xcloc' with 'Xcloc Editor.app').
+
+Tips:
+- Press Space (in Finder) -> Preview a screenshot
+- Sort by Name (in Finder) -> See English and Translated screens side-by-side.
+- Select text in a screenshot -> Then copy it and search in 'Xcloc Editor.app'

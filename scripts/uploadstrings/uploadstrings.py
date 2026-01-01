@@ -52,8 +52,11 @@ import mfgithub
 
 website_repo = './../mac-mouse-fix-website'
 
-translation_guide_path = sys.path[0] + '/translation_guide.md'
-how_to_submit_path     = sys.path[0] + "/How To Submit Your Translations.txt"
+translation_guide_path     = sys.path[0] + '/translation_guide.md'
+how_to_submit_path         = sys.path[0] + "/How To Submit Your Translations.txt"
+about_app_screenshots_path = sys.path[0] + "/About App Screenshots.txt"
+
+app_screenshots_link_name = 'App Screenshots'
 
 xcloc_editor_download_url    = "https://github.com/noah-nuebling/mf-xcloc-editor/releases/latest/download/XclocEditor.zip"
 
@@ -64,7 +67,7 @@ xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_
 xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
-xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
+xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason? || [Jan 1 2025] All these subfolders emulating structure that Xcode outputs. Not necessary when editing with Xcloc Editor.app (May not even be necessary for Xcode) -> TODO: Maybe simplify
 
 #
 # Parse args
@@ -291,7 +294,7 @@ def main():
         
         # Get paths
         project_path = mflocales.path_to_xcodeproj[repo_name]
-        derived_data_path = mflocales.xcodebuild_derived_data_path(temp_dir, repo_name)
+        derived_data_path = mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name)
 
         # Assemble -exportLocalizations command
         print(f"Assembling -exportLocalizations command...")
@@ -582,6 +585,17 @@ def main():
             # Move `Xcloc Editor.app`
             mfutils.runclt(f"unzip '{xcloc_editor_zip_path}' -d '{target_folder}'")
 
+            # Move app_screenshots
+            #   [Jan 2026] Not sure this is actually useful
+            if repo_analysis.all_repos.localization_progress[l]['percentage'] > 0: # Does this condition make sense? [Jan 2026]
+
+                # Move about_app_screenshots
+                mfutils.runclt(['cp', about_app_screenshots_path, target_folder])
+                
+                # Create symlink to screenshots folder
+                xcloc_screenshots_dir = os.path.join(target_folder, xcloc_file_names['mac-mouse-fix'], xcloc_screenshots_subdir)
+                symlink_path = os.path.join(target_folder, app_screenshots_link_name)
+                mfutils.runclt(f"ln -s '{xcloc_screenshots_dir}' '{symlink_path}'")
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
@@ -603,7 +617,7 @@ def main():
                 rm_result = mfutils.runclt(['rm', '-R', zip_file_path]) # We first remove any existing zip_file, because otherwise the `zip` CLT will combine the existing archive with the new data we're archiving which is weird. (If I understand the `zip` man correctly`)
                 print(f'Zip file of same name already existed. Calling rm on the zip_file returned: { mfutils.clt_result_description(rm_result) }')
                 
-            zip_result = mfutils.runclt(['zip', '-r', zip_file_name, zippable_dir_name], cwd=base_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why.
+            zip_result = mfutils.runclt(['zip', '-r', '--symlinks', zip_file_name, zippable_dir_name], cwd=base_dir) # We need to set the cwd (current working directory) like this, if we use abslute path to the zip_file and xcloc file, then the `zip` clt will recreate the whole path from our system root inside the zip archive. Not sure why. || [Jan 2026] --symlinks is necessary to work with app_screenshots_link_name
             # print(f'zip clt returned: { zip_result }')
             
             with open(zip_file_path, 'rb') as zip_file:
