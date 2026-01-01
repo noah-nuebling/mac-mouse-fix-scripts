@@ -352,7 +352,7 @@ stderr:
     
     return result
     
-def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, prefer_arm64: bool = True) -> str | None:
+def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, beep_on_failure: bool = False, prefer_arm64: bool = True) -> str | None:
     
     """
     
@@ -446,22 +446,35 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
             returncode = proc.poll()
             if returncode != None:
                 break
+    
+    # Handle errors
+    if 1:
+        if not print_live_output:
+            success = returncode in success_codes and (stderr == '' or not fail_on_stderr)
+            if not success:
+                if beep_on_failure: os.system('afplay /System/Library/Sounds/Sosumi.aiff')
+                assert False, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+            if stderr != '':                                                                # If command was successful but there's still an stderr – print it. || Reasoning: [Mar 2025] When running node on .ts files it will work but print to stderr that it's an experimental feature.
+                print(f"{command_name}: stderr {{", end='\n')
+                print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
+                print(f"}} endstderr: {command_name}", end='\n')
+        else:
+            success = returncode in success_codes
+            if not success:
+                if beep_on_failure: os.system('afplay /System/Library/Sounds/Sosumi.aiff')
+                assert False, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result: { returncode }"  # Note that we allow stderr to be non-empty with print_live_output. It's ok since it's printed to the console, so we consider it 'handled' I guess.
+    
+    # Handle output
+    if 1:
+        if not print_live_output:
+            if strip_output:
+                stdout = stdout.strip()                                                     # The stdout sometimes has trailing newline character which we remove here.
+            return stdout
+        else:
+            print('')
+            return None
 
-    if not print_live_output:
-        assert returncode in success_codes and (stderr == '' or not fail_on_stderr), f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
-        if stderr != '':                                                                # If command was successful but there's still an stderr – print it. || Reasoning: [Mar 2025] When running node on .ts files it will work but print to stderr that it's an experimental feature.
-            print(f"{command_name}: stderr {{", end='\n')
-            print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
-            print(f"}} endstderr: {command_name}", end='\n')
-        if strip_output:
-            stdout = stdout.strip()                                                     # The stdout sometimes has trailing newline character which we remove here.
-        return stdout
-    else:
-        print('')
-        assert returncode in success_codes, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result: { returncode }"  # Note that we allow stderr to be non-empty with print_live_output. It's ok since it's printed to the console, so we consider it 'handled' I guess.
-        return None
-
-def runclt_insecure(command, cwd=None, exec=None): 
+def runclt_insecure(command, cwd=None, exec=None):
     
     """
     Notes:

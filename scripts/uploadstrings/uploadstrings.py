@@ -472,7 +472,7 @@ def main():
                         print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\nenvvars: {envvars}")
 
                         # Run the screenshot-taker test runner
-                        mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True)        
+                        mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True, beep_on_failure=True) # beep_on_failure=True in case we step away from the computer and the test-runner randomly fails. (Which just happened – I think for the first time) [Jan 2025]
 
                         # Log
                         print(f"Finished running test-runner")
