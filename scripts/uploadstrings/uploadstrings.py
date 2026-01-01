@@ -67,7 +67,7 @@ xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_
 xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
-xcloc_screenshots_subdir = "Notes/Screenshots/SomeTest/SomeDevice" # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason? || [Jan 1 2025] All these subfolders emulating structure that Xcode outputs. Not necessary when editing with Xcloc Editor.app (May not even be necessary for Xcode) -> TODO: Maybe simplify
+xcloc_screenshots_subdir = "Notes/Screenshots/"    # [Jan 1 2025] Simplify from "Notes/Screenshots/SomeTest/SomeDevice" -> "Notes/Screenshots/". The other subfolders were aping structure that I saw Xcode output IIRC, but simpler is better especially now that this is user-facing (See app_screenshots_link_name) [Jan 2026] || Old notes:  # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
 
 #
 # Parse args
