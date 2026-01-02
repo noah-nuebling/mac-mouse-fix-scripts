@@ -11,7 +11,7 @@ Tip: Sorting
 
   Read the related translations above and below the one you're editing, and
   keep your new translation consistent with the existing ones.
-  (Or update all the related translations to match your new translation.)
+  (Or update the existing translations to match your new translation.)
 
   Exception: In the 'Main' file, sort by 'Comment' instead of 'Key' to group 
   related translations together.
@@ -49,17 +49,16 @@ Pro Tip: Regular Expression Search (OPTIONAL)
   Caution: 
     Once you're done, remember to turn off Regular Expressions
     by pressing Command-Option-R again. 
-    Otherwise, some searches may not work as expected, 
-    because characters like '|' or '*' have special 
-    meaning in a Regular Expression.
+    Otherwise, some searches won't work as expected,
+    because some characters like '|' and '*' have special 
+    meaning.
 
-    To search for these special characters without turning off 
-    Regular Expressions, include a backslash '\' in front
-    of the special characters. 
-    For example, to find the literal text 'Click and *Drag*'
-    while Regular Expressions are turned on,
-    you'd use the search-term 'Click and \*Drag\*'.
-    
+    To search a special character without turning off 
+    Regular Expressions, include a backslash '\' before
+    the special character.
+    For example, search for 'Click and \*Drag\*'
+    to find the text 'Click and *Drag*'
+    while Regular Expressions are turned on.
 
 ---
 
