@@ -55,6 +55,7 @@ website_repo = './../mac-mouse-fix-website'
 translation_guide_path     = sys.path[0] + '/translation_guide.md'
 how_to_submit_path         = sys.path[0] + "/How To Submit Your Translations.txt"
 about_app_screenshots_path = sys.path[0] + "/About App Screenshots.txt"
+tips_for_updating_path     = sys.path[0] + "/Tips For Updating Existing Translations.txt"
 
 app_screenshots_link_name = 'App Screenshots'
 
@@ -597,7 +598,12 @@ def main():
                 symlink_path = os.path.join(target_folder, app_screenshots_link_name)
                 symlink_target_path = os.path.relpath(xcloc_screenshots_dir, target_folder)
                 mfutils.runclt(f"ln -s '{symlink_target_path}' '{symlink_path}'")
-        
+
+            # Move tips_for_updating
+            if repo_analysis.all_repos.localization_progress[l]['percentage'] > 0:
+                mfutils.runclt(['cp', tips_for_updating_path, target_folder])
+                
+
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
     # Zip folders containing .xcloc files 

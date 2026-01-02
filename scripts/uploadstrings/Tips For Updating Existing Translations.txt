@@ -1,0 +1,54 @@
+
+When continuing the work of other translators, it can be hard to keep your 
+translations consistent with what's already there.
+
+These tips will help you write high-quality, consistent translations:
+
+
+1. Tip: Sorting
+
+Sort by 'Key' in Xcloc Editor to group related translations together.
+
+Read the related translations above and below the one you're editing, and
+keep your new translation consistent with the existing ones.
+(Or update all the related translations to match your new style.)
+
+Exception: In the 'Main' file, sort by 'Comment' instead of 'Key' to group 
+related translations together.
+
+
+2. Tip: Searching
+
+Use the search function to see how a term has been translated elsewhere.
+
+For example, if you're translating the term 'Spaces' (the macOS virtual 
+desktop feature), you'd want to see how 'Spaces' / 'Space' is translated
+elsewhere in the app.
+
+In Xcloc Editor, you can find all translations for 'Space' / 'Spaces' like this:
+
+  1. Go to 'All Project Files' (Command-J)
+  2. Select the search-field (Command-F)
+  3. Enter 'space'
+
+Now you can see all occurrences and translations for 'Space' / 'Spaces'.
+
+
+3. Tip: Advanced Searching
+
+You can highlight all occurrences of an English term AND its translation
+at the same time:
+
+  1. Turn on Regular Expressions (Command-Option-R) 
+  2. Use a search like:  double click|doppelklicken
+     (English term and translation separated by '|')
+
+Now you can easily spot whether all translations of 'double click' are 
+consistent, since all occurrences of 'double click' AND its translation 
+will be highlighted.
+
+---
+
+Notes to self: 
+- The sorting tip is based on 1TU-wL-skT.title [Jan 2026]
+- The search tips are based on questions.click-delay.body [Jan 2026]
