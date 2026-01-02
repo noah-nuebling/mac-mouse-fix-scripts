@@ -5,64 +5,68 @@ translations consistent with what's already there.
 These tips will help you stay consistent with existing translations:
 
 
-1. Tip: Sorting
+Tip: Sorting
 
-Sort by 'Key' in Xcloc Editor to group related translations together.
+  Sort by 'Key' in Xcloc Editor to group related translations together.
 
-Read the related translations above and below the one you're editing, and
-keep your new translation consistent with the existing ones.
-(Or update all the related translations to match your new style.)
+  Read the related translations above and below the one you're editing, and
+  keep your new translation consistent with the existing ones.
+  (Or update all the related translations to match your new style.)
 
-Exception: In the 'Main' file, sort by 'Comment' instead of 'Key' to group 
-related translations together.
-
-
-2. Tip: Searching
-
-Use the search function to see how a term has been translated elsewhere.
-
-For example, if you're translating the term 'Spaces' (the macOS virtual 
-desktop feature), you'd want to see how 'Space' / 'Spaces' is translated
-elsewhere in the app.
-
-In Xcloc Editor, you can find all translations for 'Space' / 'Spaces' like this:
-
-  1. Go to 'All Project Files' (Command-J)
-  2. Select the search-field (Command-F)
-  3. Enter 'space'
-
-Now you can see all occurrences and translations for 'Space' / 'Spaces'.
+  Exception: In the 'Main' file, sort by 'Comment' instead of 'Key' to group 
+  related translations together.
 
 
-3. Tip: Regular Expression Search (Pro Tip) (OPTIONAL)
+Tip: Searching
 
-You can highlight all occurrences of an English term AND its translation
-at the same time using Regular Expressions:
+  Use the search function to see how a term has been translated elsewhere.
 
-  1. Turn on Regular Expressions (Command-Option-R) 
-  2. Use a search like:  double click|doppelklicken
-     (English term and translation separated by '|')
+  For example, if you're translating the term 'Spaces' (the macOS virtual 
+  desktop feature), you'd want to see how 'Space' / 'Spaces' is translated
+  elsewhere in the app.
 
-Now you can easily spot whether all translations of 'double click' are 
-consistent, since all occurrences of 'double click' AND the translation 
-'doppelklicken' will be highlighted.
+  In Xcloc Editor, you could find all translations for 'Space' and 'Spaces' like this:
 
-Caution: 
-  Once you're done, remember to turn off Regular Expressions
-  by pressing Command-Option-R again. 
-  Otherwise, some searches may not work as expected, 
-  because some characters, like '|' or '*' have special 
-  meaning in a Regular Expression.
+    1. Go to 'All Project Files' (Command-J)
+    2. Select the search-field (Command-F)
+    3. Enter 'space'
 
-  To search for these special characters without turning off 
-  Regular Expressions, include a backslash '\' in front
-  of the special characters. For example, you'll have to use 
-  the search-term 'Click and \*Drag\*' to find the literal 
-  text 'Click and *Drag*' when Regular Expressions are turned on.
+  Now you can see all occurrences and translations for 'Space' and 'Spaces'.
+
+
+Pro Tip: Regular Expression Search (OPTIONAL)
+
+  You can highlight all occurrences of an English term AND its translation
+  at the same time using Regular Expressions:
+
+    1. Turn on Regular Expressions (Command-Option-R) 
+    2. Use a search like:  double click|doppelklicken
+      (English term and translation separated by '|')
+
+  Now all occurrences of 'double click' AND the translation 'doppelklicken' 
+  will be highlighted, helping you spot whether the translations are consistent.
+
+  Caution: 
+    Once you're done, remember to turn off Regular Expressions
+    by pressing Command-Option-R again. 
+    Otherwise, some searches may not work as expected, 
+    because characters like '|' or '*' have special 
+    meaning in a Regular Expression.
+
+    To search for these special characters without turning off 
+    Regular Expressions, include a backslash '\' in front
+    of the special characters. 
+    For example, you'd have to use the search-string 
+    'Click and \*Drag\*' to find the literal text 'Click and *Drag*' 
+    when Regular Expressions are turned on.
 
 ---
 
+
 Notes to self: 
-- The sorting tip is based on 1TU-wL-skT.title [Jan 2026]
-- The search tips are based on questions.click-delay.body [Jan 2026]
-- Some of these tips are redundant with the 'Pro Tips:' from translation_guide.md [Jan 2026]
+
+  - The sorting tip is based on 1TU-wL-skT.title [Jan 2026]
+  - The search tips are based on questions.click-delay.body [Jan 2026]
+  - Some of these tips are redundant with the 'Pro Tips:' from translation_guide.md [Jan 2026]
+  - Will the "Regular Expression Search" section just be tuned out or even scare off translators? 
+      Is the complexity worth it to include here? [Jan 2026]
