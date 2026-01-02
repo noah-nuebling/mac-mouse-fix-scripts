@@ -600,6 +600,8 @@ def main():
                 mfutils.runclt(f"ln -s '{symlink_target_path}' '{symlink_path}'")
 
             # Move tips_for_updating
+            #   Also see commit note 72ed32f in mac-mouse-fix repo. (Initial plan / thoughts on this) [Jan 2026]
+            #   - [ ] TODO: Maybe update `3. Tip: **Search using Regular Expressions**` from translation_guide.md to match content of tips_for_updating. 
             if repo_analysis.all_repos.localization_progress[l]['percentage'] > 0:
                 mfutils.runclt(['cp', tips_for_updating_path, target_folder])
                 

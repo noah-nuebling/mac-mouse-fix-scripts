@@ -71,6 +71,8 @@ Text that doesn't have a green checkmark as its state needs to be reviewed.
 
 <img width="1153" alt="Image" src="https://github.com/user-attachments/assets/6b9e85f4-ab3c-402f-8f62-3c80be06ccdd" />
 
+After you found a text to edit, don't forget to switch back to sorting by `Key` or `Comment`, so you can see related strings, which you'll want to keep your new translation consistent with.
+
 ### **4. Edit Translations**
 
 Click a cell in the `Translation` column to edit the translation.
@@ -187,19 +189,21 @@ Thank you for helping to bring Mac Mouse Fix to people around the world! 🌎
 
 **Can I update existing translations?**
 
-That would be awesome! You will get full credits along with the original translator.
+Absolutely. Even small spelling fixes or ironing out inconsistencies is very valuable and much appreciated! 
+You will get full credits along with the original translators.
 
-Make sure to take a look at:
-Tips For Updating Existing Translations.txt
+Before diving in, take a look at:
+`Tips For Updating Existing Translations.txt`
 
 which you will find in the translations files.
 
 **Can I submit incomplete translations?**
 
-Yes, you are welcome to. \
-Please leave a short note about which parts are still incomplete and whether you plan to finish them.
+Yes, you are welcome to, but I cannot promise that I'll accept them. \
+I think it's probably better if fewer people do larger chunks of the initial translations,
+since it's hard to keep things consistent, even for one person.
 
-If your translations are added to the project, you will get full credits alongside the translator who finished your work. 
+Please leave a short note about which parts are still incomplete and whether you plan to finish them.
 
 **Where can I learn more about the Xcloc Editor?**
 
@@ -220,7 +224,7 @@ You could, but I haven't tested how well it works.
 
 The `.xcloc` files contain industry standard `.xliff` files that you could edit with other software. You'd be missing out on the screenshots (by pressing Space) and some other nice things.
 
-If you [let me know](https://redirect.macmousefix.com/?target=mailto-noah&subject=Translation%20Workflow) about the translation workflow / software you have in mind, I'll look into supporting that better.
+If you [let me know](https://redirect.macmousefix.com/?target=mailto-noah&subject=Translation%20Workflow) about the translation workflow / software you'd prefer, I'll look into supporting that better.
 
 
 <!--
