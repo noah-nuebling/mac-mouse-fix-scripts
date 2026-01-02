@@ -595,7 +595,8 @@ def main():
                 # Create symlink to screenshots folder
                 xcloc_screenshots_dir = os.path.join(target_folder, xcloc_file_names['mac-mouse-fix'], xcloc_screenshots_subdir)
                 symlink_path = os.path.join(target_folder, app_screenshots_link_name)
-                mfutils.runclt(f"ln -s '{xcloc_screenshots_dir}' '{symlink_path}'")
+                symlink_target_path = os.path.relpath(xcloc_screenshots_dir, target_folder)
+                mfutils.runclt(f"ln -s '{symlink_target_path}' '{symlink_path}'")
         
         print(f'Moved .xcloc files into folders: {locale_export_dirs}\n')
     
