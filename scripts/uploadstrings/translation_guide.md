@@ -189,6 +189,11 @@ Thank you for helping to bring Mac Mouse Fix to people around the world! 🌎
 
 That would be awesome! You will get full credits along with the original translator.
 
+Make sure to take a look at:
+Tips For Updating Existing Translations.txt
+
+which you will find in the translations files.
+
 **Can I submit incomplete translations?**
 
 Yes, you are welcome to. \
