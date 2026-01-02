@@ -49,7 +49,7 @@ Pro Tip: Regular Expression Search (OPTIONAL)
     Once you're done, remember to turn off Regular Expressions
     by pressing Command-Option-R again. 
     Otherwise, some searches won't work as expected,
-    because some characters like '|' and '*' have special 
+    because some characters like '|', '+', or '*' have special 
     meaning.
 
     To search a special character without turning off 
