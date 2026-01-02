@@ -1,4 +1,3 @@
-
 When continuing the work of other translators, it can be hard to keep your 
 translations consistent with what's already there.
 
@@ -13,17 +12,17 @@ Tip: Sorting
   keep your new translation consistent with the existing ones.
   (Or update the existing translations to match your new translation.)
 
-  Exception: In the 'Main' file, sort by 'Comment' instead of 'Key' to group 
-  related translations together.
+  Exception: In the 'Main' file inside 'Mac Mouse Fix.xcloc', sort by 
+  'Comment' instead of 'Key' to group related translations together.
 
 
 Tip: Searching
 
-  Use the search function to see how a term has been translated elsewhere.
+  Use the search function to see how a term has been translated.
 
   For example, if you're translating the term 'Spaces' (the macOS virtual 
   desktop feature), you'd want to see how 'Space' / 'Spaces' is translated
-  elsewhere in the app.
+  elsewhere in the project.
 
   In Xcloc Editor, you could find all translations for 'Space' and 'Spaces' like this:
 
@@ -58,12 +57,12 @@ Pro Tip: Regular Expression Search (OPTIONAL)
     the special character.
     For example, search for 'Click and \*Drag\*'
     to find the text 'Click and *Drag*'
-    while Regular Expressions are turned on.
+    while Regular Expressions are still turned on.
 
 ---
 
 
-Notes to self: 
+Notes to self: (Ignore this)
 
   - The sorting tip is based on 1TU-wL-skT.title [Jan 2026]
   - The search tips are based on questions.click-delay.body [Jan 2026]

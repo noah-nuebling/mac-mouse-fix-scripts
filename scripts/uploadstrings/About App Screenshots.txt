@@ -7,4 +7,4 @@ I hope this is a good way to spot issues with the translations
 Tips:
 - Press Space (in Finder) -> Preview a screenshot
 - Sort by Name (in Finder) -> See English and Translated screens side-by-side.
-- Select text in a screenshot -> Then copy it and search in 'Xcloc Editor.app'
+- Select text in a screenshot -> Then copy it and search for it in 'Xcloc Editor.app'
