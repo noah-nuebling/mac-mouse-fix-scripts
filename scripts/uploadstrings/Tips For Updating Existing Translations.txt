@@ -2,7 +2,7 @@
 When continuing the work of other translators, it can be hard to keep your 
 translations consistent with what's already there.
 
-These tips will help you write high-quality, consistent translations:
+These tips will help you stay consistent with existing translations:
 
 
 1. Tip: Sorting
@@ -22,7 +22,7 @@ related translations together.
 Use the search function to see how a term has been translated elsewhere.
 
 For example, if you're translating the term 'Spaces' (the macOS virtual 
-desktop feature), you'd want to see how 'Spaces' / 'Space' is translated
+desktop feature), you'd want to see how 'Space' / 'Spaces' is translated
 elsewhere in the app.
 
 In Xcloc Editor, you can find all translations for 'Space' / 'Spaces' like this:
@@ -34,21 +34,35 @@ In Xcloc Editor, you can find all translations for 'Space' / 'Spaces' like this:
 Now you can see all occurrences and translations for 'Space' / 'Spaces'.
 
 
-3. Tip: Advanced Searching
+3. Tip: Regular Expression Search (Pro Tip) (OPTIONAL)
 
 You can highlight all occurrences of an English term AND its translation
-at the same time:
+at the same time using Regular Expressions:
 
   1. Turn on Regular Expressions (Command-Option-R) 
   2. Use a search like:  double click|doppelklicken
      (English term and translation separated by '|')
 
 Now you can easily spot whether all translations of 'double click' are 
-consistent, since all occurrences of 'double click' AND its translation 
-will be highlighted.
+consistent, since all occurrences of 'double click' AND the translation 
+'doppelklicken' will be highlighted.
+
+Caution: 
+  Once you're done, remember to turn off Regular Expressions
+  by pressing Command-Option-R again. 
+  Otherwise, some searches may not work as expected, 
+  because some characters, like '|' or '*' have special 
+  meaning in a Regular Expression.
+
+  To search for these special characters without turning off 
+  Regular Expressions, include a backslash '\' in front
+  of the special characters. For example, you'll have to use 
+  the search-term 'Click and \*Drag\*' to find the literal 
+  text 'Click and *Drag*' when Regular Expressions are turned on.
 
 ---
 
 Notes to self: 
 - The sorting tip is based on 1TU-wL-skT.title [Jan 2026]
 - The search tips are based on questions.click-delay.body [Jan 2026]
+- Some of these tips are redundant with the 'Pro Tips:' from translation_guide.md [Jan 2026]
