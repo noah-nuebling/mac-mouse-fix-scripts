@@ -103,13 +103,14 @@ if 1:
     # Parse args
     parser = argparse.ArgumentParser()
     parser.add_argument("--xcloc-path", required=True, help="Path to the xcloc file")
-    parser.add_argument("--only-source-mismatches", action='store_true', help="Only list mismatches in the source (English) strings.")
-    parser.add_argument("--only-comment-mismatches", action='store_true', help="Only list mismatches in the string comments.")
+    parser.add_argument("--no-source-mismatches", action='store_true', help="Don't list mismatches in the source (English) strings.")
+    parser.add_argument("--no-comment-mismatches", action='store_true', help="Don't list mismatches in the string comments.")
+    parser.add_argument("--no-key-mismatches",     action='store_true', help="Don't list mismatches in the string keys.")
     args = parser.parse_args()
 
     # Load xliff file
-    xliff_paths = glob.glob(f"{args.xcloc_path}/**/*.xliff", recursive=True)
-    assert len(xliff_paths) == 1, f"Found unexpected number of xliff paths: {xliff_paths}"
+    xliff_paths = glob.glob(f"{glob.escape(args.xcloc_path)}/**/*.xliff", recursive=True)
+    assert len(xliff_paths) == 1, f"Found unexpected number of xliff paths found in '{args.xcloc_path}'. xliff paths: {xliff_paths}"
     xliff_path = xliff_paths[0];
     xliff_obj = ET.fromstring(Path(xliff_path).read_text())
 
@@ -169,41 +170,46 @@ if 1:
         else:
             key_to_search_for = trans_unit.key
 
-        xcstrings_entry = None
+        xcstrings_entries = []
         if 1:
-            xcstrings_entries = []
             for file_path, xcstrings_obj in xcstrings_objs.items():
                 x = xcstrings_obj['strings'].get(key_to_search_for, None)
                 if x: xcstrings_entries.append(x)
                 
-            if len(xcstrings_entries) == 0:
-                assert False, f"No xcstrings_entries found for key: {key_to_search_for}.\ntrans_unit: {trans_unit}"
-            elif len(xcstrings_entries) > 1:
-                #assert trans_unit.key == 'CFBundleName', f"Multiple xcstrings found for key ({key_to_search_for}), where this is not expected."
-                xcstrings_entry = [x for x in xcstrings_entries if trans_unit.source == x['localizations']['en']['stringUnit']['value']][0]
-            else:
-                xcstrings_entry = xcstrings_entries[0];
 
         mismatch_warning = ''
         
-        # Check comment mismatch
-        if 1 and not args.only_source_mismatches:
-            xcstrings_comment = xcstrings_entry.get('comment', '');
-            if xcstrings_comment != trans_unit.note:
-                diff_xliff, diff_xcstrings = highlight_diff(trans_unit.note, xcstrings_comment)
-                mismatch_warnings.append(f"""COMMENT mismatch for key '{trans_unit.key}':\n    XLIFF:\n{textwrap.indent(diff_xliff, '        ')}\n    XCSTRINGS:\n{textwrap.indent(diff_xcstrings, '        ')}\n""")
-
-        # Check source mismatch
-        if 1 and not args.only_comment_mismatches:
-            xcstrings_source = None
-            if sub_keypath:
-                xcstrings_source = mfdict_getkp(xcstrings_entry, f"localizations.en.{sub_keypath}.stringUnit.value")
+        # Extract xcstrings_entry and check key mismatches
+        xcstrings_entry = None
+        if len(xcstrings_entries) == 1:
+            xcstrings_entry = xcstrings_entries[0];
+        else:
+            if len(xcstrings_entries) > 1:
+                xcstrings_entry = [x for x in xcstrings_entries if trans_unit.source == x['localizations']['en']['stringUnit']['value']][0]
             else:
-                xcstrings_source = mfdict_getkp(xcstrings_entry, "localizations.en.stringUnit.value")
+                xcstrings_entry = None
+            if 1 and not args.no_key_mismatches:
+                mismatch_warnings.append(f"""KEY mismatch for key Found {RED}{len(xcstrings_entries)}{RESET} entries in xcstrings files for {RED}'{trans_unit.key}'{RESET}\n""")
 
-            if xcstrings_source != trans_unit.source:
-                diff_xliff, diff_xcstrings = highlight_diff(trans_unit.source, xcstrings_source)
-                mismatch_warnings.append(f"""SOURCE mismatch for key '{trans_unit.key}'\n    XLIFF:\n{textwrap.indent(diff_xliff, '        ')}\n    XCSTRINGS:\n{textwrap.indent(diff_xcstrings, '        ')}\n""")
+        if xcstrings_entry != None:
+            # Check comment mismatch
+            if 1 and not args.no_comment_mismatches:
+                xcstrings_comment = xcstrings_entry.get('comment', '');
+                if xcstrings_comment != trans_unit.note:
+                    diff_xliff, diff_xcstrings = highlight_diff(trans_unit.note, xcstrings_comment)
+                    mismatch_warnings.append(f"""COMMENT mismatch for key '{trans_unit.key}':\n    XLIFF:\n{textwrap.indent(diff_xliff, '        ')}\n    XCSTRINGS:\n{textwrap.indent(diff_xcstrings, '        ')}\n""")
+
+            # Check source mismatch
+            if 1 and not args.no_source_mismatches:
+                xcstrings_source = None
+                if sub_keypath:
+                    xcstrings_source = mfdict_getkp(xcstrings_entry, f"localizations.en.{sub_keypath}.stringUnit.value")
+                else:
+                    xcstrings_source = mfdict_getkp(xcstrings_entry, "localizations.en.stringUnit.value")
+
+                if xcstrings_source != trans_unit.source:
+                    diff_xliff, diff_xcstrings = highlight_diff(trans_unit.source, xcstrings_source)
+                    mismatch_warnings.append(f"""SOURCE mismatch for key '{trans_unit.key}'\n    XLIFF:\n{textwrap.indent(diff_xliff, '        ')}\n    XCSTRINGS:\n{textwrap.indent(diff_xcstrings, '        ')}\n""")
 
     mismatch_warnings.sort()
     mismatch_warnings = [f'\n(Mismatch {i})\n{mismatch_warnings[i]}' for i in range(len(mismatch_warnings))]
