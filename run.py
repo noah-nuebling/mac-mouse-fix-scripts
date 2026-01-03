@@ -85,7 +85,7 @@ dotenv file explanation:
         
         To parse it, we use the regex:
 
-            ^(?!\s*#)(.*?)=(.*)$
+            ^(?!\\s*#)(.*?)=(.*)$
         
         You can test it here:
 
