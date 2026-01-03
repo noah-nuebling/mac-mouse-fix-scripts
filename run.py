@@ -126,6 +126,7 @@ Use ./run like this:
 Known run_args
 
     --nopip         -> Don't try to install dependencies via pip – Speeds up iteration time
+    --debug         -> Print verbose output (loading info, paths, etc.)
 
 Known subcommands:
 
@@ -187,10 +188,10 @@ def main():
     # Make sure we're running in the mac-mouse-fix project folder (We don't really need to be asserting this)
     cwd_name = os.path.basename(os.getcwd())
     assert cwd_name == 'mac-mouse-fix' or cwd_name == 'mac-mouse-fix-website' or cwd_name == 'mac-mouse-fix-update-feed'
-    
     # Log
-    print(f"Invoking run.py with cwd: {os.getcwd()}")
-    
+    if False: # Keep the logging light for the Claudes [Jan 2026]
+        print(f"Invoking run.py with cwd: {os.getcwd()}")
+
     # Find 'subcommands'
     def fill_subcommand_map():
         
@@ -233,13 +234,15 @@ def main():
     if spliti: # The args before `--` are for run.py
         run_args   = sys.argv[1:spliti]
         argv_other = [sys.argv[0]] + sys.argv[spliti+1:] # [Jul 2025] argv[0] isn't needed but it makes argv_other exactly match the "else" case.
-        print(f"run.py: Split args into run.py args: {run_args}, and other args: {argv_other}")
+        if False: # Keep the logging light for the Claudes [Jan 2026]
+            print(f"run.py: Split args into run.py args: {run_args}, and other args: {argv_other}")
     else:
         argv_other = sys.argv
 
     # Parse run.py args
     #   [Jul 2025] Maybe we could print_help_and_exit() if the user passes unknown args?
     arg_nopip = "--nopip" in run_args
+    arg_debug = "--debug" in run_args
 
     # Handle missing subcommand
     #   (Note: [Mar 2025] We do this after building subcommand_map so we can show the user the available subcommands.)
@@ -316,7 +319,7 @@ def main():
                 subprocess.check_call(f"python3 -m venv {venv_path}", text=True, shell=True)
             else:
                 # Log
-                print(f"\nrun.py: Reusing existing venv at ./{venv_path}. (If there are problems try deleting the venv.)")
+                if arg_debug: print(f"\nrun.py: Reusing existing venv at ./{venv_path}. (If there are problems try deleting the venv.)")
         
         # Define helper
         def install_requirements():
@@ -338,7 +341,7 @@ def main():
         python_interpreter = f'./{venv_python_path}'
     
     # Log
-    print(f"\nrun.py: Loading environ variables from ./{dotenv_path} ...")
+    if arg_debug: print(f"\nrun.py: Loading environ variables from ./{dotenv_path} ...")
     
     # Load environment variables defined in the .env file
     dotenv_vars = load_dotenv()
@@ -356,8 +359,9 @@ def main():
     env_vars = os.environ | dotenv_vars
     
     # Log
-    print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...\n")
-    print(f"----------------------------------------------------------------------------------------------------------\n")
+    if arg_debug:
+        print(f"run.py: Running script at ./{script_path} with arguments: {subcommand_args} using interpreter {python_interpreter} ...")
+        print(f"----------------------------------------------------------------------------------------------------------\n")
     
     # Run script
     #   Notes:
