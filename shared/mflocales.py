@@ -123,6 +123,54 @@ language_name_override_map = {
     }
 }
 
+locale_to_plural_categories: dict[str, list[str]] = {
+    
+    # (By Claude))
+    # TODO: Try to find the API that Xcode uses instead of hardcoding.
+    
+    """
+    # CLDR plural categories per locale
+    #   Source: https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html
+    #   Used by mfstrings.py to determine which plural forms to show for each locale. [Jan 2026]
+    #
+    #   Notes:
+    #   - 'other' is always required and serves as the default/fallback
+    #   - Languages like Chinese, Japanese, Korean, Turkish, Vietnamese only use 'other' (no plural distinctions)
+    #   - Slavic languages (Czech, Russian, Polish) have complex systems with 'one', 'few', 'many', 'other'
+    #   - Arabic has the most categories: 'zero', 'one', 'two', 'few', 'many', 'other'
+    """
+
+    # Note: The order matters - we use this order when displaying plural forms
+    'en':       ['one', 'other'],
+    'de':       ['one', 'other'],
+    'fr':       ['one', 'many', 'other'],
+    'es':       ['one', 'many', 'other'],
+    'pt':       ['one', 'many', 'other'],
+    'pt-BR':    ['one', 'many', 'other'],
+    'it':       ['one', 'many', 'other'],
+    'tr':       ['other'],
+    'vi':       ['other'],
+    'ko':       ['other'],
+    'ja':       ['other'],
+    'zh':       ['other'],
+    'zh-Hans':  ['other'],
+    'zh-Hant':  ['other'],
+    'zh-HK':    ['other'],
+    'cs':       ['one', 'few', 'many', 'other'],
+    'pl':       ['one', 'few', 'many', 'other'],
+    'ru':       ['one', 'few', 'many', 'other'],
+    'uk':       ['one', 'few', 'many', 'other'],
+    'ar':       ['zero', 'one', 'two', 'few', 'many', 'other'],
+    'he':       ['one', 'two', 'many', 'other'],
+}
+
+def get_plural_categories(locale: str) -> list[str]:
+    """
+    Get the CLDR plural categories for a locale.
+    """
+    assert locale in locale_to_plural_categories
+    return locale_to_plural_categories[locale]
+
 # project_locales = ['en', 'de', 'zh-HK', 'zh-Hans', 'zh-Hant', 'vi', 'ko']   # This is used to check if the locales of the website and the main app are in-sync. Update: Now validating locales inside uploadstrings.py instead.
 
 
