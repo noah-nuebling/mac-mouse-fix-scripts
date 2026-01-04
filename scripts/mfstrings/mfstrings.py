@@ -501,6 +501,7 @@ def apply_highlights(text: str, ranges: list[tuple[int, int, str]]) -> str:
 
 
 def print_row_pretty(
+    row_index: int,
     columns: list[str],
     row_values: list[str],
     grep_pattern: re.Pattern | None = None,
@@ -518,7 +519,8 @@ def print_row_pretty(
         diff_prefix: Prefix for the header line (e.g., '+', '-', '~')
     """
     # First column value is the header
-    header_val = unescape_value(row_values[0]) if len(row_values) > 0 else ''
+    header_val = f"({row_index})"
+    header_val += ' ' + (unescape_value(row_values[0]) if len(row_values) > 0 else '')
     header_display = highlight_matches(header_val, grep_pattern)
 
     # Print header
@@ -616,7 +618,7 @@ def cmd_inspect(args):
             f"\n"
             f"\n--diff shows the diff between HEAD and the current worktree"
             f"\n"
-            f"\n state:LOCALE columns contain either 'translated' or 'needs_review'.
+            f"\n state:LOCALE columns contain either 'translated' or 'needs_review'."
         )
         exit(1)
 
@@ -666,13 +668,15 @@ def cmd_inspect(args):
             print(output)
         else:               # Human-readable output
             lines = output.split('\n')
+            row_counter = 0
             for line in lines[1:]:  # Skip header
                 # Filter by grep pattern if provided
                 if grep_pattern and not grep_pattern.search(line):
                     continue
 
                 parts = line.split('\t')
-                print_row_pretty(columns, parts, grep_pattern)
+                print_row_pretty(row_counter, columns, parts, grep_pattern)
+                row_counter += 1
                 print()  # Blank line between entries
 
     else: # --diff output
@@ -711,6 +715,7 @@ def cmd_inspect(args):
         all_lineids = set(head_map.keys()) | set(worktree_map.keys())
         worktree_has_changes = False
 
+        row_counter = 0
         for fk in sorted(all_lineids):
             old_line = head_map.get(fk)
             new_line = worktree_map.get(fk)
@@ -733,9 +738,11 @@ def cmd_inspect(args):
                 new_parts = new_line.split('\t') if new_line else []
                 old_parts = old_line.split('\t') if old_line else []
 
-                if old_line is None:    print_row_pretty(columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added - show all green
-                elif new_line is None:  print_row_pretty(columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed - show all red
-                else:                   print_row_pretty(columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed - show diff
+                if old_line is None:    print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added - show all green
+                elif new_line is None:  print_row_pretty(row_counter, columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed - show all red
+                else:                   print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed - show diff
+                
+                row_counter += 1
 
                 print()  # Blank line between entries
             else:
