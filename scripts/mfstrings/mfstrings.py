@@ -184,7 +184,7 @@ def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], 
     for locale in locales:
         if locale == 'en':
             continue
-        all_columns.append(f'{locale}_state')
+        all_columns.append(f'state:{locale}')
 
     return all_columns, locales, file_data
 
@@ -341,8 +341,8 @@ def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | N
     for col in columns:
         if col in locales and col != 'en':
             requested_locales.append(col)
-        elif col.endswith('_state'):
-            locale = col[:-6]  # Remove '_state' suffix
+        elif col.startswith('state:'):
+            locale = col[6:]  # Remove 'state:' prefix
             if locale in locales and locale not in requested_locales:
                 requested_locales.append(locale)
 
@@ -389,7 +389,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | N
                         if locale == 'en':
                             row_data['en'] = value
                         else:
-                            row_data[f'{locale}_state'] = state
+                            row_data[f'state:{locale}'] = state
                             row_data[locale] = value
 
                     # Store row data (filter to requested columns)
@@ -412,7 +412,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | N
                     if locale == 'en':
                         row_data['en'] = value
                     else:
-                        row_data[f'{locale}_state'] = state
+                        row_data[f'state:{locale}'] = state
                         row_data[locale] = value
 
                 # Store row data (filter to requested columns)
@@ -606,7 +606,7 @@ def cmd_inspect(args):
             f"\n  - {'\n  - '.join(all_columns)}"
             f"\n"
             f"\nExample:"
-            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,tr_state,tr --sortcol comment"
+            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,state:tr,tr --sortcol comment"
             f"\n  ./run mfstrings inspect --cols all  # Include all columns"
             f"\n"
             f"\nOutput is sorted by the first column unless --sortcol is specified."
@@ -876,7 +876,7 @@ def main():
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect all string units (TSV output)') # - [ ] TODO: Consider adding a file-filter if this slows down the Claude's (currently takes 450ms) [Jan 2025]
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
-            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "tr_state,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
+            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
