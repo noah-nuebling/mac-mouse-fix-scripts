@@ -231,13 +231,13 @@ def main():
     argv_other = []
     
     spliti = None
-    for i in range(len(sys.argv)):
-        if sys.argv[i] == '--': 
+    for i in range(1, len(sys.argv)):
+        if sys.argv[i] == '--': # The args before `--` are the run_args run.py
             spliti = i; break
-        if not sys.argv[i].startswith('--'):
+        if not sys.argv[i].startswith('--'): # The first arg without `--` prefix is the subcommand
             spliti = None; break
 
-    if spliti: # The args before `--` are for run.py
+    if spliti: 
         run_args   = sys.argv[1:spliti]
         argv_other = [sys.argv[0]] + sys.argv[spliti+1:] # [Jul 2025] argv[0] isn't needed but it makes argv_other exactly match the "else" case.
         if False: # Keep the logging light for the Claudes [Jan 2026]
