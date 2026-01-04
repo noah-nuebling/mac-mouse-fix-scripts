@@ -352,26 +352,32 @@ stderr:
     
     return result
     
-def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, fail_on_stderr: bool = True, strip_output: bool = True, beep_on_failure: bool = False, prefer_arm64: bool = True) -> str | None:
+
+def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, manually_handle_errors: bool = False, strip_stdout: bool = True) -> str | tuple[str, int, str]:
     
+
     """
-    
-    Notes on args that we're passing to subprocess.run():
-        - `shell=False`: Invoking the clt directly instead of calling it through a shell.
-            -> When using `shell=True`, it allows you to pass the clt and args in a single string and also to use several commands using ; or use shell features like | pipes.
-            -> However, using `shell=True` is a SECURITY PROBLEM if we pass in any user-generated strings. -> Never use that without considering security.
-            -> We're using shlex to process the input string so that we can pass in the command and args as a single string as you would use it on the command line but without having to enable `shell=True`
-        - `text=True`: Return stdout and stderr as string instead of bits
-        - `cwd=cwd`: Sets the working directory for the subprocess. 
-        - `executable=exec`: Replaces the program to execute.
-            -> We used to have this set for some reason, I think to replace the shell, but I don't think we should set this.
-    
+    Run a (c)ommand-(l)ine-(t)ool
+    Use this instead of subprocess
+
+    Examples: [Jan 2026]
+        
+        stdout = runclt('git status --short')                                           # returns stdout, raises on error (if returncode != 0 or stderr != '')
+
+        stdout, code, stderr = runclt('git status', manually_handle_errors=True)        # Custom handling of returncode and stderr
+
+        runclt('npm install', print_live_output=True)                                   # Stream output as it runs (for long-running subtasks)
+
+        runclt(['git', 'commit', '-m', 'my message'], print_live_output=True)           # You can also pass a list of strings instead of a string
+
+        runclt('cat myfile.txt > output.txt')                                           # DOESNT WORK -> You can't do shell stuff. We just mimic shell syntax using shlex.split. We decided to do that because shell=True is a "security problem" (although I don't know if that matters here) [Jan 2026]
+
+    Uncertainties:
+        - command_arg is a *arg. I forgot why. I think it's so we don't set cwd= print_live_output= etc accidentally, when we try to pass an args list but forget the [brackets] (?) Our comment just says its 'syntax sugar'.  [Jan 2026]
+
     """
-    
+
     # Preprocess `command`
-    #   -> So that it works similar to as if shell=True (we can pass in the args as a single string, like on the command-line) but yet we can keep shell=False (because that's a security problem)
-    #   -> If one of your args contains spaces, you can escape with "with quotes" or with\ backslashes - just like a normal shell (Implemented by shlex)
-    
     commands: list[str] = []
     if len(command_arg) > 1:
         commands = list(command_arg) # Syntax sugar for the `is list` case [Oct 2025]
@@ -383,23 +389,10 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
 
     command_name = commands[0]
     
-    # Check commands that shouldn't be run
+    # Warn against footguns
     assert commands[0] != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
-
-    # Handle non-standard return codes
-    success_codes=[0]
-    if commands[0] == 'git' and commands[1] == 'diff': 
-        success_codes.append(1) # Git diff returns 1 if there's a difference
-    
-    # Launch the arm64 version of the clt
-    #   Background: On my M1 mac all the clts are normally launched as x86_64 for some reason. This causes xcodebuild to fail with weird errors about provisioning profiles. 
-    #   Explanation: `arch -arm64 -x86_64 <clt> <args>` will launch the -arm64 version of clt, if available, otherwise it should fall back to available archs.
-    #   Update: [Mar 2025] IIRC, this is not necessary anymore. I forgot why. I think my shell was in x86_64 mode or something?
-    if prefer_arm64 and False:
-        commands = ['arch', '-arm64', '-x86_64'] + commands
     
     # Run process and collect output
-    
     stdout = ""
     stderr = ""
     returncode = None
@@ -407,100 +400,39 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
         
         while True:
             
-            # Print
-            if print_live_output:
-                print(f"{command_name}: stdout {{", end='\n')
-            
-            # Read stdout
+            # Handle stdout
+            if print_live_output: print(f"{command_name}: stdout {{", end='\n') # Print stdout header
             while True:
-                
-                stdout_line = proc.stdout.readline()
-                if stdout_line == None or len(stdout_line) == 0:
-                    break                
-                else:
-                    stdout += f"\n{stdout_line}"
-                    if print_live_output:
-                        print(f"  > {stdout_line}", end='')
+                stdout_line = proc.stdout.readline() # Read stdout
+                if stdout_line == None or len(stdout_line) == 0: break # Break
+                stdout += f"\n{stdout_line}" # Store stdout
+                if print_live_output: print(f"  > {stdout_line}", end='') # Print stdout body
+            if print_live_output: print(f"}} endstdout: {command_name}", end='\n') # Print stdout footer
             
-            # Print
-            if print_live_output:
-                print(f"}} endstdout: {command_name}", end='\n')
-                print(f"{command_name}: stderr {{", end='\n')
-
-            # Read stderr
-            while True:
-                
-                stderr_line = proc.stderr.readline()
-                if stderr_line == None or len(stderr_line) == 0:
-                    break                
-                else:
-                    stderr += f"\n{stderr_line}"
-                    if print_live_output:
-                        print(f"  > {stderr_line}", end='')
-                
-            # Print    
-            if print_live_output:
-                print(f"}} endstderr: {command_name}", end='\n')
+            # Handle stderr
+            if print_live_output: print(f"{command_name}: stderr {{", end='\n') # Print stderr header
+            while True:    
+                stderr_line = proc.stderr.readline() # Read stderr
+                if stderr_line == None or len(stderr_line) == 0: break # Break
+                stderr += f"\n{stderr_line}" # Store stderr
+                if print_live_output: print(f"  > {stderr_line}", end='') # Print stderr body
+            if print_live_output: print(f"}} endstderr: {command_name}", end='\n') # Print stderr footer
             
             # Check if subproc has finished
             returncode = proc.poll()
             if returncode != None:
                 break
     
-    # Handle errors
-    if 1:
-        if not print_live_output:
-            success = returncode in success_codes and (stderr == '' or not fail_on_stderr)
-            if not success:
-                if beep_on_failure: os.system('afplay /System/Library/Sounds/Sosumi.aiff')
-                assert False, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
-            if stderr != '':                                                                # If command was successful but there's still an stderr – print it. || Reasoning: [Mar 2025] When running node on .ts files it will work but print to stderr that it's an experimental feature.
-                print(f"{command_name}: stderr {{", end='\n')
-                print('\n'.join(map(lambda line: f"  > {line}", stderr.splitlines())))
-                print(f"}} endstderr: {command_name}", end='\n')
-        else:
-            success = returncode in success_codes
-            if not success:
-                if beep_on_failure: os.system('afplay /System/Library/Sounds/Sosumi.aiff')
-                assert False, f"Command \n\"{shlex.join(commands)}\"\n was run in cwd \"{cwd}\" and failed with result: { returncode }"  # Note that we allow stderr to be non-empty with print_live_output. It's ok since it's printed to the console, so we consider it 'handled' I guess.
-    
-    # Handle output
-    if 1:
-        if not print_live_output:
-            if strip_output:
-                stdout = stdout.strip()                                                     # The stdout sometimes has trailing newline character which we remove here.
-            return stdout
-        else:
-            print('')
-            return None
+    # Process stdout
+    if strip_stdout:
+        stdout = stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
 
-def runclt_insecure(command, cwd=None, exec=None):
-    
-    """
-    Notes:
-    
-    This is a SECURITY PROBLEM.
-    -> What makes this insecure is if we set shell=True on subprocess.run and then pass in user-generated strings. 
-        (If you don't pass in user generated strings, this is ok to use)
-    -> We replaced this with runclt(), renamed this func to runclt_insecure() and added these notes about security in the commit after b052473ad4a5efd9128f2934daf15bdbd0daf8a7
-    
-
-        
-    """
-    
-    assert False
-    
-    success_codes=[0]
-    if command.startswith('git diff'): 
-        success_codes.append(1) # Git diff returns 1 if there's a difference
-    
-    clt_result = subprocess.run(command, cwd=cwd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, executable=exec)
-    
-    assert clt_result.stderr == '' and clt_result.returncode in success_codes, f"Command \"{command}\", run in cwd \"{cwd}\"\nreturned: {clt_result_description(clt_result)}"
-    
-    clt_result.stdout = clt_result.stdout.strip() # The stdout sometimes has trailing newline character which we remove here.
-    
-    return clt_result.stdout
+    # Return
+    if not manually_handle_errors:
+        assert returncode == 0 and stderr == '', f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+        return stdout
+    else:
+        return stdout, returncode, stderr
 
 def run_git_command(repo_path, command):
     

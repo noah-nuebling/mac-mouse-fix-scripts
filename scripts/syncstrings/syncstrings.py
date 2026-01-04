@@ -89,7 +89,7 @@ def main():
         #   - I ran into a problem where calling node failed, it was because /usr/local/bin (where node is located) was not in PATH. Restarting vscode fixed it.
         #   - [Feb 2025] This extracts the quotes themselves using quotesTool.mjs
 
-        quotes = json.loads(mfutils.runclt(['node', website_repo['quotes']['tool_path']], cwd=target_repo, fail_on_stderr=False))
+        quotes, _, _ = json.loads(mfutils.runclt(['node', website_repo['quotes']['tool_path']], cwd=target_repo, manually_handle_errors=True))
         extracted_strings: list[StringsDataItem] = []
         for quote in quotes:
             key = quote['quoteKey']
