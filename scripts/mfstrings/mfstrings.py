@@ -318,12 +318,13 @@ def extract_note_from_comment(comment: str) -> str:
 def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     """
     Extract state and value from a stringUnit dict.
-    Returns (state, value) where state defaults to 'new' if empty.
+    Returns (state, value) where state either 'translated' or 'needs_review'. (.xcstrings contain some more states which we all map to needs_review) (Binary state should help with grepping.)
     """
+
     state = string_unit.get('state', '')
-    if state == '':
-        state = 'new'
+    if state != 'translated': state = 'needs_review'
     value = string_unit.get('value', '')
+    
     return state, value
 
 
@@ -614,6 +615,8 @@ def cmd_inspect(args):
             f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
             f"\n"
             f"\n--diff shows the diff between HEAD and the current worktree"
+            f"\n"
+            f"\n state:LOCALE columns contain either 'translated' or 'needs_review'.
         )
         exit(1)
 
@@ -644,7 +647,7 @@ def cmd_inspect(args):
     grep_pattern = None
     if args.grep:
         if not args.pretty:
-            print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr) # Stupid Claude didn't use print_help_and_exit(). (It's right above) There are so many different error reporting / help mechanisms now. Claude 4.5 still kinda stupid sometimes. Still decends into chaos if you let it do its thing for too long I think.
+            print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr) # TODO: Stupid Claude didn't use print_help_and_exit(). (It's right above) There are so many different error reporting / help-printing mechanisms now. Claude 4.5 Opus still kinda stupid sometimes. Still decends into chaos if you let it do its thing for too long I think.
             print(f"  ./run mfstrings inspect --cols ... | grep '{args.grep}'", file=sys.stderr)
             exit(1)
         try:
@@ -876,7 +879,7 @@ def main():
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect all string units (TSV output)') # - [ ] TODO: Consider adding a file-filter if this slows down the Claude's (currently takes 450ms) [Jan 2025]
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
-            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
+            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified. Cells in the state:LOCALE are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
