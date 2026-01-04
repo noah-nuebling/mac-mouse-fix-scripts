@@ -11,6 +11,7 @@ from functools import cmp_to_key
 
 import mfobjc
 import mflocales
+import mfutils
 
 #
 # Constants
@@ -181,6 +182,13 @@ def escape_cell(value: str) -> str:
     if value is None:
         return ""
     return value.replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
+
+
+def unescape_value(value: str) -> str:
+    """Unescape \\n, \\t, \\r in input values (inverse of escape_cell)."""
+    if value is None:
+        return ""
+    return value.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
 
 
 def get_plural_variants_for_locale(loc_data: dict) -> dict[str, dict] | None:
@@ -485,9 +493,9 @@ def cmd_edit(args):
         variant_data = plural.setdefault(variant, {'stringUnit': {}})
         string_unit = variant_data.setdefault('stringUnit', {})
 
-        # Apply edits
+        # Apply edits (unescape \n, \t, \r to match inspect output format)
         if args.value is not None:
-            string_unit['value'] = args.value
+            string_unit['value'] = unescape_value(args.value)
         if args.state:
             string_unit['state'] = args.state
 
@@ -502,22 +510,20 @@ def cmd_edit(args):
         # Ensure stringUnit exists
         string_unit = loc_data.setdefault('stringUnit', {})
 
-        # Apply edits
+        # Apply edits (unescape \n, \t, \r to match inspect output format)
         if args.value is not None:
-            string_unit['value'] = args.value
+            string_unit['value'] = unescape_value(args.value)
         if args.state:
             string_unit['state'] = args.state
 
         print(f"Updated {fileid}/{base_key} [{locale}]")
 
-    # Write the file back
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, indent=2, ensure_ascii=False)
-        f.write('\n')  # Add trailing newline
+    # Write the file back (using mfutils to match Xcode's JSON formatting)
+    mfutils.write_xcstrings_file(file_path, content)
 
-    # Print what was changed
+    # Print what was changed (show escaped form for consistency with inspect)
     if args.value is not None:
-        print(f"  value: {args.value}")
+        print(f"  value: {escape_cell(unescape_value(args.value))}")
     if args.state:
         print(f"  state: {args.state}")
 
