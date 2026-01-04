@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-#
-# Created by Claude (Anthropic) - 2025
-#
+"""
+    mfstrings.py is a file created and primarily maintained (By Claude)
+"""
 
 import argparse
 import json
@@ -125,35 +125,18 @@ def parse_string_path(path: str) -> tuple[str, str, str]:
     return (fileid, key, locale)
 
 
-def get_file_content_at_ref(path: str, ref: str) -> str | None:
+def get_file_content_at_ref(path: str, ref: str) -> str:
     """
     Get file content at a specific git ref using `git show`.
-    Returns None if the file doesn't exist at that ref.
     """
-    import subprocess
 
-    # Determine which repo this file is in and get the relative path
-    abs_path = os.path.abspath(path)
-
-    # Check if it's in mac-mouse-fix-website
-    if website_repo in path or abs_path.startswith(os.path.abspath(website_repo)):
-        repo_root = os.path.abspath(website_repo)
-        rel_path = os.path.relpath(abs_path, repo_root)
+    repo_root = None
+    if os.path.normpath(path).startswith('../mac-mouse-fix-website'):
+        repo_root = '../mac-mouse-fix-website'
     else:
-        repo_root = os.getcwd()  # mac-mouse-fix
-        rel_path = os.path.relpath(abs_path, repo_root)
+        repo_root = '.'
 
-    try:
-        result = subprocess.run(
-            ['git', 'show', f'{ref}:{rel_path}'],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout
-    except subprocess.CalledProcessError:
-        return None  # File doesn't exist at this ref
+    return mfutils.runclt(f'git show {ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
 
 
 def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], list[str], list[tuple[str, dict]]]:
@@ -187,13 +170,21 @@ def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], 
     # Sort locales (en first, then alphabetically)
     locales = sorted(all_locales, key=lambda l: (l != 'en', l))
 
-    # Build all available columns
-    all_columns = ['fileid', 'key', 'comment', 'en']
+    # Build all available columns [Jan 2026]
+    # Order: key first (for --pretty readability), then metadata, then translations, then states at the end
+    all_columns = ['key', 'fileid', 'comment', 'en']
+
+    # Add translation columns (without state)
+    for locale in locales:
+        if locale == 'en':
+            continue
+        all_columns.append(locale)
+
+    # Add state columns at the end
     for locale in locales:
         if locale == 'en':
             continue
         all_columns.append(f'{locale}_state')
-        all_columns.append(locale)
 
     return all_columns, locales, file_data
 
@@ -228,7 +219,14 @@ def cmd_list_cols(_args):
 
 
 def escape_cell(value: str) -> str:
-    """Escape tabs and newlines in cell values for TSV output."""
+    """
+    Escape tabs and newlines in cell values for TSV output.
+    
+    NOTE: [Jan 2026] Some cell values contain U+2028 (Shift+Return) instead of `\n`. 
+        This will not escape U+2028, but .splitlines() will split on it!
+        -> split('\n') instead splitlines(), to split the TSV table into rows!
+
+    """
     if value is None:
         return ""
     return value.replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
@@ -329,7 +327,7 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def generate_inspect_output(columns: list[str], sortcol: str | None, git_ref: str | None = None) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | None = None) -> str:
     """
     Generate inspect output as TSV string.
 
@@ -609,6 +607,7 @@ def cmd_inspect(args):
             f"\n"
             f"\nExample:"
             f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,tr_state,tr --sortcol comment"
+            f"\n  ./run mfstrings inspect --cols all  # Include all columns"
             f"\n"
             f"\nOutput is sorted by the first column unless --sortcol is specified."
             f"\n"
@@ -625,12 +624,16 @@ def cmd_inspect(args):
     if not args.cols:
         print_help_and_exit("Missing --cols arg")
 
-    columns = args.cols.split(',')
+    # Handle 'all' keyword to include all columns [Jan 2026]
+    if args.cols == 'all':
+        columns = all_columns
+    else:
+        columns = args.cols.split(',')
 
-    # Validate columns
-    for col in columns:
-        if col not in all_columns:
-            print_help_and_exit(f"Unknown column: {col}")
+        # Validate columns
+        for col in columns:
+            if col not in all_columns:
+                print_help_and_exit(f"Unknown column: {col}")
 
     # Validate --sortcol
     if args.sortcol:
@@ -641,47 +644,71 @@ def cmd_inspect(args):
     grep_pattern = None
     if args.grep:
         if not args.pretty:
-            print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr)
+            print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr) # Stupid Claude didn't use print_help_and_exit(). (It's right above) There are so many different error reporting / help mechanisms now. Claude 4.5 still kinda stupid sometimes. Still decends into chaos if you let it do its thing for too long I think.
             print(f"  ./run mfstrings inspect --cols ... | grep '{args.grep}'", file=sys.stderr)
             exit(1)
         try:
             grep_pattern = re.compile(args.grep, re.IGNORECASE)
         except re.error as e:
-            print(f"Error: Invalid regex pattern '{args.grep}': {e}")
+            print(f"Error: Invalid regex pattern '{args.grep}': {e}") 
             exit(1)
 
-    # Handle --diff mode
-    if args.diff:
+    # Print the output
+    
+    if not args.diff: # Normal (non-diff) output
+        
+        output = inspect_output_tsv(columns, args.sortcol)
+        
+        if not args.pretty: 
+            print(output)
+        else:               # Human-readable output
+            lines = output.split('\n')
+            for line in lines[1:]:  # Skip header
+                # Filter by grep pattern if provided
+                if grep_pattern and not grep_pattern.search(line):
+                    continue
+
+                parts = line.split('\t')
+                print_row_pretty(columns, parts, grep_pattern)
+                print()  # Blank line between entries
+
+    else: # --diff output
+        
+        # Validate --diff
+        if args.diff:
+            if 'key' not in columns or 'fileid' not in columns:
+                print(f"Error: --diff needs key and fileid columns to be present.") # Improvement idea: Could run the diffing logic with 'key' and 'fileid' present and then strip them later if the user doesn't want to see them.
+                exit(1)
+
         # Generate output for HEAD and worktree
-        output_head = generate_inspect_output(columns, args.sortcol, git_ref='HEAD')
-        output_worktree = generate_inspect_output(columns, args.sortcol, git_ref=None)
+        output_head     = inspect_output_tsv(columns, args.sortcol, git_ref='HEAD')
+        output_worktree = inspect_output_tsv(columns, args.sortcol, git_ref=None)
 
-        lines_head = output_head.splitlines()
-        lines_worktree = output_worktree.splitlines()
+        lines_head     = output_head.split('\n')
+        lines_worktree = output_worktree.split('\n')
 
-        # Build a map of (fileid, key) -> line for each version
-        def parse_line(line: str) -> tuple[str, str, str]:
-            """Parse a line into (fileid, key, rest)."""
-            parts = line.split('\t', 2)
-            if len(parts) >= 2:
-                return (parts[0], parts[1], line)
-            return ('', '', line)
+        def get_lineid(line: str) -> str: # Return tuple of (lineid, line) || lineid tells us which lines to compare.
+            
+            parts = line.split('\t')
+
+            assert 'key' in columns and 'fileid' in columns, f"Programmer error. We should be checking this condition above."
+            lineid = parts[columns.index('key')] + parts[columns.index('fileid')] # We need both the file and key to identify a line, sine the keys can be duplicate across .xcstrings files.
+            
+            return lineid
 
         head_map = {}
         for line in lines_head[1:]:  # Skip header
-            fileid, key, _ = parse_line(line)
-            head_map[(fileid, key)] = line
+            head_map[get_lineid(line)] = line
 
         worktree_map = {}
         for line in lines_worktree[1:]:  # Skip header
-            fileid, key, _ = parse_line(line)
-            worktree_map[(fileid, key)] = line
+            worktree_map[get_lineid(line)] = line
 
         # Find changes
-        all_keys = set(head_map.keys()) | set(worktree_map.keys())
-        has_changes = False
+        all_lineids = set(head_map.keys()) | set(worktree_map.keys())
+        worktree_has_changes = False
 
-        for fk in sorted(all_keys):
+        for fk in sorted(all_lineids):
             old_line = head_map.get(fk)
             new_line = worktree_map.get(fk)
 
@@ -696,59 +723,33 @@ def cmd_inspect(args):
                 if not old_matches and not new_matches:
                     continue
 
-            has_changes = True
-            fileid, key = fk
+            worktree_has_changes = True
 
             if args.pretty:
                 # Human-readable output with colors
                 new_parts = new_line.split('\t') if new_line else []
                 old_parts = old_line.split('\t') if old_line else []
 
-                if old_line is None:
-                    # Added - show all green
-                    print_row_pretty(columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+")
-                elif new_line is None:
-                    # Removed - show all red
-                    print_row_pretty(columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")
-                else:
-                    # Changed - show diff
-                    print_row_pretty(columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~")
+                if old_line is None:    print_row_pretty(columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added - show all green
+                elif new_line is None:  print_row_pretty(columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed - show all red
+                else:                   print_row_pretty(columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed - show diff
 
                 print()  # Blank line between entries
             else:
                 # Machine-readable TSV diff output
                 # Format: +/-/~ <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
-                if old_line is None:
-                    print(f"+\t{new_line}")
-                elif new_line is None:
-                    print(f"-\t{old_line}")
+                if old_line is None:    print(f"+\t{new_line}")
+                elif new_line is None:  print(f"-\t{old_line}")
                 else:
                     print(f"-\t{old_line}")
                     print(f"+\t{new_line}")
 
-        if not has_changes:
+        if not worktree_has_changes:
             if args.pretty:
                 print("No changes.")
             exit(0)
         else:
             exit(1)
-    else:
-        # Normal output
-        output = generate_inspect_output(columns, args.sortcol)
-        if args.pretty:
-            # Human-readable output
-            lines = output.splitlines()
-            for line in lines[1:]:  # Skip header
-                # Filter by grep pattern if provided
-                if grep_pattern and not grep_pattern.search(line):
-                    continue
-
-                parts = line.split('\t')
-                print_row_pretty(columns, parts, grep_pattern)
-                print()  # Blank line between entries
-        else:
-            # TSV output
-            print(output)
 
 
 def cmd_edit(args):
@@ -875,7 +876,7 @@ def main():
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect all string units (TSV output)') # - [ ] TODO: Consider adding a file-filter if this slows down the Claude's (currently takes 450ms) [Jan 2025]
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
-            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "tr_state,fileid,key,en,tr"). Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
+            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "tr_state,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
