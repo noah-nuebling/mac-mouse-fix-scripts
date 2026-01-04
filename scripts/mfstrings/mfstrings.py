@@ -7,6 +7,8 @@
 import argparse
 import json
 import os
+import re
+import sys
 from difflib import SequenceMatcher
 from functools import cmp_to_key
 
@@ -315,6 +317,18 @@ def extract_note_from_comment(comment: str) -> str:
     return note
 
 
+def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
+    """
+    Extract state and value from a stringUnit dict.
+    Returns (state, value) where state defaults to 'new' if empty.
+    """
+    state = string_unit.get('state', '')
+    if state == '':
+        state = 'new'
+    value = string_unit.get('value', '')
+    return state, value
+
+
 def generate_inspect_output(columns: list[str], sortcol: str | None, git_ref: str | None = None) -> str:
     """
     Generate inspect output as TSV string.
@@ -363,56 +377,45 @@ def generate_inspect_output(columns: list[str], sortcol: str | None, git_ref: st
                         'comment': comment,
                     }
 
-                    # Get English value for this variant
-                    en_loc_data = localizations.get('en', {})
-                    en_variants = get_plural_variants_for_locale(en_loc_data)
-                    if en_variants and variant in en_variants:
-                        variant_string_unit = en_variants[variant].get('stringUnit', {})
-                        row_data['en'] = variant_string_unit.get('value', '')
-                    else:
-                        row_data['en'] = '-'
-
-                    # Get values for other locales
+                    # Get values for each locale (including English)
                     for locale in locales:
-                        if locale == 'en':
-                            continue
                         loc_data = localizations.get(locale, {})
                         loc_variants = get_plural_variants_for_locale(loc_data)
 
                         if loc_variants and variant in loc_variants:
-                            variant_string_unit = loc_variants[variant].get('stringUnit', {})
-                            state = variant_string_unit.get('state', '')
-                            if state == '':
-                                state = 'new'
-                            row_data[f'{locale}_state'] = state
-                            row_data[locale] = variant_string_unit.get('value', '')
+                            string_unit = loc_variants[variant].get('stringUnit', {})
+                            state, value = get_string_unit_data(string_unit)
                         else:
-                            # This locale doesn't have this variant
-                            row_data[f'{locale}_state'] = '-'
-                            row_data[locale] = '-'
+                            state, value = '-', '-'  # This locale doesn't have this variant
+
+                        if locale == 'en':
+                            row_data['en'] = value
+                        else:
+                            row_data[f'{locale}_state'] = state
+                            row_data[locale] = value
 
                     # Store row data (filter to requested columns)
                     filtered_row_data = {col: row_data.get(col, '') for col in columns}
                     rows.append(filtered_row_data)
             else:
-                # Non-pluralizable string: single row as before
+                # Non-pluralizable string: single row
                 row_data: dict[str, str] = {
                     'fileid': fileid,
                     'key': key,
                     'comment': comment,
-                    'en': localizations.get('en', {}).get('stringUnit', {}).get('value', ''),
                 }
 
+                # Get values for each locale (including English)
                 for locale in locales:
-                    if locale == 'en':
-                        continue
                     loc_data = localizations.get(locale, {})
                     string_unit = loc_data.get('stringUnit', {})
-                    state = string_unit.get('state', '')
-                    if state == '':
-                        state = 'new'
-                    row_data[f'{locale}_state'] = state
-                    row_data[locale] = string_unit.get('value', '')
+                    state, value = get_string_unit_data(string_unit)
+
+                    if locale == 'en':
+                        row_data['en'] = value
+                    else:
+                        row_data[f'{locale}_state'] = state
+                        row_data[locale] = value
 
                 # Store row data (filter to requested columns)
                 filtered_row_data = {col: row_data.get(col, '') for col in columns}
@@ -438,17 +441,47 @@ def generate_inspect_output(columns: list[str], sortcol: str | None, git_ref: st
     return '\n'.join(lines)
 
 
-def print_row_pretty(fileid: str, key: str, columns: list[str], row_values: list[str]):
+def highlight_matches(text: str, pattern: re.Pattern | None) -> str:
+    """
+    Highlight all matches of pattern in text with YELLOW color.
+    Returns text unchanged if pattern is None.
+    """
+    if pattern is None:
+        return text
+
+    YELLOW = '\033[93m'
+    result = []
+    last_end = 0
+
+    for match in pattern.finditer(text):
+        # Add text before match
+        result.append(text[last_end:match.start()])
+        # Add highlighted match
+        result.append(f"{YELLOW}{match.group()}{RESET}")
+        last_end = match.end()
+
+    # Add remaining text
+    result.append(text[last_end:])
+    return ''.join(result)
+
+
+def print_row_pretty(columns: list[str], row_values: list[str], grep_pattern: re.Pattern | None = None):
     """
     Print a single row in human-readable format.
+    The first column is printed as a bold header, the rest are indented below.
     row_values should be escaped TSV values matching the columns order.
+    If grep_pattern is provided, matches will be highlighted.
     """
-    print(f"{BOLD}[{fileid}] {key}{RESET}")
-    for i, col in enumerate(columns):
-        if col in ('fileid', 'key'):
-            continue  # Already printed in header
+    # First column is the header
+    header_val = row_values[0] if len(row_values) > 0 else ''
+    header_display = unescape_value(header_val)
+    print(f"{BOLD}{highlight_matches(header_display, grep_pattern)}{RESET}")
+
+    # Rest of the columns are indented
+    for i, col in enumerate(columns[1:], start=1):
         val = row_values[i] if i < len(row_values) else ''
         val_display = unescape_value(val).replace('\n', '\n    ')  # Indent multiline
+        val_display = highlight_matches(val_display, grep_pattern)
         print(f"  {DIM}{col}:{RESET}")
         print(f"    {val_display}")
 
@@ -499,6 +532,19 @@ def cmd_inspect(args):
     if args.sortcol:
         if args.sortcol not in columns:
             print_help_and_exit(f"Column '{args.sortcol}' which was passed to --sortcol, was not found in columns passed to --col: {columns}")
+
+    # Validate --grep
+    grep_pattern = None
+    if args.grep:
+        if not args.pretty:
+            print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr)
+            print(f"  ./run mfstrings inspect --cols ... | grep '{args.grep}'", file=sys.stderr)
+            exit(1)
+        try:
+            grep_pattern = re.compile(args.grep, re.IGNORECASE)
+        except re.error as e:
+            print(f"Error: Invalid regex pattern '{args.grep}': {e}")
+            exit(1)
 
     # Handle --diff mode
     if args.diff:
@@ -617,10 +663,12 @@ def cmd_inspect(args):
             # Human-readable output
             lines = output.splitlines()
             for line in lines[1:]:  # Skip header
+                # Filter by grep pattern if provided
+                if grep_pattern and not grep_pattern.search(line):
+                    continue
+
                 parts = line.split('\t')
-                fileid = parts[0] if len(parts) > 0 else ''
-                key = parts[1] if len(parts) > 1 else ''
-                print_row_pretty(fileid, key, columns, parts)
+                print_row_pretty(columns, parts, grep_pattern)
                 print()  # Blank line between entries
         else:
             # TSV output
@@ -754,6 +802,7 @@ def main():
             inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "tr_state,fileid,key,en,tr"). Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
+            inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
             inspect_parser.set_defaults(func=cmd_inspect)
 
             # edit command
