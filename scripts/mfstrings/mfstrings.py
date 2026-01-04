@@ -465,6 +465,42 @@ def highlight_matches(text: str, pattern: re.Pattern | None) -> str:
     return ''.join(result)
 
 
+def apply_highlights(text: str, ranges: list[tuple[int, int, str]]) -> str:
+    """
+    Apply multiple color highlights to text.
+    ranges is a list of (start, end, color) tuples.
+    Later ranges override earlier ones where they overlap.
+    """
+    if not ranges:
+        return text
+
+    # Build a color map for each character position
+    colors: list[str | None] = [None] * len(text)
+
+    for start, end, color in ranges:
+        for i in range(start, min(end, len(text))):
+            colors[i] = color
+
+    # Build the result string
+    result = []
+    current_color: str | None = None
+
+    for i, char in enumerate(text):
+        char_color = colors[i]
+        if char_color != current_color:
+            if current_color is not None:
+                result.append(RESET)
+            if char_color is not None:
+                result.append(char_color)
+            current_color = char_color
+        result.append(char)
+
+    if current_color is not None:
+        result.append(RESET)
+
+    return ''.join(result)
+
+
 def print_row_pretty(columns: list[str], row_values: list[str], grep_pattern: re.Pattern | None = None):
     """
     Print a single row in human-readable format.
@@ -584,22 +620,36 @@ def cmd_inspect(args):
             if old_line == new_line:
                 continue  # No change
 
+            # Filter by grep pattern if provided
+            if grep_pattern:
+                # Check if pattern matches either old or new line
+                old_matches = old_line and grep_pattern.search(old_line)
+                new_matches = new_line and grep_pattern.search(new_line)
+                if not old_matches and not new_matches:
+                    continue
+
             has_changes = True
             fileid, key = fk
 
             if args.pretty:
                 # Human-readable output with colors
+                # Apply grep highlighting to header elements
+                fileid_display = highlight_matches(fileid, grep_pattern)
+                key_display = highlight_matches(key, grep_pattern)
+
                 if old_line is None:
                     # Added
-                    print(f"{GREEN}+ [{fileid}] {key}{RESET}")
-                    print(f"  {GREEN}{new_line}{RESET}")
+                    print(f"{GREEN}+ [{fileid_display}] {key_display}{RESET}")
+                    new_line_display = highlight_matches(new_line, grep_pattern)
+                    print(f"  {GREEN}{new_line_display}{RESET}")
                 elif new_line is None:
                     # Removed
-                    print(f"{RED}- [{fileid}] {key}{RESET}")
-                    print(f"  {RED}{old_line}{RESET}")
+                    print(f"{RED}- [{fileid_display}] {key_display}{RESET}")
+                    old_line_display = highlight_matches(old_line, grep_pattern)
+                    print(f"  {RED}{old_line_display}{RESET}")
                 else:
                     # Changed - highlight the differences
-                    print(f"{BOLD}~ [{fileid}] {key}{RESET}")
+                    print(f"{BOLD}~ [{fileid_display}] {key_display}{RESET}")
 
                     # Split into columns and show diff for each changed column
                     old_parts = old_line.split('\t')
@@ -614,25 +664,36 @@ def cmd_inspect(args):
                             old_val_display = unescape_value(old_val)
                             new_val_display = unescape_value(new_val)
 
-                            # Highlight character-level differences
-                            matcher = SequenceMatcher(None, old_val_display, new_val_display)
-                            old_highlighted, new_highlighted = [], []
+                            # Build highlight ranges: diff (red/green) first, then grep (yellow) to override
+                            YELLOW = '\033[93m'
+                            old_ranges: list[tuple[int, int, str]] = []
+                            new_ranges: list[tuple[int, int, str]] = []
 
+                            # Add diff highlights (red/green) first
+                            matcher = SequenceMatcher(None, old_val_display, new_val_display)
                             for op, i1, i2, j1, j2 in matcher.get_opcodes():
-                                if op == 'equal':
-                                    old_highlighted.append(old_val_display[i1:i2])
-                                    new_highlighted.append(new_val_display[j1:j2])
-                                elif op == 'delete':
-                                    old_highlighted.append(f"{RED}{old_val_display[i1:i2]}{RESET}")
+                                if op == 'delete':
+                                    old_ranges.append((i1, i2, RED))
                                 elif op == 'insert':
-                                    new_highlighted.append(f"{GREEN}{new_val_display[j1:j2]}{RESET}")
+                                    new_ranges.append((j1, j2, GREEN))
                                 elif op == 'replace':
-                                    old_highlighted.append(f"{RED}{old_val_display[i1:i2]}{RESET}")
-                                    new_highlighted.append(f"{GREEN}{new_val_display[j1:j2]}{RESET}")
+                                    old_ranges.append((i1, i2, RED))
+                                    new_ranges.append((j1, j2, GREEN))
+
+                            # Add grep highlights (yellow) - these override diff colors
+                            if grep_pattern:
+                                for m in grep_pattern.finditer(old_val_display):
+                                    old_ranges.append((m.start(), m.end(), YELLOW))
+                                for m in grep_pattern.finditer(new_val_display):
+                                    new_ranges.append((m.start(), m.end(), YELLOW))
+
+                            # Apply highlights
+                            old_display = apply_highlights(old_val_display, old_ranges)
+                            new_display = apply_highlights(new_val_display, new_ranges)
 
                             # Indent multiline content
-                            old_display = ''.join(old_highlighted).replace('\n', '\n      ')
-                            new_display = ''.join(new_highlighted).replace('\n', '\n      ')
+                            old_display = old_display.replace('\n', '\n      ')
+                            new_display = new_display.replace('\n', '\n      ')
 
                             print(f"  {DIM}{col}:{RESET}")
                             print(f"    {RED}-{RESET} {old_display}")
