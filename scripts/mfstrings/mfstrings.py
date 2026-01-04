@@ -501,25 +501,93 @@ def apply_highlights(text: str, ranges: list[tuple[int, int, str]]) -> str:
     return ''.join(result)
 
 
-def print_row_pretty(columns: list[str], row_values: list[str], grep_pattern: re.Pattern | None = None):
+def print_row_pretty(
+    columns: list[str],
+    row_values: list[str],
+    grep_pattern: re.Pattern | None = None,
+    old_row_values: list[str] | None = None,
+    diff_prefix: str = ''
+):
     """
     Print a single row in human-readable format.
-    The first column is printed as a bold header, the rest are indented below.
-    row_values should be escaped TSV values matching the columns order.
-    If grep_pattern is provided, matches will be highlighted.
-    """
-    # First column is the header
-    header_val = row_values[0] if len(row_values) > 0 else ''
-    header_display = unescape_value(header_val)
-    print(f"{BOLD}{highlight_matches(header_display, grep_pattern)}{RESET}")
 
-    # Rest of the columns are indented
-    for i, col in enumerate(columns[1:], start=1):
-        val = row_values[i] if i < len(row_values) else ''
-        val_display = unescape_value(val).replace('\n', '\n    ')  # Indent multiline
-        val_display = highlight_matches(val_display, grep_pattern)
-        print(f"  {DIM}{col}:{RESET}")
-        print(f"    {val_display}")
+    Args:
+        columns: Column names
+        row_values: Current/new row values (escaped TSV)
+        grep_pattern: Optional regex pattern for highlighting matches
+        old_row_values: If provided, shows diff between old and new values
+        diff_prefix: Prefix for the header line (e.g., '+', '-', '~')
+    """
+    # First column value is the header
+    header_val = unescape_value(row_values[0]) if len(row_values) > 0 else ''
+    header_display = highlight_matches(header_val, grep_pattern)
+
+    # Print header
+    if diff_prefix:
+        print(f"{BOLD}{diff_prefix} {header_display}{RESET}")
+    else:
+        print(f"{BOLD}{header_display}{RESET}")
+
+    # Print remaining columns (skip first which is the header)
+    for i, col in enumerate(columns):
+        if i == 0:
+            continue
+
+        new_val = row_values[i] if i < len(row_values) else ''
+        new_val_display = unescape_value(new_val)
+
+        if old_row_values is not None:
+            # Diff mode
+            old_val = old_row_values[i] if i < len(old_row_values) else ''
+            old_val_display = unescape_value(old_val)
+
+            if old_val != new_val:
+                # Changed column - show diff with highlights
+                YELLOW = '\033[93m'
+                old_ranges: list[tuple[int, int, str]] = []
+                new_ranges: list[tuple[int, int, str]] = []
+
+                # Add diff highlights (red/green) first
+                matcher = SequenceMatcher(None, old_val_display, new_val_display)
+                for op, i1, i2, j1, j2 in matcher.get_opcodes():
+                    if op == 'delete':
+                        old_ranges.append((i1, i2, RED))
+                    elif op == 'insert':
+                        new_ranges.append((j1, j2, GREEN))
+                    elif op == 'replace':
+                        old_ranges.append((i1, i2, RED))
+                        new_ranges.append((j1, j2, GREEN))
+
+                # Add grep highlights (yellow) - these override diff colors
+                if grep_pattern:
+                    for m in grep_pattern.finditer(old_val_display):
+                        old_ranges.append((m.start(), m.end(), YELLOW))
+                    for m in grep_pattern.finditer(new_val_display):
+                        new_ranges.append((m.start(), m.end(), YELLOW))
+
+                # Apply highlights
+                old_display = apply_highlights(old_val_display, old_ranges)
+                new_display = apply_highlights(new_val_display, new_ranges)
+
+                # Indent multiline content
+                old_display = old_display.replace('\n', '\n      ')
+                new_display = new_display.replace('\n', '\n      ')
+
+                print(f"  {DIM}{col}:{RESET}")
+                print(f"    {RED}-{RESET} {old_display}")
+                print(f"    {GREEN}+{RESET} {new_display}")
+            else:
+                # Unchanged column
+                val_display = highlight_matches(new_val_display, grep_pattern)
+                val_display = val_display.replace('\n', '\n    ')
+                print(f"  {DIM}{col}:{RESET}")
+                print(f"    {val_display}")
+        else:
+            # Non-diff mode
+            val_display = highlight_matches(new_val_display, grep_pattern)
+            val_display = val_display.replace('\n', '\n    ')
+            print(f"  {DIM}{col}:{RESET}")
+            print(f"    {val_display}")
 
 
 def cmd_inspect(args):
@@ -633,71 +701,18 @@ def cmd_inspect(args):
 
             if args.pretty:
                 # Human-readable output with colors
-                # Apply grep highlighting to header elements
-                fileid_display = highlight_matches(fileid, grep_pattern)
-                key_display = highlight_matches(key, grep_pattern)
+                new_parts = new_line.split('\t') if new_line else []
+                old_parts = old_line.split('\t') if old_line else []
 
                 if old_line is None:
-                    # Added
-                    print(f"{GREEN}+ [{fileid_display}] {key_display}{RESET}")
-                    new_line_display = highlight_matches(new_line, grep_pattern)
-                    print(f"  {GREEN}{new_line_display}{RESET}")
+                    # Added - show all green
+                    print_row_pretty(columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+")
                 elif new_line is None:
-                    # Removed
-                    print(f"{RED}- [{fileid_display}] {key_display}{RESET}")
-                    old_line_display = highlight_matches(old_line, grep_pattern)
-                    print(f"  {RED}{old_line_display}{RESET}")
+                    # Removed - show all red
+                    print_row_pretty(columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")
                 else:
-                    # Changed - highlight the differences
-                    print(f"{BOLD}~ [{fileid_display}] {key_display}{RESET}")
-
-                    # Split into columns and show diff for each changed column
-                    old_parts = old_line.split('\t')
-                    new_parts = new_line.split('\t')
-
-                    for i, col in enumerate(columns):
-                        old_val = old_parts[i] if i < len(old_parts) else ''
-                        new_val = new_parts[i] if i < len(new_parts) else ''
-
-                        if old_val != new_val:
-                            # Unescape for display
-                            old_val_display = unescape_value(old_val)
-                            new_val_display = unescape_value(new_val)
-
-                            # Build highlight ranges: diff (red/green) first, then grep (yellow) to override
-                            YELLOW = '\033[93m'
-                            old_ranges: list[tuple[int, int, str]] = []
-                            new_ranges: list[tuple[int, int, str]] = []
-
-                            # Add diff highlights (red/green) first
-                            matcher = SequenceMatcher(None, old_val_display, new_val_display)
-                            for op, i1, i2, j1, j2 in matcher.get_opcodes():
-                                if op == 'delete':
-                                    old_ranges.append((i1, i2, RED))
-                                elif op == 'insert':
-                                    new_ranges.append((j1, j2, GREEN))
-                                elif op == 'replace':
-                                    old_ranges.append((i1, i2, RED))
-                                    new_ranges.append((j1, j2, GREEN))
-
-                            # Add grep highlights (yellow) - these override diff colors
-                            if grep_pattern:
-                                for m in grep_pattern.finditer(old_val_display):
-                                    old_ranges.append((m.start(), m.end(), YELLOW))
-                                for m in grep_pattern.finditer(new_val_display):
-                                    new_ranges.append((m.start(), m.end(), YELLOW))
-
-                            # Apply highlights
-                            old_display = apply_highlights(old_val_display, old_ranges)
-                            new_display = apply_highlights(new_val_display, new_ranges)
-
-                            # Indent multiline content
-                            old_display = old_display.replace('\n', '\n      ')
-                            new_display = new_display.replace('\n', '\n      ')
-
-                            print(f"  {DIM}{col}:{RESET}")
-                            print(f"    {RED}-{RESET} {old_display}")
-                            print(f"    {GREEN}+{RESET} {new_display}")
+                    # Changed - show diff
+                    print_row_pretty(columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~")
 
                 print()  # Blank line between entries
             else:
