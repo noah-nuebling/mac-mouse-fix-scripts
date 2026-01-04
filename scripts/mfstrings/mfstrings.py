@@ -7,6 +7,7 @@
 import argparse
 import json
 import os
+from difflib import SequenceMatcher
 from functools import cmp_to_key
 
 import mfobjc
@@ -18,6 +19,13 @@ import mfutils
 #
 
 website_repo = './../mac-mouse-fix-website'
+
+# ANSI colors
+RED = '\033[91m'
+GREEN = '\033[92m'
+RESET = '\033[0m'
+BOLD = '\033[1m'
+DIM = '\033[2m'
 
 #
 # Helpers
@@ -115,10 +123,43 @@ def parse_string_path(path: str) -> tuple[str, str, str]:
     return (fileid, key, locale)
 
 
-def get_all_columns_and_locales() -> tuple[list[str], list[str], list[tuple[str, dict]]]:
+def get_file_content_at_ref(path: str, ref: str) -> str | None:
+    """
+    Get file content at a specific git ref using `git show`.
+    Returns None if the file doesn't exist at that ref.
+    """
+    import subprocess
+
+    # Determine which repo this file is in and get the relative path
+    abs_path = os.path.abspath(path)
+
+    # Check if it's in mac-mouse-fix-website
+    if website_repo in path or abs_path.startswith(os.path.abspath(website_repo)):
+        repo_root = os.path.abspath(website_repo)
+        rel_path = os.path.relpath(abs_path, repo_root)
+    else:
+        repo_root = os.getcwd()  # mac-mouse-fix
+        rel_path = os.path.relpath(abs_path, repo_root)
+
+    try:
+        result = subprocess.run(
+            ['git', 'show', f'{ref}:{rel_path}'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+    except subprocess.CalledProcessError:
+        return None  # File doesn't exist at this ref
+
+
+def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], list[str], list[tuple[str, dict]]]:
     """
     Load all xcstrings files and return available columns, locales, and file data.
     Returns (all_columns, locales, file_data) where file_data is list of (fileid, content).
+
+    If git_ref is provided, loads file contents from that git ref instead of the working directory.
     """
     files = get_all_xcstrings_files_with_ids()
 
@@ -126,13 +167,20 @@ def get_all_columns_and_locales() -> tuple[list[str], list[str], list[tuple[str,
     file_data: list[tuple[str, dict]] = []
 
     for fileid, path in files:
-        with open(path, 'r', encoding='utf-8') as f:
-            content = json.load(f)
-            file_data.append((fileid, content))
+        if git_ref:
+            content_str = get_file_content_at_ref(path, git_ref)
+            if content_str is None:
+                continue  # File doesn't exist at this ref
+            content = json.loads(content_str)
+        else:
+            with open(path, 'r', encoding='utf-8') as f:
+                content = json.load(f)
 
-            for key, string_info in content.get('strings', {}).items():
-                localizations = string_info.get('localizations', {})
-                all_locales.update(localizations.keys())
+        file_data.append((fileid, content))
+
+        for key, string_info in content.get('strings', {}).items():
+            localizations = string_info.get('localizations', {})
+            all_locales.update(localizations.keys())
 
     # Sort locales (en first, then alphabetically)
     locales = sorted(all_locales, key=lambda l: (l != 'en', l))
@@ -267,45 +315,14 @@ def extract_note_from_comment(comment: str) -> str:
     return note
 
 
-def cmd_inspect(args):
-    """Inspect all string units from all .xcstrings files."""
+def generate_inspect_output(columns: list[str], sortcol: str | None, git_ref: str | None = None) -> str:
+    """
+    Generate inspect output as TSV string.
 
+    If git_ref is provided, loads file contents from that git ref instead of the working directory.
+    """
     # Load data
-    all_columns, locales, file_data = get_all_columns_and_locales()
-
-    def print_help_and_exit(err):
-        print(
-            f"Invalid args passed to 'mfstrings inspect' command:"
-            f"\n"
-            f"\n{err}"
-            f"\n"
-            f"\nUsage: ./run mfstrings inspect --cols <columns> [--sortcol <column>] [--pretty]"
-            f"\n"
-            f"\nAvailable columns:"
-            f"\n  - {'\n  - '.join(all_columns)}"
-            f"\n"
-            f"\nExample:"
-            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,tr_state,tr --sortcol comment"
-            f"\n"
-            f"\nOutput is sorted by the first column unless --sortcol is specified."
-            f"\n"
-            f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
-        )
-        exit(1)
-
-    if not file_data:
-        print_help_and_exit("No .xcstrings files found.")
-
-    # Determine which columns to show
-    if not args.cols:
-        print_help_and_exit("Missing --cols arg")
-
-    columns = args.cols.split(',')
-
-    # Validate columns
-    for col in columns:
-        if col not in all_columns:
-            print_help_and_exit(f"Unknown column: {col}")
+    all_columns, locales, file_data = get_all_columns_and_locales(git_ref=git_ref)
 
     # Determine which locales are being requested (for plural variant union)
     requested_locales = ['en']  # Always include 'en'
@@ -401,34 +418,213 @@ def cmd_inspect(args):
                 filtered_row_data = {col: row_data.get(col, '') for col in columns}
                 rows.append(filtered_row_data)
 
-    # Validate --sortcol
-    if args.sortcol:
-        if not args.sortcol in columns:
-            print_help_and_exit(f"Column '{args.sortcol}' which was passed to --sortcol, was not found in columns passed to --col: {columns}")
-
     # Sort
     def mfcmp(a, b):
-        if args.sortcol:  # Sort by --sortcol
-            if (x := mfobjc.NSString_localizedStandardCompare(a[args.sortcol], b[args.sortcol])): return x
+        if sortcol:  # Sort by --sortcol
+            if (x := mfobjc.NSString_localizedStandardCompare(a[sortcol], b[sortcol])): return x
 
         for col in columns:  # Sort by first, second, ... column
             if (x := mfobjc.NSString_localizedStandardCompare(a[col], b[col])): return x
         return 0
     rows.sort(key=cmp_to_key(mfcmp))
 
-    # Output
-    if args.pretty:
-        # Pretty table with | separators
-        print('\t|\t'.join(columns))
-        for row in rows:
-            row_values = [escape_cell(row.get(col, '')) for col in columns]
-            print('\t|\t'.join(row_values))
+    # Generate output (always TSV - pretty printing is handled separately)
+    lines = []
+    lines.append('\t'.join(columns))
+    for row in rows:
+        row_values = [escape_cell(row.get(col, '')) for col in columns]
+        lines.append('\t'.join(row_values))
+
+    return '\n'.join(lines)
+
+
+def print_row_pretty(fileid: str, key: str, columns: list[str], row_values: list[str]):
+    """
+    Print a single row in human-readable format.
+    row_values should be escaped TSV values matching the columns order.
+    """
+    print(f"{BOLD}[{fileid}] {key}{RESET}")
+    for i, col in enumerate(columns):
+        if col in ('fileid', 'key'):
+            continue  # Already printed in header
+        val = row_values[i] if i < len(row_values) else ''
+        val_display = unescape_value(val).replace('\n', '\n    ')  # Indent multiline
+        print(f"  {DIM}{col}:{RESET}")
+        print(f"    {val_display}")
+
+
+def cmd_inspect(args):
+    """Inspect all string units from all .xcstrings files."""
+
+    # Load data (for validation and help text)
+    all_columns, locales, file_data = get_all_columns_and_locales()
+
+    def print_help_and_exit(err):
+        print(
+            f"Invalid args passed to 'mfstrings inspect' command:"
+            f"\n"
+            f"\n{err}"
+            f"\n"
+            f"\nUsage: ./run mfstrings inspect --cols <columns> [--sortcol <column>] [--pretty] [--diff]"
+            f"\n"
+            f"\nAvailable columns:"
+            f"\n  - {'\n  - '.join(all_columns)}"
+            f"\n"
+            f"\nExample:"
+            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,tr_state,tr --sortcol comment"
+            f"\n"
+            f"\nOutput is sorted by the first column unless --sortcol is specified."
+            f"\n"
+            f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
+            f"\n"
+            f"\n--diff shows the diff between HEAD and the current worktree"
+        )
+        exit(1)
+
+    if not file_data:
+        print_help_and_exit("No .xcstrings files found.")
+
+    # Determine which columns to show
+    if not args.cols:
+        print_help_and_exit("Missing --cols arg")
+
+    columns = args.cols.split(',')
+
+    # Validate columns
+    for col in columns:
+        if col not in all_columns:
+            print_help_and_exit(f"Unknown column: {col}")
+
+    # Validate --sortcol
+    if args.sortcol:
+        if args.sortcol not in columns:
+            print_help_and_exit(f"Column '{args.sortcol}' which was passed to --sortcol, was not found in columns passed to --col: {columns}")
+
+    # Handle --diff mode
+    if args.diff:
+        # Generate output for HEAD and worktree
+        output_head = generate_inspect_output(columns, args.sortcol, git_ref='HEAD')
+        output_worktree = generate_inspect_output(columns, args.sortcol, git_ref=None)
+
+        lines_head = output_head.splitlines()
+        lines_worktree = output_worktree.splitlines()
+
+        # Build a map of (fileid, key) -> line for each version
+        def parse_line(line: str) -> tuple[str, str, str]:
+            """Parse a line into (fileid, key, rest)."""
+            parts = line.split('\t', 2)
+            if len(parts) >= 2:
+                return (parts[0], parts[1], line)
+            return ('', '', line)
+
+        head_map = {}
+        for line in lines_head[1:]:  # Skip header
+            fileid, key, _ = parse_line(line)
+            head_map[(fileid, key)] = line
+
+        worktree_map = {}
+        for line in lines_worktree[1:]:  # Skip header
+            fileid, key, _ = parse_line(line)
+            worktree_map[(fileid, key)] = line
+
+        # Find changes
+        all_keys = set(head_map.keys()) | set(worktree_map.keys())
+        has_changes = False
+
+        for fk in sorted(all_keys):
+            old_line = head_map.get(fk)
+            new_line = worktree_map.get(fk)
+
+            if old_line == new_line:
+                continue  # No change
+
+            has_changes = True
+            fileid, key = fk
+
+            if args.pretty:
+                # Human-readable output with colors
+                if old_line is None:
+                    # Added
+                    print(f"{GREEN}+ [{fileid}] {key}{RESET}")
+                    print(f"  {GREEN}{new_line}{RESET}")
+                elif new_line is None:
+                    # Removed
+                    print(f"{RED}- [{fileid}] {key}{RESET}")
+                    print(f"  {RED}{old_line}{RESET}")
+                else:
+                    # Changed - highlight the differences
+                    print(f"{BOLD}~ [{fileid}] {key}{RESET}")
+
+                    # Split into columns and show diff for each changed column
+                    old_parts = old_line.split('\t')
+                    new_parts = new_line.split('\t')
+
+                    for i, col in enumerate(columns):
+                        old_val = old_parts[i] if i < len(old_parts) else ''
+                        new_val = new_parts[i] if i < len(new_parts) else ''
+
+                        if old_val != new_val:
+                            # Unescape for display
+                            old_val_display = unescape_value(old_val)
+                            new_val_display = unescape_value(new_val)
+
+                            # Highlight character-level differences
+                            matcher = SequenceMatcher(None, old_val_display, new_val_display)
+                            old_highlighted, new_highlighted = [], []
+
+                            for op, i1, i2, j1, j2 in matcher.get_opcodes():
+                                if op == 'equal':
+                                    old_highlighted.append(old_val_display[i1:i2])
+                                    new_highlighted.append(new_val_display[j1:j2])
+                                elif op == 'delete':
+                                    old_highlighted.append(f"{RED}{old_val_display[i1:i2]}{RESET}")
+                                elif op == 'insert':
+                                    new_highlighted.append(f"{GREEN}{new_val_display[j1:j2]}{RESET}")
+                                elif op == 'replace':
+                                    old_highlighted.append(f"{RED}{old_val_display[i1:i2]}{RESET}")
+                                    new_highlighted.append(f"{GREEN}{new_val_display[j1:j2]}{RESET}")
+
+                            # Indent multiline content
+                            old_display = ''.join(old_highlighted).replace('\n', '\n      ')
+                            new_display = ''.join(new_highlighted).replace('\n', '\n      ')
+
+                            print(f"  {DIM}{col}:{RESET}")
+                            print(f"    {RED}-{RESET} {old_display}")
+                            print(f"    {GREEN}+{RESET} {new_display}")
+
+                print()  # Blank line between entries
+            else:
+                # Machine-readable TSV diff output
+                # Format: +/-/~ <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
+                if old_line is None:
+                    print(f"+\t{new_line}")
+                elif new_line is None:
+                    print(f"-\t{old_line}")
+                else:
+                    print(f"-\t{old_line}")
+                    print(f"+\t{new_line}")
+
+        if not has_changes:
+            if args.pretty:
+                print("No changes.")
+            exit(0)
+        else:
+            exit(1)
     else:
-        # TSV output
-        print('\t'.join(columns))
-        for row in rows:
-            row_values = [escape_cell(row.get(col, '')) for col in columns]
-            print('\t'.join(row_values))
+        # Normal output
+        output = generate_inspect_output(columns, args.sortcol)
+        if args.pretty:
+            # Human-readable output
+            lines = output.splitlines()
+            for line in lines[1:]:  # Skip header
+                parts = line.split('\t')
+                fileid = parts[0] if len(parts) > 0 else ''
+                key = parts[1] if len(parts) > 1 else ''
+                print_row_pretty(fileid, key, columns, parts)
+                print()  # Blank line between entries
+        else:
+            # TSV output
+            print(output)
 
 
 def cmd_edit(args):
@@ -468,7 +664,7 @@ def cmd_edit(args):
     # Find the string
     strings = content.get('strings', {})
     if base_key not in strings:
-        print(f"Error: Key '{base_key}' not found in {args.fileid}")
+        print(f"Error: Key '{base_key}' not found in {fileid}")
         exit(1)
 
     string_info = strings[base_key]
@@ -557,6 +753,7 @@ def main():
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
             inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "tr_state,fileid,key,en,tr"). Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified.')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
+            inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             inspect_parser.set_defaults(func=cmd_inspect)
 
             # edit command
