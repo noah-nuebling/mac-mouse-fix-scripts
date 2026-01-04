@@ -229,8 +229,14 @@ def main():
     # Extract run.py args
     run_args   = []
     argv_other = []
-    try:    spliti = sys.argv.index('--')
-    except: spliti = None
+    
+    spliti = None
+    for i in range(len(sys.argv)):
+        if sys.argv[i] == '--': 
+            spliti = i; break
+        if not sys.argv[i].startswith('--'):
+            spliti = None; break
+
     if spliti: # The args before `--` are for run.py
         run_args   = sys.argv[1:spliti]
         argv_other = [sys.argv[0]] + sys.argv[spliti+1:] # [Jul 2025] argv[0] isn't needed but it makes argv_other exactly match the "else" case.
