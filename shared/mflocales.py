@@ -454,7 +454,20 @@ def find_xcstrings_files(repo_root):
     repo_name = os.path.basename(os.path.abspath(repo_root))
     assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website']
 
-    paths = glob.glob(os.path.normpath(repo_root + '/**/*.xcstrings'), recursive=True)
+    # [Jan 2026] (By Claude) Use git ls-files instead of glob.glob() as a performance optimization
+    #   This respects .gitignore and only searches tracked files, avoiding slow traversal of
+    #   large ignored directories like node_modules (18k+ files in website repo)
+    import subprocess
+    result = subprocess.run(
+        ['git', 'ls-files', '*.xcstrings', '**/*.xcstrings'],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    # Convert relative paths to absolute paths
+    paths = [os.path.join(repo_root, p.strip()) for p in result.stdout.splitlines() if p.strip()]
+
     paths = [p for p in paths if os.path.relpath(p, repo_root) not in xcstrings_blacklist[repo_name]]
     return paths
 
