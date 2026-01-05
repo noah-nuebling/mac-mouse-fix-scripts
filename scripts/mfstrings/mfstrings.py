@@ -754,37 +754,20 @@ def cmd_edit(args):
         print(f"  state: {args.state}")
 
 def cmd_list_files(_args):
-    
+
     # Find files
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
     if not xcstrings__ids_to_paths:
         print("No .xcstrings files found.")
         return
 
-    # Find number of strings in each file
-    xcstrings__ids_to_countstrs = {}
-    if 1:
-        xcstrings__ids_to_counts = {}
-        xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
-        for fileid in xcstrings__ids_to_paths:
-            xcstrings_obj = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
-            for key in mfkeypath(xcstrings_obj, 'strings'):
-                if mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False: continue
-                xcstrings__ids_to_counts[fileid] = xcstrings__ids_to_counts.get(fileid, 0) + 1
-        
-        xcstrings__ids_to_countstrs = {fileid: f"{mfkeypath(xcstrings__ids_to_counts, fileid)} strings" for fileid in xcstrings__ids_to_counts.keys()}
-
-
     # Get ljust args
-    max_id_len          = max(len(fileid) for fileid in xcstrings__ids_to_paths.keys())
-    max_countstr_len    = max(len(x) for x in xcstrings__ids_to_countstrs.values())
+    max_id_len = max(len(fileid) for fileid in xcstrings__ids_to_paths.keys())
 
     # Print result
     print(f"Found {len(xcstrings__ids_to_paths)} .xcstrings file(s):\n")
-    for fileid in xcstrings__ids_to_countstrs: # Using xcstrings__ids_to_countstrs filters the files with count 0
-        path = xcstrings__ids_to_paths[fileid]
-        countstr = xcstrings__ids_to_countstrs[fileid]
-        print(f"  {fileid.ljust(max_id_len)} {countstr.rjust(max_countstr_len)}  {os.path.normpath(path)}")
+    for fileid, path in sorted(xcstrings__ids_to_paths.items()):
+        print(f"  {fileid.ljust(max_id_len)}  ({os.path.normpath(path)})")
 
 
 def cmd_list_cols(_args):
@@ -795,6 +778,157 @@ def cmd_list_cols(_args):
     for col in columns:
         print(f"{col}")
     
+
+def cmd_progress(args):
+    """Show translation progress as a table (files × locales)."""
+
+    # Load data
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
+
+    # Filter locales
+    if args.locales != 'all':
+        requested_locales = args.locales.split(',')
+        invalid_locales = [l for l in requested_locales if l not in translation_locales]
+        if invalid_locales:
+            print(f"Error: Unknown locale(s): {', '.join(invalid_locales)}")
+            print(f"Available locales: {', '.join(sorted(translation_locales))}")
+            exit(1)
+        translation_locales = requested_locales
+
+    # Filter files
+    if args.files != 'all':
+        requested_files = args.files.split(',')
+        invalid_files = [f for f in requested_files if f not in xcstrings__ids_to_paths]
+        if invalid_files:
+            print(f"Error: Unknown file ID(s): {', '.join(invalid_files)}")
+            print(f"Available file IDs: {', '.join(sorted(xcstrings__ids_to_paths.keys()))}")
+            exit(1)
+        xcstrings__ids_to_paths = {f: xcstrings__ids_to_paths[f] for f in requested_files}
+
+    # Compute progress per file per locale
+    # Structure: {fileid: {locale: {translated: n, to_translate: n, percentage: f}}}
+    progress_data: dict[str, dict[str, dict]] = {}
+    string_counts: dict[str, int] = {}  # Track string count per file
+
+    for fileid, path in xcstrings__ids_to_paths.items():
+        xcstrings_obj = xcstrings__paths_to_objs[path]
+
+        # Skip files with no translatable strings
+        string_count = sum(1 for key in mfkeypath(xcstrings_obj, 'strings')
+                          if mfkeypath(xcstrings_obj, f'strings/{key}/shouldTranslate') != False)
+        if string_count == 0:
+            continue
+
+        string_counts[fileid] = string_count
+        file_progress = mflocales.get_localization_progress([xcstrings_obj], translation_locales)
+        progress_data[fileid] = file_progress
+
+    # Compute totals per locale (across all files)
+    totals_per_locale: dict[str, dict] = {}
+    for locale in translation_locales:
+        total_translated = sum(progress_data[fid][locale]['translated'] for fid in progress_data)
+        total_to_translate = sum(progress_data[fid][locale]['to_translate'] for fid in progress_data)
+        totals_per_locale[locale] = {
+            'translated': total_translated,
+            'to_translate': total_to_translate,
+            'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
+        }
+
+    # Compute totals per file (across all locales)
+    totals_per_file: dict[str, dict] = {}
+    for fileid in progress_data:
+        total_translated = sum(progress_data[fileid][loc]['translated'] for loc in translation_locales)
+        total_to_translate = sum(progress_data[fileid][loc]['to_translate'] for loc in translation_locales)
+        totals_per_file[fileid] = {
+            'translated': total_translated,
+            'to_translate': total_to_translate,
+            'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
+        }
+
+    # Compute grand total
+    grand_translated = sum(totals_per_locale[loc]['translated'] for loc in translation_locales)
+    grand_to_translate = sum(totals_per_locale[loc]['to_translate'] for loc in translation_locales)
+    grand_percentage = grand_translated / grand_to_translate if grand_to_translate > 0 else 0.0
+
+    # Format percentage for display
+    def fmt_pct(pct: float) -> str:
+        if pct == 1.0:
+            return '100%'
+        elif pct == 0.0:
+            return '0%'
+        else:
+            return f'{pct * 100:.0f}%'
+
+    # Build the table
+    # Columns: fileid | strings | locale1 | locale2 | ... | total
+    # Rows: file1, file2, ..., TOTAL
+
+    sorted_fileids = sorted(progress_data.keys())
+    total_strings = sum(string_counts.values())
+
+    # Build column headers
+    columns = ['fileid', 'strings'] + translation_locales + ['total']
+
+    if not args.pretty:
+        # TSV output
+        print('\t'.join(columns))
+
+        for fileid in sorted_fileids:
+            row = [fileid, str(string_counts[fileid])]
+            for locale in translation_locales:
+                row.append(fmt_pct(progress_data[fileid][locale]['percentage']))
+            row.append(fmt_pct(totals_per_file[fileid]['percentage']))
+            print('\t'.join(row))
+
+        # Totals row
+        totals_row = ['TOTAL', str(total_strings)]
+        for locale in translation_locales:
+            totals_row.append(fmt_pct(totals_per_locale[locale]['percentage']))
+        totals_row.append(fmt_pct(grand_percentage))
+        print('\t'.join(totals_row))
+
+    else:
+        # Pretty output
+        file_col_width = max(len('fileid'), max(len(fid) for fid in sorted_fileids), len('TOTAL'))
+        strings_col_width = max(len('strings'), len(str(total_strings)))
+        locale_col_width = max(5, max(len(loc) for loc in translation_locales))
+
+        # Print header
+        header = f"{'fileid'.ljust(file_col_width)}"
+        header += f"  {'strings'.rjust(strings_col_width)}"
+        for locale in translation_locales:
+            header += f"  {locale.rjust(locale_col_width)}"
+        header += f"  {'total'.rjust(locale_col_width)}"
+        print(header)
+        print('-' * len(header))
+
+        # Print rows for each file
+        for fileid in sorted_fileids:
+            row = f"{fileid.ljust(file_col_width)}"
+            row += f"  {str(string_counts[fileid]).rjust(strings_col_width)}"
+            for locale in translation_locales:
+                pct = progress_data[fileid][locale]['percentage']
+                row += f"  {fmt_pct(pct).rjust(locale_col_width)}"
+            file_pct = totals_per_file[fileid]['percentage']
+            row += f"  {fmt_pct(file_pct).rjust(locale_col_width)}"
+            print(row)
+
+        # Print totals row
+        print('-' * len(header))
+        totals_row = f"{'TOTAL'.ljust(file_col_width)}"
+        totals_row += f"  {str(total_strings).rjust(strings_col_width)}"
+        for locale in translation_locales:
+            pct = totals_per_locale[locale]['percentage']
+            totals_row += f"  {fmt_pct(pct).rjust(locale_col_width)}"
+        totals_row += f"  {fmt_pct(grand_percentage).rjust(locale_col_width)}"
+        print(totals_row)
+
+        # Print summary
+        print()
+        print(f"Overall: {grand_translated}/{grand_to_translate} strings translated ({fmt_pct(grand_percentage)})")
+
 
 def cmd_delete_locale(args):
     """Delete all translations for a specific locale from all .xcstrings files."""
@@ -902,6 +1036,13 @@ def main():
             delete_locale_parser = subparsers.add_parser('delete-locale', help='Delete all translations for a locale. Won\'t run if any .xcstrings files have uncomitted changes.[Jan 2026]. Created for \'context debugging\' workflow [Jan 2026]')
             delete_locale_parser.add_argument('locale', type=str, help='The locale code to delete (e.g., "de", "fr", "zh-Hans")')
             delete_locale_parser.set_defaults(func=cmd_delete_locale)
+
+            # progress command
+            progress_parser = subparsers.add_parser('progress', help='Show translation progress as a table (files × locales)')
+            progress_parser.add_argument('--locales', type=str, required=True, help='Comma-separated list of locales to show, or "all" for all locales')
+            progress_parser.add_argument('--files', type=str, required=True, help='Comma-separated list of file IDs to show, or "all" for all files')
+            progress_parser.add_argument('--pretty', action='store_true', help='Human-readable output (default is TSV)')
+            progress_parser.set_defaults(func=cmd_progress)
 
         # Parse and execute
         args = parser.parse_args()
