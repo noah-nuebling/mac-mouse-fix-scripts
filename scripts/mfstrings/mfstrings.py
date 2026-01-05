@@ -103,16 +103,9 @@ def available_columns_for_locales(locales: list[str]):
 
     return all_columns
 
-def xcstrings_locales(xcstrings_objs: list[dict]):
-
-    # Collect locales from xcstrings files.
-    all_locales: set[str] = set()
-    for xcstrings_obj in xcstrings_objs:
-        for key in mfkeypath(xcstrings_obj, 'strings'):
-            all_locales.update(list(mfkeypath(xcstrings_obj, f"strings/{key}/localizations").keys()))
-
-    # Sort locales (en first, then alphabetically)
-    return sorted(all_locales, key=lambda l: (l != 'en', l))
+def project_locales():
+    development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
+    return [development_locale] + translation_locales
 
 def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | None = None) -> dict[str, dict]:
     """
@@ -188,7 +181,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
         xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
 
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref)
-    locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
+    locales = project_locales()
 
     # Determine which locales are being requested (for plural variant union)
     requested_locales = ['en']  # Always include 'en'
@@ -477,7 +470,7 @@ def cmd_inspect(args):
     # Load data (for validation and help text)
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
-    locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
+    locales = project_locales()
     all_columns = available_columns_for_locales(locales)
 
     def print_help_and_exit(err): # TODO: Unify the way we print help / input errors [Jan 2026]
@@ -549,7 +542,7 @@ def cmd_inspect(args):
         
         if not args.pretty: 
             print(output)
-        else:               # Human-readable output
+        else: 
             lines = output.split('\n')
             row_counter = 0
             for line in lines[1:]:  # Skip header
@@ -564,7 +557,7 @@ def cmd_inspect(args):
 
     else: # --diff output
         
-        # Validate --diff
+        # Validate --cols
         if args.diff:
             if 'key' not in columns or 'fileid' not in columns:
                 print(f"Error: --diff needs key and fileid columns to be present.") # Improvement idea: Could run the diffing logic with 'key' and 'fileid' present and then strip them later if the user doesn't want to see them.
@@ -577,7 +570,7 @@ def cmd_inspect(args):
         lines_head     = output_head.split('\n')
         lines_worktree = output_worktree.split('\n')
 
-        def get_lineid(line: str) -> str: # Return tuple of (lineid, line) || lineid tells us which lines to compare.
+        def get_lineid(line: str) -> str: # Return tuple of (lineid, line) || lineid tells us which lines to compare for the diff.
             
             parts = line.split('\t')
 
@@ -796,9 +789,7 @@ def cmd_list_files(_args):
 
 def cmd_list_cols(_args):
 
-    xcstrings_paths = list(find_xcstrings__ids_to_paths().values())
-    xcstrings_objs  = list(load_xcstrings__paths_to_objs(xcstrings_paths).values())
-    locales         = xcstrings_locales(xcstrings_objs)
+    locales         = project_locales()
     columns         = available_columns_for_locales(locales)
 
     for col in columns:
@@ -831,7 +822,7 @@ def cmd_delete_locale(args):
     # Validate locale exists
     xcstrings__ids_to_paths     = find_xcstrings__ids_to_paths()
     xcstrings__paths_to_objs    = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
-    locales                     = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
+    locales                     = project_locales()
     
     if locale not in locales:
         print(f"Error: Locale '{locale}' not found in any .xcstrings file.")
