@@ -12,6 +12,8 @@ import sys
 from difflib import SequenceMatcher
 from functools import cmp_to_key
 
+from pathlib import Path
+
 import mfobjc
 import mflocales
 import mfutils
@@ -33,21 +35,18 @@ DIM = '\033[2m'
 # Helpers
 #
 
-def get_all_xcstrings_files() -> list[str]:
-    """Get all .xcstrings files from both mac-mouse-fix and mac-mouse-fix-website repos."""
-    main_files = mflocales.find_xcstrings_files('.')
-    website_files = mflocales.find_xcstrings_files(website_repo)
-    all_files = main_files + website_files
-    all_files = sorted(all_files)
 
-    return all_files
+def find_xcstrings__ids_to_paths() -> dict[str, str]:
+    """
+    Returns {fileid -> path} map
+    """
 
-def get_all_xcstrings_files_with_ids() -> list[tuple[str, str]]:
-    """
-    Get all .xcstrings files with short identifiers.
-    Returns list of (fileid, path) tuples.
-    """
-    paths = get_all_xcstrings_files()
+    # Get all .xcstrings file paths from both mac-mouse-fix and mac-mouse-fix-website repos.
+    paths = []
+    if 1:
+        main_files = mflocales.find_xcstrings_files('.')
+        website_files = mflocales.find_xcstrings_files(website_repo)
+        paths = main_files + website_files
 
     # Count occurrences of each base name
     name_counts: dict[str, int] = {}
@@ -57,7 +56,7 @@ def get_all_xcstrings_files_with_ids() -> list[tuple[str, str]]:
 
     # Assign unique ids
     name_seen: dict[str, int] = {}
-    result: list[tuple[str, str]] = []
+    result: dict[str, str] = {}
 
     for path in paths:
         name = os.path.splitext(os.path.basename(path))[0]
@@ -70,7 +69,7 @@ def get_all_xcstrings_files_with_ids() -> list[tuple[str, str]]:
         else:
             fileid = name
 
-        result.append((fileid, path))
+        result[fileid] = path
 
     return result
 
@@ -80,10 +79,11 @@ def get_xcstrings_path_by_fileid(fileid: str) -> str | None:
     Get the file path for a given fileid.
     Returns None if not found.
     """
-    files = get_all_xcstrings_files_with_ids()
-    for fid, path in files:
+    
+    for fid, path in find_xcstrings__ids_to_paths().items():
         if fid == fileid:
             return path
+    
     return None
 
 
@@ -139,39 +139,12 @@ def get_file_content_at_ref(path: str, ref: str) -> str:
     return mfutils.runclt(f'git show {ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
 
 
-def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], list[str], list[tuple[str, dict]]]:
-    """
-    Load all xcstrings files and return available columns, locales, and file data.
-    Returns (all_columns, locales, file_data) where file_data is list of (fileid, content).
-
-    If git_ref is provided, loads file contents from that git ref instead of the working directory.
-    """
-    files = get_all_xcstrings_files_with_ids()
-
-    all_locales: set[str] = set()
-    file_data: list[tuple[str, dict]] = []
-
-    for fileid, path in files:
-        if git_ref:
-            content_str = get_file_content_at_ref(path, git_ref)
-            if content_str is None:
-                continue  # File doesn't exist at this ref
-            content = json.loads(content_str)
-        else:
-            with open(path, 'r', encoding='utf-8') as f:
-                content = json.load(f)
-
-        file_data.append((fileid, content))
-
-        for key, string_info in content.get('strings', {}).items():
-            localizations = string_info.get('localizations', {})
-            all_locales.update(localizations.keys())
-
-    # Sort locales (en first, then alphabetically)
-    locales = sorted(all_locales, key=lambda l: (l != 'en', l))
-
+def available_columns_for_locales(locales: list[str]):
+    
     # Build all available columns [Jan 2026]
-    # Order: key first (for --pretty readability), then metadata, then translations, then states at the end
+    #   Pass in a union of locales from all xcstrings files [Jan 2026]
+    #   Order: key first (for --pretty readability), then metadata, then translations, then states at the end
+    
     all_columns = ['key', 'fileid', 'comment', 'en']
 
     # Add translation columns (without state)
@@ -186,36 +159,34 @@ def get_all_columns_and_locales(git_ref: str | None = None) -> tuple[list[str], 
             continue
         all_columns.append(f'state:{locale}')
 
-    return all_columns, locales, file_data
+    return all_columns
 
-#
-# Commands
-#
+def xcstrings_locales(xcstrings_objs: list[dict]):
 
-def cmd_list_files(_args):
-    files = get_all_xcstrings_files_with_ids()
+    # Collect locales from xcstrings files.
+    all_locales: set[str] = set()
+    for xcstrings_obj in xcstrings_objs:
+        for key in mfutils.mfkeypath(xcstrings_obj, 'strings'):
+            all_locales.update(mfutils.mfkeypath(xcstrings_obj, f"strings/{key}/localizations").keys())
 
-    if not files:
-        print("No .xcstrings files found.")
-        return
+    # Sort locales (en first, then alphabetically)
+    return sorted(all_locales, key=lambda l: (l != 'en', l))
 
-    max_id_len = max(len(fileid) for fileid, _ in files)
+def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | None = None) -> dict[str, dict]:
+    """
+    Returns {xcstrings_path: xcstrings_obj}
 
-    print(f"Found {len(files)} .xcstrings file(s):\n")
-    for fileid, path in files:
-        print(f"  {fileid.ljust(max_id_len)}  ({path})")
+    If git_ref is provided, loads file contents from that git ref instead of the working directory.
+    """
+    
+    result: dict[str, dict] = {}
 
+    for path in xcstrings_paths:
+        if git_ref: content_str = get_file_content_at_ref(path, git_ref)
+        else:       content_str = Path(path).read_text()
+        result[path] = json.loads(content_str)
 
-def cmd_list_cols(_args):
-    all_columns, _, _ = get_all_columns_and_locales()
-
-    if not all_columns:
-        print("No .xcstrings files found.")
-        return
-
-    print("Available columns:\n")
-    for col in all_columns:
-        print(f"  {col}")
+    return result
 
 
 def escape_cell(value: str) -> str:
@@ -335,22 +306,28 @@ def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | N
     If git_ref is provided, loads file contents from that git ref instead of the working directory.
     """
     # Load data
-    all_columns, locales, file_data = get_all_columns_and_locales(git_ref=git_ref)
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
 
     # Determine which locales are being requested (for plural variant union)
     requested_locales = ['en']  # Always include 'en'
-    for col in columns:
-        if col in locales and col != 'en':
-            requested_locales.append(col)
-        elif col.startswith('state:'):
-            locale = col[6:]  # Remove 'state:' prefix
-            if locale in locales and locale not in requested_locales:
-                requested_locales.append(locale)
+    if 1:
+        for col in columns:
+            if col in locales and col != 'en':
+                requested_locales.append(col)
+            elif col.startswith('state:'):
+                locale = col[6:]  # Remove 'state:' prefix
+                if locale in locales and locale not in requested_locales:
+                    requested_locales.append(locale)
 
     # Build all rows first (so we can sort)
     rows: list[dict[str, str]] = []
 
-    for fileid, content in file_data:
+    for fileid in xcstrings__ids_to_paths:
+        
+        content = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
+
         strings = content.get('strings', {})
 
         for key in strings.keys():
@@ -595,7 +572,10 @@ def cmd_inspect(args):
     """Inspect all string units from all .xcstrings files."""
 
     # Load data (for validation and help text)
-    all_columns, locales, file_data = get_all_columns_and_locales()
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
+    all_columns = available_columns_for_locales(locales)
 
     def print_help_and_exit(err):
         print(
@@ -622,7 +602,7 @@ def cmd_inspect(args):
         )
         exit(1)
 
-    if not file_data:
+    if not xcstrings__paths_to_objs:
         print_help_and_exit("No .xcstrings files found.")
 
     # Determine which columns to show
@@ -862,6 +842,50 @@ def file_is_dirty(path: str) -> bool:
     repo_root = repo_root_for_path(path)
     return mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root) # Check if file has changes (staged or unstaged)
 
+def cmd_list_files(_args):
+    
+    # Find files
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+    if not xcstrings__ids_to_paths:
+        print("No .xcstrings files found.")
+        return
+
+    # Find number of strings in each file
+    xcstrings__ids_to_countstrs = {}
+    if 1:
+        xcstrings__ids_to_counts = {}
+        xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+        for fileid in xcstrings__ids_to_paths:
+            xcstrings_obj = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
+            for key in mfutils.mfkeypath(xcstrings_obj, 'strings'):
+                if mfutils.mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False: continue
+                xcstrings__ids_to_counts[fileid] = xcstrings__ids_to_counts.get(fileid, 0) + 1
+        
+        xcstrings__ids_to_countstrs = {fileid: f"{mfutils.mfkeypath(xcstrings__ids_to_counts, fileid)} strings" for fileid in xcstrings__ids_to_counts.keys()}
+
+
+    # Get ljust args
+    max_id_len          = max(len(fileid) for fileid in xcstrings__ids_to_paths.keys())
+    max_countstr_len    = max(len(x) for x in xcstrings__ids_to_countstrs.values())
+
+    # Print result
+    print(f"Found {len(xcstrings__ids_to_paths)} .xcstrings file(s):\n")
+    for fileid in xcstrings__ids_to_countstrs: # Using xcstrings__ids_to_countstrs filters the files with count 0
+        path = xcstrings__ids_to_paths[fileid]
+        countstr = xcstrings__ids_to_countstrs[fileid]
+        print(f"  {fileid.ljust(max_id_len)} {countstr.rjust(max_countstr_len)}  {os.path.normpath(path)}")
+
+
+def cmd_list_cols(_args):
+
+    xcstrings_paths = list(find_xcstrings__ids_to_paths().values())
+    xcstrings_objs  = list(load_xcstrings__paths_to_objs(xcstrings_paths).values())
+    locales         = xcstrings_locales(xcstrings_objs)
+    columns         = available_columns_for_locales(locales)
+
+    for col in columns:
+        print(f"{col}")
+    
 
 def cmd_delete_locale(args):
     """Delete all translations for a specific locale from all .xcstrings files."""
@@ -869,10 +893,10 @@ def cmd_delete_locale(args):
     locale = args.locale
 
     # Get all files first (needed for both safety check and processing)
-    files = get_all_xcstrings_files_with_ids()
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
 
     # Safety check: abort if any .xcstrings files have uncommitted changes
-    dirty_files = [f[1] for f in files if file_is_dirty(f[1])]
+    dirty_files = [f[1] for f in xcstrings__ids_to_paths if file_is_dirty(f[1])]
     if dirty_files:
         print("Error: Cannot delete locale while .xcstrings files have uncommitted changes.")
         print(f"Dirty files: [\n    {'\n    '.join([os.path.normpath(p) for p in dirty_files])}\n]")
@@ -880,7 +904,10 @@ def cmd_delete_locale(args):
         exit(1)
 
     # Validate locale exists
-    _, locales, _ = get_all_columns_and_locales()
+    xcstrings__ids_to_paths     = find_xcstrings__ids_to_paths()
+    xcstrings__paths_to_objs    = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    locales                     = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
+    
     if locale not in locales:
         print(f"Error: Locale '{locale}' not found in any .xcstrings file.")
         print(f"Available locales: {', '.join(sorted(locales))}")
@@ -891,9 +918,8 @@ def cmd_delete_locale(args):
         exit(1)
     total_deleted = 0
 
-    for fileid, path in files:
-        with open(path, 'r', encoding='utf-8') as f:
-            content = json.load(f)
+    for fileid, path in xcstrings__ids_to_paths.items():
+        content = xcstrings__paths_to_objs[path]
 
         strings = content.get('strings', {})
         file_deleted = 0
@@ -910,7 +936,7 @@ def cmd_delete_locale(args):
             total_deleted += file_deleted
 
     if total_deleted > 0:
-        print(f"\nDeleted {total_deleted} '{locale}' entries across {len(files)} files.")
+        print(f"\nDeleted {total_deleted} '{locale}' entries across {len(xcstrings__ids_to_paths)} files.")
     else:
         print(f"No '{locale}' entries found.")
 
