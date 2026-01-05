@@ -286,17 +286,11 @@ def get_localization_progress(xcstring_objects: list[dict], translation_locales:
                     #   (Matches mf-xcloc-editor [Dec 2025]
                     if (1):
 
-                        def _mfkeypath(dict, kp): # Local helper [Dec 2025]
-                            result = dict
-                            for key in kp.split('/'):
-                                result = result.get(key, {})
-                            return result
-
-                        quantifiers = _mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys() # quantifiers are strings like 'one', 'few', 'many' [Dec 2025]
+                        quantifiers = mfutils.mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys() # quantifiers are strings like 'one', 'few', 'many' [Dec 2025]
                         if len(quantifiers): # is a pluralizable string
                             combined_state = 'translated'
                             for quantifier in quantifiers:
-                                variant_state = _mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{quantifier}/stringUnit/state")
+                                variant_state = mfutils.mfkeypath(xcstring_object, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{quantifier}/stringUnit/state")
                                 if variant_state != 'translated':
                                     combined_state = 'needs_review' # IFF all plural variants are 'translated', we consider the top level string 'translated', otherwise we consider it 'needs_review'
                                     break
@@ -1062,7 +1056,7 @@ def get_localizable_strings_from_website_source_code(source_code: str):
     \s*?\)                                                      # Match closing parenthesis
     """
 
-    """
+    r"""
     On VSCode search:
 
         Steps to transform the regex for use in **VSCode Search**:

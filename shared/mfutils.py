@@ -33,6 +33,12 @@ from typing import List, Union
 # General utility functions that don't belong together
 #
 
+def mfkeypath(dict, kp): # Query a dict with/a/keypath [Jan 2026]
+    result = dict
+    for key in kp.split('/'):
+        result = result.get(key, {})
+    return result
+
 def exc_desc(e: Exception) -> str:
     return f"{type(e).__name__}({e})"
 
