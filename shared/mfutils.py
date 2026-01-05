@@ -357,7 +357,7 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
     
 
     """
-    Run a (c)ommand-(l)ine-(t)ool
+    (Run) a (c)ommand-(l)ine-(t)ool
     Use this instead of subprocess
 
     Examples: [Jan 2026]
@@ -372,25 +372,20 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
 
         runclt('cat myfile.txt > output.txt')                                           # DOESNT WORK -> You can't do shell stuff. We just mimic shell syntax using shlex.split. We decided to do that because shell=True is a "security problem" (although I don't know if that matters here) [Jan 2026]
 
-    Uncertainties:
-        - command_arg is a *arg. I forgot why. I think it's so we don't set cwd= print_live_output= etc accidentally, when we try to pass an args list but forget the [brackets] (?) Our comment just says its 'syntax sugar'.  [Jan 2026]
-
     """
 
     # Preprocess `command`
+    
+    if len(command_arg) > 1: assert False, f"Passed multiple positional args ({command_arg}). Instead, pass a single string or list."
+    
     commands: list[str] = []
-    if len(command_arg) > 1:
-        commands = list(command_arg) # Syntax sugar for the `is list` case [Oct 2025]
-    else:
-        if type(command_arg[0]) is list:
-            commands = command_arg[0]
-        elif type(command_arg[0]) is str:
-            commands = shlex.split(command_arg[0])
+    if   type(command_arg[0]) is list:  commands = command_arg[0]
+    elif type(command_arg[0]) is str:   commands = shlex.split(command_arg[0])
 
     command_name = commands[0]
     
     # Warn against footguns
-    assert commands[0] != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
+    assert commands_name != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
     
     # Run process and collect output
     stdout = ""
@@ -398,24 +393,24 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
     returncode = None
     with subprocess.Popen(commands, cwd=cwd, shell=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
         
-        while True:
+        while 1:
             
             # Handle stdout
             if print_live_output: print(f"{command_name}: stdout {{", end='\n') # Print stdout header
-            while True:
-                stdout_line = proc.stdout.readline() # Read stdout
-                if stdout_line == None or len(stdout_line) == 0: break # Break
-                stdout += f"\n{stdout_line}" # Store stdout
-                if print_live_output: print(f"  > {stdout_line}", end='') # Print stdout body
+            while 1:
+                stdout_line = proc.stdout.readline() # Read stdout line
+                if not stdout_line: break # Break
+                stdout += f"\n{stdout_line}" # Store stdout line
+                if print_live_output: print(f"  > {stdout_line}", end='') # Print stdout line
             if print_live_output: print(f"}} endstdout: {command_name}", end='\n') # Print stdout footer
             
             # Handle stderr
             if print_live_output: print(f"{command_name}: stderr {{", end='\n') # Print stderr header
-            while True:    
-                stderr_line = proc.stderr.readline() # Read stderr
-                if stderr_line == None or len(stderr_line) == 0: break # Break
-                stderr += f"\n{stderr_line}" # Store stderr
-                if print_live_output: print(f"  > {stderr_line}", end='') # Print stderr body
+            while 1:    
+                stderr_line = proc.stderr.readline() # Read stderr line
+                if not stderr_line: break # Break
+                stderr += f"\n{stderr_line}" # Store stderr line
+                if print_live_output: print(f"  > {stderr_line}", end='') # Print stderr line
             if print_live_output: print(f"}} endstderr: {command_name}", end='\n') # Print stderr footer
             
             # Check if subproc has finished
@@ -429,7 +424,7 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
 
     # Return
     if not manually_handle_errors:
-        assert returncode == 0 and stderr == '', f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr) }"
+        assert returncode == 0 and stderr == '', f"Command \n\"{shlex.join(commands)}\"\n was run in cwd {f'"cwd"' if cwd else f'"{os.getcwd()}" (implicit)'} and failed with result:\n{ clt_result_description(returncode, stdout, stderr)}.\n\nPass manually_handle_errors=True to avoid this error. [Jan 2026]"
         return stdout
     else:
         return stdout, returncode, stderr
