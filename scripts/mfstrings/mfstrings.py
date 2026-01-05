@@ -299,7 +299,7 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str | None, fileid_filter: str, git_ref: str | None = None) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None) -> str:
     """
     Generate inspect output as TSV string.
 
@@ -408,10 +408,11 @@ def inspect_output_tsv(columns: list[str], sortcol: str | None, fileid_filter: s
 
     # Sort
     def mfcmp(a, b):
-        if sortcol:  # Sort by --sortcol
-            if (x := mfobjc.NSString_localizedStandardCompare(a[sortcol], b[sortcol])): return x
-
-        for col in columns:  # Sort by first, second, ... column
+        # Primary sort by --sortcol
+        if (x := mfobjc.NSString_localizedStandardCompare(a[sortcol], b[sortcol])): return x
+        # Secondary sort by remaining columns in order
+        for col in columns:
+            if col == sortcol: continue
             if (x := mfobjc.NSString_localizedStandardCompare(a[col], b[col])): return x
         return 0
     rows.sort(key=cmp_to_key(mfcmp))
@@ -592,7 +593,7 @@ def cmd_inspect(args):
             f"\n"
             f"\n{err}"
             f"\n"
-            f"\nUsage: ./run mfstrings inspect --fileid <fileid> --cols <columns> [--sortcol <column>] [--pretty] [--diff]"
+            f"\nUsage: ./run mfstrings inspect --fileid <fileid> --cols <columns> --sortcol <column> [--pretty] [--diff]"
             f"\n"
             f"\nAvailable file IDs: {', '.join(xcstrings__ids_to_paths.keys())}"
             f"\n"
@@ -600,11 +601,9 @@ def cmd_inspect(args):
             f"\n  - {'\n  - '.join(all_columns)}"
             f"\n"
             f"\nExample:"
-            f"\n  ./run mfstrings inspect --fileid all --cols fileid,key,comment,en,state:tr,tr --sortcol comment"
-            f"\n  ./run mfstrings inspect --fileid Localizable --cols key,en,tr,state:tr"
-            f"\n  ./run mfstrings inspect --fileid all --cols all  # Include all files and columns"
-            f"\n"
-            f"\nOutput is sorted by the first column unless --sortcol is specified."
+            f"\n  ./run mfstrings inspect --fileid all --cols fileid,key,comment,en,state:tr,tr --sortcol key"
+            f"\n  ./run mfstrings inspect --fileid Localizable --cols key,en,tr,state:tr --sortcol key"
+            f"\n  ./run mfstrings inspect --fileid all --cols all --sortcol key"
             f"\n"
             f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
             f"\n"
@@ -621,10 +620,6 @@ def cmd_inspect(args):
     if args.fileid != 'all' and args.fileid not in xcstrings__ids_to_paths:
         print_help_and_exit(f"Unknown fileid: '{args.fileid}'")
 
-    # Determine which columns to show
-    if not args.cols:
-        print_help_and_exit("Missing --cols arg")
-
     # Handle 'all' keyword to include all columns [Jan 2026]
     if args.cols == 'all':
         columns = all_columns
@@ -637,9 +632,8 @@ def cmd_inspect(args):
                 print_help_and_exit(f"Unknown column: {col}")
 
     # Validate --sortcol
-    if args.sortcol:
-        if args.sortcol not in columns:
-            print_help_and_exit(f"Column '{args.sortcol}' which was passed to --sortcol, was not found in columns passed to --col: {columns}")
+    if args.sortcol not in columns:
+        print_help_and_exit(f"Column '{args.sortcol}' which was passed to --sortcol, was not found in columns passed to --cols: {columns}")
 
     # Validate --grep
     grep_pattern = None
@@ -984,10 +978,10 @@ def main():
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect string units from .xcstrings files (TSV output)')
             inspect_parser.add_argument('--fileid', type=str, required=True, help='File ID to inspect (e.g., "Localizable", "Main"). Use "all" to inspect all files. Run "./run mfstrings list-files" to see available file IDs.')
-            inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
-            inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified. Cells in the state:LOCALE are either "translated" or "needs_review".')
-            inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
+            inspect_parser.add_argument('--cols', type=str, required=True, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Cells in the state:LOCALE columns are either "translated" or "needs_review".')
+            inspect_parser.add_argument('--sortcol', type=str, required=True, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
+            inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
             inspect_parser.set_defaults(func=cmd_inspect)
 
