@@ -124,18 +124,18 @@ def parse_string_path(path: str) -> tuple[str, str, str]:
 
     return (fileid, key, locale)
 
+def repo_root_for_path(filepath: str) -> str: # Determine which repo this file belongs to
+    if os.path.normpath(filepath).startswith('../mac-mouse-fix-website'):
+        return '../mac-mouse-fix-website'
+    else:
+        return '.'
 
 def get_file_content_at_ref(path: str, ref: str) -> str:
     """
     Get file content at a specific git ref using `git show`.
     """
 
-    repo_root = None
-    if os.path.normpath(path).startswith('../mac-mouse-fix-website'):
-        repo_root = '../mac-mouse-fix-website'
-    else:
-        repo_root = '.'
-
+    repo_root = repo_root_for_path(path)
     return mfutils.runclt(f'git show {ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
 
 
@@ -858,6 +858,62 @@ def cmd_edit(args):
     if args.state:
         print(f"  state: {args.state}")
 
+def file_is_dirty(path: str) -> bool:
+    repo_root = repo_root_for_path(path)
+    return mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root) # Check if file has changes (staged or unstaged)
+
+
+def cmd_delete_locale(args):
+    """Delete all translations for a specific locale from all .xcstrings files."""
+
+    locale = args.locale
+
+    # Get all files first (needed for both safety check and processing)
+    files = get_all_xcstrings_files_with_ids()
+
+    # Safety check: abort if any .xcstrings files have uncommitted changes
+    dirty_files = [f[1] for f in files if file_is_dirty(f[1])]
+    if dirty_files:
+        print("Error: Cannot delete locale while .xcstrings files have uncommitted changes.")
+        print(f"Dirty files: [\n    {'\n    '.join([os.path.normpath(p) for p in dirty_files])}\n]")
+        print("\nCommit or stash your changes first.")
+        exit(1)
+
+    # Validate locale exists
+    _, locales, _ = get_all_columns_and_locales()
+    if locale not in locales:
+        print(f"Error: Locale '{locale}' not found in any .xcstrings file.")
+        print(f"Available locales: {', '.join(sorted(locales))}")
+        exit(1)
+
+    if locale == 'en':
+        print("Error: Cannot delete the source locale 'en'.")
+        exit(1)
+    total_deleted = 0
+
+    for fileid, path in files:
+        with open(path, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+
+        strings = content.get('strings', {})
+        file_deleted = 0
+
+        for key, string_info in strings.items():
+            localizations = string_info.get('localizations', {})
+            if locale in localizations:
+                del localizations[locale]
+                file_deleted += 1
+
+        if file_deleted > 0:
+            mfutils.write_xcstrings_file(path, content)
+            print(f"  {fileid}: deleted {file_deleted} entries")
+            total_deleted += file_deleted
+
+    if total_deleted > 0:
+        print(f"\nDeleted {total_deleted} '{locale}' entries across {len(files)} files.")
+    else:
+        print(f"No '{locale}' entries found.")
+
 
 def main():
 
@@ -898,6 +954,11 @@ def main():
             edit_parser.add_argument('--value', type=str, help='The new translation value')
             edit_parser.add_argument('--state', type=str, help='The new state: "translated" or "needs_review"')
             edit_parser.set_defaults(func=cmd_edit)
+
+            # delete-locale command
+            delete_locale_parser = subparsers.add_parser('delete-locale', help='Delete all translations for a locale. Won\'t run if any .xcstrings files have uncomitted changes.[Jan 2026]. Created for \'context debugging\' workflow [Jan 2026]')
+            delete_locale_parser.add_argument('locale', type=str, help='The locale code to delete (e.g., "de", "fr", "zh-Hans")')
+            delete_locale_parser.set_defaults(func=cmd_delete_locale)
 
         # Parse and execute
         args = parser.parse_args()
