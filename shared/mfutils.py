@@ -385,7 +385,7 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
     command_name = commands[0]
     
     # Warn against footguns
-    assert commands_name != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
+    assert command_name != 'cd', f"cd will only affect the subprocess, not the Python process. Use os.chdir() instead."
     
     # Run process and collect output
     stdout = ""
