@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import cmp_to_key
 
@@ -766,7 +767,7 @@ def cmd_list_files(_args):
 
     # Print result
     print(f"Found {len(xcstrings__ids_to_paths)} .xcstrings file(s):\n")
-    for fileid, path in sorted(xcstrings__ids_to_paths.items()):
+    for fileid, path in xcstrings__ids_to_paths.items():
         print(f"  {fileid.ljust(max_id_len)}  ({os.path.normpath(path)})")
 
 
@@ -777,14 +778,84 @@ def cmd_list_cols(_args):
 
     for col in columns:
         print(f"{col}")
-    
+
 
 def cmd_progress(args):
     """Show translation progress as a table (files × locales)."""
 
-    # Load data
+    @dataclass
+    class ProgressData:
+        """Progress data computed for a set of files and locales."""
+        per_file_locale: dict[str, dict[str, dict]]  # {fileid: {locale: {translated, to_translate, percentage}}}
+        string_counts: dict[str, int]                 # {fileid: count}
+        totals_per_locale: dict[str, dict]            # {locale: {translated, to_translate, percentage}}
+        totals_per_file: dict[str, dict]              # {fileid: {translated, to_translate, percentage}}
+        grand_translated: int
+        grand_to_translate: int
+
+        @property
+        def grand_percentage(self) -> float:
+            return self.grand_translated / self.grand_to_translate if self.grand_to_translate > 0 else 0.0
+    
+    def compute_progress_data(xcstrings__ids_to_paths: dict[str, str], translation_locales: list[str], git_ref: str | None = None) -> ProgressData:
+        """Compute translation progress for given files and locales."""
+
+        xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref)
+
+        per_file_locale: dict[str, dict[str, dict]] = {}
+        string_counts: dict[str, int] = {}
+
+        for fileid, path in xcstrings__ids_to_paths.items():
+            xcstrings_obj = xcstrings__paths_to_objs[path]
+
+            # Skip files with no translatable strings
+            string_count = sum(1 for key in mfkeypath(xcstrings_obj, 'strings')
+                            if mfkeypath(xcstrings_obj, f'strings/{key}/shouldTranslate') != False)
+            if string_count == 0:
+                continue
+
+            string_counts[fileid] = string_count
+            file_progress = mflocales.get_localization_progress([xcstrings_obj], translation_locales)
+            per_file_locale[fileid] = file_progress
+
+        # Compute totals per locale
+        totals_per_locale: dict[str, dict] = {}
+        for locale in translation_locales:
+            total_translated = sum(per_file_locale[fid][locale]['translated'] for fid in per_file_locale)
+            total_to_translate = sum(per_file_locale[fid][locale]['to_translate'] for fid in per_file_locale)
+            totals_per_locale[locale] = {
+                'translated': total_translated,
+                'to_translate': total_to_translate,
+                'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
+            }
+
+        # Compute totals per file
+        totals_per_file: dict[str, dict] = {}
+        for fileid in per_file_locale:
+            total_translated = sum(per_file_locale[fileid][loc]['translated'] for loc in translation_locales)
+            total_to_translate = sum(per_file_locale[fileid][loc]['to_translate'] for loc in translation_locales)
+            totals_per_file[fileid] = {
+                'translated': total_translated,
+                'to_translate': total_to_translate,
+                'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
+            }
+
+        # Compute grand totals
+        grand_translated = sum(totals_per_locale[loc]['translated'] for loc in translation_locales)
+        grand_to_translate = sum(totals_per_locale[loc]['to_translate'] for loc in translation_locales)
+
+        return ProgressData(
+            per_file_locale=per_file_locale,
+            string_counts=string_counts,
+            totals_per_locale=totals_per_locale,
+            totals_per_file=totals_per_file,
+            grand_translated=grand_translated,
+            grand_to_translate=grand_to_translate
+        )
+
+
+    # Load file paths and locales
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
-    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
     development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
 
     # Filter locales
@@ -807,52 +878,10 @@ def cmd_progress(args):
             exit(1)
         xcstrings__ids_to_paths = {f: xcstrings__ids_to_paths[f] for f in requested_files}
 
-    # Compute progress per file per locale
-    # Structure: {fileid: {locale: {translated: n, to_translate: n, percentage: f}}}
-    progress_data: dict[str, dict[str, dict]] = {}
-    string_counts: dict[str, int] = {}  # Track string count per file
+    # Compute progress
+    data = compute_progress_data(xcstrings__ids_to_paths, translation_locales)
 
-    for fileid, path in xcstrings__ids_to_paths.items():
-        xcstrings_obj = xcstrings__paths_to_objs[path]
-
-        # Skip files with no translatable strings
-        string_count = sum(1 for key in mfkeypath(xcstrings_obj, 'strings')
-                          if mfkeypath(xcstrings_obj, f'strings/{key}/shouldTranslate') != False)
-        if string_count == 0:
-            continue
-
-        string_counts[fileid] = string_count
-        file_progress = mflocales.get_localization_progress([xcstrings_obj], translation_locales)
-        progress_data[fileid] = file_progress
-
-    # Compute totals per locale (across all files)
-    totals_per_locale: dict[str, dict] = {}
-    for locale in translation_locales:
-        total_translated = sum(progress_data[fid][locale]['translated'] for fid in progress_data)
-        total_to_translate = sum(progress_data[fid][locale]['to_translate'] for fid in progress_data)
-        totals_per_locale[locale] = {
-            'translated': total_translated,
-            'to_translate': total_to_translate,
-            'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
-        }
-
-    # Compute totals per file (across all locales)
-    totals_per_file: dict[str, dict] = {}
-    for fileid in progress_data:
-        total_translated = sum(progress_data[fileid][loc]['translated'] for loc in translation_locales)
-        total_to_translate = sum(progress_data[fileid][loc]['to_translate'] for loc in translation_locales)
-        totals_per_file[fileid] = {
-            'translated': total_translated,
-            'to_translate': total_to_translate,
-            'percentage': total_translated / total_to_translate if total_to_translate > 0 else 0.0
-        }
-
-    # Compute grand total
-    grand_translated = sum(totals_per_locale[loc]['translated'] for loc in translation_locales)
-    grand_to_translate = sum(totals_per_locale[loc]['to_translate'] for loc in translation_locales)
-    grand_percentage = grand_translated / grand_to_translate if grand_to_translate > 0 else 0.0
-
-    # Format percentage for display
+    # Format helpers
     def fmt_pct(pct: float) -> str:
         if pct == 1.0:
             return '100%'
@@ -861,73 +890,152 @@ def cmd_progress(args):
         else:
             return f'{pct * 100:.0f}%'
 
-    # Build the table
-    # Columns: fileid | strings | locale1 | locale2 | ... | total
-    # Rows: file1, file2, ..., TOTAL
+    def fmt_diff(diff: int) -> str:
+        if diff > 0:
+            return f'+{diff}'
+        else:
+            return str(diff)
 
-    sorted_fileids = sorted(progress_data.keys())
-    total_strings = sum(string_counts.values())
-
-    # Build column headers
+    sorted_fileids = sorted(data.per_file_locale.keys())
+    total_strings = sum(data.string_counts.values())
     columns = ['fileid', 'strings'] + translation_locales + ['total']
 
-    if not args.pretty:
-        # TSV output
-        print('\t'.join(columns))
+    if args.diff:
+        # Diff mode: compare HEAD vs worktree
+        head = compute_progress_data(xcstrings__ids_to_paths, translation_locales, git_ref='HEAD')
 
-        for fileid in sorted_fileids:
-            row = [fileid, str(string_counts[fileid])]
+        # Format before→after (with optional color for pretty mode)
+        def fmt_change(old: int, new: int, color: bool = False) -> str:
+            if old == new:
+                return str(new)
+            if color:
+                if new > old:
+                    return f'{GREEN}{old}→{new}{RESET}'
+                else:
+                    return f'{RED}{old}→{new}{RESET}'
+            return f'{old}→{new}'
+
+        if not args.pretty:
+            print('\t'.join(columns))
+            for fileid in sorted_fileids:
+                row = [fileid, str(data.string_counts[fileid])]
+                for locale in translation_locales:
+                    old = head.per_file_locale.get(fileid, {}).get(locale, {}).get('translated', 0)
+                    new = data.per_file_locale[fileid][locale]['translated']
+                    row.append(fmt_change(old, new))
+                old_total = head.totals_per_file.get(fileid, {}).get('translated', 0)
+                new_total = data.totals_per_file[fileid]['translated']
+                row.append(fmt_change(old_total, new_total))
+                print('\t'.join(row))
+            totals_row = ['TOTAL', str(total_strings)]
             for locale in translation_locales:
-                row.append(fmt_pct(progress_data[fileid][locale]['percentage']))
-            row.append(fmt_pct(totals_per_file[fileid]['percentage']))
-            print('\t'.join(row))
+                old = head.totals_per_locale.get(locale, {}).get('translated', 0)
+                new = data.totals_per_locale[locale]['translated']
+                totals_row.append(fmt_change(old, new))
+            totals_row.append(fmt_change(head.grand_translated, data.grand_translated))
+            print('\t'.join(totals_row))
+        else:
+            # Compute max width needed for before→after values (without color codes)
+            max_change_len = max(5, max(len(loc) for loc in translation_locales))
+            for fileid in sorted_fileids:
+                for locale in translation_locales:
+                    old = head.per_file_locale.get(fileid, {}).get(locale, {}).get('translated', 0)
+                    new = data.per_file_locale[fileid][locale]['translated']
+                    max_change_len = max(max_change_len, len(fmt_change(old, new)))
+                old_total = head.totals_per_file.get(fileid, {}).get('translated', 0)
+                new_total = data.totals_per_file[fileid]['translated']
+                max_change_len = max(max_change_len, len(fmt_change(old_total, new_total)))
 
-        # Totals row
+            file_col_width = max(len('fileid'), max(len(fid) for fid in sorted_fileids), len('TOTAL'))
+            strings_col_width = max(len('strings'), len(str(total_strings)))
+            locale_col_width = max_change_len
+
+            header = f"{'fileid'.ljust(file_col_width)}  {'strings'.rjust(strings_col_width)}"
+            for locale in translation_locales:
+                header += f"  {locale.rjust(locale_col_width)}"
+            header += f"  {'total'.rjust(locale_col_width)}"
+            print(header)
+            print('-' * len(header))
+
+            for fileid in sorted_fileids:
+                row = f"{fileid.ljust(file_col_width)}  {str(data.string_counts[fileid]).rjust(strings_col_width)}"
+                for locale in translation_locales:
+                    old = head.per_file_locale.get(fileid, {}).get(locale, {}).get('translated', 0)
+                    new = data.per_file_locale[fileid][locale]['translated']
+                    # Pad without color, then add color
+                    padded = fmt_change(old, new).rjust(locale_col_width)
+                    colored = fmt_change(old, new, color=True)
+                    # Replace plain text with colored version in padded string
+                    row += f"  {padded.replace(fmt_change(old, new), colored)}"
+                old_total = head.totals_per_file.get(fileid, {}).get('translated', 0)
+                new_total = data.totals_per_file[fileid]['translated']
+                padded = fmt_change(old_total, new_total).rjust(locale_col_width)
+                colored = fmt_change(old_total, new_total, color=True)
+                row += f"  {padded.replace(fmt_change(old_total, new_total), colored)}"
+                print(row)
+
+            print('-' * len(header))
+            totals_row = f"{'TOTAL'.ljust(file_col_width)}  {str(total_strings).rjust(strings_col_width)}"
+            for locale in translation_locales:
+                old = head.totals_per_locale.get(locale, {}).get('translated', 0)
+                new = data.totals_per_locale[locale]['translated']
+                padded = fmt_change(old, new).rjust(locale_col_width)
+                colored = fmt_change(old, new, color=True)
+                totals_row += f"  {padded.replace(fmt_change(old, new), colored)}"
+            old_grand = head.grand_translated
+            new_grand = data.grand_translated
+            padded = fmt_change(old_grand, new_grand).rjust(locale_col_width)
+            colored = fmt_change(old_grand, new_grand, color=True)
+            totals_row += f"  {padded.replace(fmt_change(old_grand, new_grand), colored)}"
+            print(totals_row)
+
+            print()
+            grand_diff = data.grand_translated - head.grand_translated
+            diff_colored = f'{GREEN}+{grand_diff}{RESET}' if grand_diff > 0 else f'{RED}{grand_diff}{RESET}' if grand_diff < 0 else '0'
+            print(f"Change: {diff_colored} strings ({data.grand_translated}/{data.grand_to_translate} total)")
+
+    elif not args.pretty:
+        print('\t'.join(columns))
+        for fileid in sorted_fileids:
+            row = [fileid, str(data.string_counts[fileid])]
+            for locale in translation_locales:
+                row.append(str(data.per_file_locale[fileid][locale]['translated']))
+            row.append(str(data.totals_per_file[fileid]['translated']))
+            print('\t'.join(row))
         totals_row = ['TOTAL', str(total_strings)]
         for locale in translation_locales:
-            totals_row.append(fmt_pct(totals_per_locale[locale]['percentage']))
-        totals_row.append(fmt_pct(grand_percentage))
+            totals_row.append(str(data.totals_per_locale[locale]['translated']))
+        totals_row.append(str(data.grand_translated))
         print('\t'.join(totals_row))
 
     else:
-        # Pretty output
         file_col_width = max(len('fileid'), max(len(fid) for fid in sorted_fileids), len('TOTAL'))
         strings_col_width = max(len('strings'), len(str(total_strings)))
         locale_col_width = max(5, max(len(loc) for loc in translation_locales))
 
-        # Print header
-        header = f"{'fileid'.ljust(file_col_width)}"
-        header += f"  {'strings'.rjust(strings_col_width)}"
+        header = f"{'fileid'.ljust(file_col_width)}  {'strings'.rjust(strings_col_width)}"
         for locale in translation_locales:
             header += f"  {locale.rjust(locale_col_width)}"
         header += f"  {'total'.rjust(locale_col_width)}"
         print(header)
         print('-' * len(header))
 
-        # Print rows for each file
         for fileid in sorted_fileids:
-            row = f"{fileid.ljust(file_col_width)}"
-            row += f"  {str(string_counts[fileid]).rjust(strings_col_width)}"
+            row = f"{fileid.ljust(file_col_width)}  {str(data.string_counts[fileid]).rjust(strings_col_width)}"
             for locale in translation_locales:
-                pct = progress_data[fileid][locale]['percentage']
-                row += f"  {fmt_pct(pct).rjust(locale_col_width)}"
-            file_pct = totals_per_file[fileid]['percentage']
-            row += f"  {fmt_pct(file_pct).rjust(locale_col_width)}"
+                row += f"  {str(data.per_file_locale[fileid][locale]['translated']).rjust(locale_col_width)}"
+            row += f"  {str(data.totals_per_file[fileid]['translated']).rjust(locale_col_width)}"
             print(row)
 
-        # Print totals row
         print('-' * len(header))
-        totals_row = f"{'TOTAL'.ljust(file_col_width)}"
-        totals_row += f"  {str(total_strings).rjust(strings_col_width)}"
+        totals_row = f"{'TOTAL'.ljust(file_col_width)}  {str(total_strings).rjust(strings_col_width)}"
         for locale in translation_locales:
-            pct = totals_per_locale[locale]['percentage']
-            totals_row += f"  {fmt_pct(pct).rjust(locale_col_width)}"
-        totals_row += f"  {fmt_pct(grand_percentage).rjust(locale_col_width)}"
+            totals_row += f"  {str(data.totals_per_locale[locale]['translated']).rjust(locale_col_width)}"
+        totals_row += f"  {str(data.grand_translated).rjust(locale_col_width)}"
         print(totals_row)
 
-        # Print summary
         print()
-        print(f"Overall: {grand_translated}/{grand_to_translate} strings translated ({fmt_pct(grand_percentage)})")
+        print(f"Overall: {data.grand_translated}/{data.grand_to_translate} strings translated ({fmt_pct(data.grand_percentage)})")
 
 
 def cmd_delete_locale(args):
@@ -1041,6 +1149,7 @@ def main():
             progress_parser = subparsers.add_parser('progress', help='Show translation progress as a table (files × locales)')
             progress_parser.add_argument('--locales', type=str, required=True, help='Comma-separated list of locales to show, or "all" for all locales')
             progress_parser.add_argument('--files', type=str, required=True, help='Comma-separated list of file IDs to show, or "all" for all files')
+            progress_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             progress_parser.add_argument('--pretty', action='store_true', help='Human-readable output (default is TSV)')
             progress_parser.set_defaults(func=cmd_progress)
 
