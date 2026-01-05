@@ -299,14 +299,23 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str | None, git_ref: str | None = None) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str | None, fileid_filter: str, git_ref: str | None = None) -> str:
     """
     Generate inspect output as TSV string.
 
-    If git_ref is provided, loads file contents from that git ref instead of the working directory.
+    Args:
+        fileid_filter: File ID to inspect. Use "all" to inspect all files.
+        git_ref: If provided, loads file contents from that git ref instead of the working directory.
     """
     # Load data
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+
+    # Filter by fileid if not "all"
+    if fileid_filter != 'all':
+        if fileid_filter not in xcstrings__ids_to_paths:
+            raise ValueError(f"Unknown fileid: '{fileid_filter}'. Run './run mfstrings list-files' to see available file IDs.")
+        xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
+
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
     locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
 
@@ -569,7 +578,7 @@ def print_row_pretty(
 
 
 def cmd_inspect(args):
-    """Inspect all string units from all .xcstrings files."""
+    """Inspect string units from .xcstrings files."""
 
     # Load data (for validation and help text)
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
@@ -583,14 +592,17 @@ def cmd_inspect(args):
             f"\n"
             f"\n{err}"
             f"\n"
-            f"\nUsage: ./run mfstrings inspect --cols <columns> [--sortcol <column>] [--pretty] [--diff]"
+            f"\nUsage: ./run mfstrings inspect --fileid <fileid> --cols <columns> [--sortcol <column>] [--pretty] [--diff]"
+            f"\n"
+            f"\nAvailable file IDs: {', '.join(xcstrings__ids_to_paths.keys())}"
             f"\n"
             f"\nAvailable columns:"
             f"\n  - {'\n  - '.join(all_columns)}"
             f"\n"
             f"\nExample:"
-            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,state:tr,tr --sortcol comment"
-            f"\n  ./run mfstrings inspect --cols all  # Include all columns"
+            f"\n  ./run mfstrings inspect --fileid all --cols fileid,key,comment,en,state:tr,tr --sortcol comment"
+            f"\n  ./run mfstrings inspect --fileid Localizable --cols key,en,tr,state:tr"
+            f"\n  ./run mfstrings inspect --fileid all --cols all  # Include all files and columns"
             f"\n"
             f"\nOutput is sorted by the first column unless --sortcol is specified."
             f"\n"
@@ -604,6 +616,10 @@ def cmd_inspect(args):
 
     if not xcstrings__paths_to_objs:
         print_help_and_exit("No .xcstrings files found.")
+
+    # Validate --fileid
+    if args.fileid != 'all' and args.fileid not in xcstrings__ids_to_paths:
+        print_help_and_exit(f"Unknown fileid: '{args.fileid}'")
 
     # Determine which columns to show
     if not args.cols:
@@ -630,7 +646,7 @@ def cmd_inspect(args):
     if args.grep:
         if not args.pretty:
             print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr) # TODO: Stupid Claude didn't use print_help_and_exit(). (It's right above) There are so many different error reporting / help-printing mechanisms now. Claude 4.5 Opus still kinda stupid sometimes. Still decends into chaos if you let it do its thing for too long I think.
-            print(f"  ./run mfstrings inspect --cols ... | grep '{args.grep}'", file=sys.stderr)
+            print(f"  ./run mfstrings inspect --fileid ... --cols ... | grep '{args.grep}'", file=sys.stderr)
             exit(1)
         try:
             grep_pattern = re.compile(args.grep, re.IGNORECASE)
@@ -639,10 +655,10 @@ def cmd_inspect(args):
             exit(1)
 
     # Print the output
-    
+
     if not args.diff: # Normal (non-diff) output
-        
-        output = inspect_output_tsv(columns, args.sortcol)
+
+        output = inspect_output_tsv(columns, args.sortcol, args.fileid)
         
         if not args.pretty: 
             print(output)
@@ -668,8 +684,8 @@ def cmd_inspect(args):
                 exit(1)
 
         # Generate output for HEAD and worktree
-        output_head     = inspect_output_tsv(columns, args.sortcol, git_ref='HEAD')
-        output_worktree = inspect_output_tsv(columns, args.sortcol, git_ref=None)
+        output_head     = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref='HEAD')
+        output_worktree = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None)
 
         lines_head     = output_head.split('\n')
         lines_worktree = output_worktree.split('\n')
@@ -966,7 +982,8 @@ def main():
             list_cols_parser.set_defaults(func=cmd_list_cols)
 
             # inspect command
-            inspect_parser = subparsers.add_parser('inspect', help='Inspect all string units (TSV output)') # - [ ] TODO: Consider adding a file-filter if this slows down the Claude's (currently takes 450ms) [Jan 2025]
+            inspect_parser = subparsers.add_parser('inspect', help='Inspect string units from .xcstrings files (TSV output)')
+            inspect_parser.add_argument('--fileid', type=str, required=True, help='File ID to inspect (e.g., "Localizable", "Main"). Use "all" to inspect all files. Run "./run mfstrings list-files" to see available file IDs.')
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output with | separators')
             inspect_parser.add_argument('--cols', type=str, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Omit this arg to see available columns. Output is sorted by first column unless --sortcol is specified. Cells in the state:LOCALE are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, help='Column to sort the table by. This column must also be passed to --cols.')
