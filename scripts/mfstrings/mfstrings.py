@@ -18,6 +18,8 @@ import mfobjc
 import mflocales
 import mfutils
 
+from mfutils import mfkeypath
+
 #
 # Constants
 #
@@ -73,71 +75,11 @@ def find_xcstrings__ids_to_paths() -> dict[str, str]:
 
     return result
 
-
-def get_xcstrings_path_by_fileid(fileid: str) -> str | None:
-    """
-    Get the file path for a given fileid.
-    Returns None if not found.
-    """
-    
-    for fid, path in find_xcstrings__ids_to_paths().items():
-        if fid == fileid:
-            return path
-    
-    return None
-
-
-def parse_key_with_variant(key: str) -> tuple[str, str | None]:
-    """
-    Parse a key that may contain a >variant suffix for pluralizable strings.
-    Returns (base_key, variant) where variant is None for non-pluralizable keys.
-
-    Examples:
-        "some.key" -> ("some.key", None)
-        "some.key>one" -> ("some.key", "one")
-        "some.key>other" -> ("some.key", "other")
-    """
-    if '>' in key:
-        parts = key.rsplit('>', 1)
-        return (parts[0], parts[1])
-    return (key, None)
-
-
-def parse_string_path(path: str) -> tuple[str, str, str]:
-    """
-    Parse a string path in the format "fileid/key/locale" into its components.
-    Returns (fileid, key, locale).
-
-    Note: This assumes keys don't contain '/' characters. [Jan 2026]
-
-    Examples:
-        "Localizable/some.key/tr" -> ("Localizable", "some.key", "tr")
-        "Localizable/some.key>one/de" -> ("Localizable", "some.key>one", "de")
-    """
-    parts = path.split('/')
-    if len(parts) < 3:
-        raise ValueError(f"Invalid path format: '{path}'. Expected 'fileid/key/locale'.")
-
-    fileid = parts[0]
-    locale = parts[-1]
-    key = '/'.join(parts[1:-1])  # Everything in between (handles keys with / just in case)
-
-    return (fileid, key, locale)
-
 def repo_root_for_path(filepath: str) -> str: # Determine which repo this file belongs to
     if os.path.normpath(filepath).startswith('../mac-mouse-fix-website'):
         return '../mac-mouse-fix-website'
     else:
         return '.'
-
-def get_file_content_at_ref(path: str, ref: str) -> str:
-    """
-    Get file content at a specific git ref using `git show`.
-    """
-
-    repo_root = repo_root_for_path(path)
-    return mfutils.runclt(f'git show {ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
-
 
 def available_columns_for_locales(locales: list[str]):
     
@@ -166,8 +108,8 @@ def xcstrings_locales(xcstrings_objs: list[dict]):
     # Collect locales from xcstrings files.
     all_locales: set[str] = set()
     for xcstrings_obj in xcstrings_objs:
-        for key in mfutils.mfkeypath(xcstrings_obj, 'strings'):
-            all_locales.update(mfutils.mfkeypath(xcstrings_obj, f"strings/{key}/localizations").keys())
+        for key in mfkeypath(xcstrings_obj, 'strings'):
+            all_locales.update(list(mfkeypath(xcstrings_obj, f"strings/{key}/localizations").keys()))
 
     # Sort locales (en first, then alphabetically)
     return sorted(all_locales, key=lambda l: (l != 'en', l))
@@ -180,9 +122,11 @@ def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | Non
     """
     
     result: dict[str, dict] = {}
-
+    
     for path in xcstrings_paths:
-        if git_ref: content_str = get_file_content_at_ref(path, git_ref)
+        if git_ref: # Get file content at a specific git ref using `git show`.
+            repo_root = repo_root_for_path(path)
+            content_str = mfutils.runclt(f'git show {git_ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
         else:       content_str = Path(path).read_text()
         result[path] = json.loads(content_str)
 
@@ -203,97 +147,24 @@ def escape_cell(value: str) -> str:
     return value.replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
 
 
-def unescape_value(value: str) -> str:
+def unescape_cell(value: str) -> str:
     """Unescape \\n, \\t, \\r in input values (inverse of escape_cell)."""
     if value is None:
         return ""
     return value.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
 
 
-def get_plural_variants_for_locale(loc_data: dict) -> dict[str, dict] | None:
-    """
-    Extract plural variants from a locale's data if it's a pluralizable string.
-    Returns a dict mapping variant names (e.g., 'one', 'other') to their stringUnit dicts,
-    or None if this is not a pluralizable string.
-    """
-    substitutions = loc_data.get('substitutions', {})
-    pluralizable = substitutions.get('pluralizable', {})
-    variations = pluralizable.get('variations', {})
-    plural = variations.get('plural', {})
-
-    if not plural:
-        return None
-
-    return plural
-
-
 def is_pluralizable_string(string_info: dict) -> bool:
-    """Check if a string is pluralizable by looking at any of its localizations."""
-    localizations = string_info.get('localizations', {})
-    for loc_data in localizations.values():
-        if get_plural_variants_for_locale(loc_data) is not None:
-            return True
-    return False
-
-
-def get_all_plural_variants_for_string(string_info: dict, requested_locales: list[str]) -> list[str]:
-    """
-    Get the union of all plural variant names across the requested locales for a pluralizable string.
-    Returns variants in a canonical order: zero, one, two, few, many, other.
-    """
-    canonical_order = ['zero', 'one', 'two', 'few', 'many', 'other']
-
-    all_variants: set[str] = set()
-    localizations = string_info.get('localizations', {})
-
-    for locale in requested_locales:
-        loc_data = localizations.get(locale, {})
-        variants = get_plural_variants_for_locale(loc_data)
-        if variants:
-            all_variants.update(variants.keys())
-
-    # Sort by canonical order
-    result = [v for v in canonical_order if v in all_variants]
-    # Add any unexpected variants at the end (shouldn't happen, but just in case)
-    for v in sorted(all_variants):
-        if v not in result:
-            result.append(v)
-
-    return result
-
-
-def extract_note_from_comment(comment: str) -> str:
-    """
-    Removes unnecessary autogenerated old-style plist stuff from comments generated by Interface Builder.
-
-    When an old-style plist is detected, removes everything, except for the value for the 'Note', which is the actuall note left by the developer.
-    
-    Example input:
-        Class = "NSMenuItem"; title = "Regular"; ObjectID = "17P-PJ-tV1"; Note = "Scrolling > Smoothness > Regular Option";
-    Example output:
-        Scrolling > Smoothness > Regular Option
-
-    We implemented the same thing in mf-xcloc-editor [Jan 3 2026]
-    
-    """
-
-    dict = mfobjc.NSPropertyListSerialization_loads(comment)
-    if not mfobjc.isclass(dict, 'NSDictionary'): return comment
-
-    note = mfobjc.NSDictionary_stringForKey(dict, 'Note')
-    if not note: return ""
-    
-    return note
-
+    """Check if a string is pluralizable by looking at the English version."""
+    return bool(mfkeypath(string_info, f"localizations/en/substitutions/pluralizable/"))
 
 def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     """
     Extract state and value from a stringUnit dict.
-    Returns (state, value) where state either 'translated' or 'needs_review'. (.xcstrings contain some more states which we all map to needs_review) (Binary state should help with grepping.)
+    Maps raw state to either 'translated' or 'needs_review'. (.xcstrings contain some more states which we all map to needs_review) (Binary state should help with grepping.)
     """
 
-    state = string_unit.get('state', '')
-    if state != 'translated': state = 'needs_review'
+    state = 'translated' if (string_unit.get('state', '') == 'translated') else 'needs_review'
     value = string_unit.get('value', '')
     
     return state, value
@@ -316,7 +187,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
             raise ValueError(f"Unknown fileid: '{fileid_filter}'. Run './run mfstrings list-files' to see available file IDs.")
         xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
 
-    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref)
     locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
 
     # Determine which locales are being requested (for plural variant union)
@@ -335,24 +206,47 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
     for fileid in xcstrings__ids_to_paths:
         
-        content = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
+        xcstrings_obj = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
 
-        strings = content.get('strings', {})
-
-        for key in strings.keys():
-            string_info = strings[key]
+        for key in mfkeypath(xcstrings_obj, f"strings"):
+            
 
             # Skip strings marked as "don't translate"
-            if string_info.get('shouldTranslate') == False:
+            if mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False:
                 continue
+            
+            # Extract comment
+            comment = str(mfkeypath(xcstrings_obj, f"strings/{key}/comment") or '')
 
-            comment = extract_note_from_comment(string_info.get('comment', ''))
-            localizations = string_info.get('localizations', {})
+            # Process comment
+            if 1:
+                """
+                When an old-style plist is detected, removes everything, except for the value for the 'Note', which is the actual comment left by the developer.
+                
+                Example input:  Class = "NSMenuItem"; title = "Regular"; ObjectID = "17P-PJ-tV1"; Note = "Scrolling > Smoothness > Regular Option";
+                Example output: Scrolling > Smoothness > Regular Option
+
+                We implemented the same thing in mf-xcloc-editor [Jan 3 2026]                
+                """
+
+                dict = mfobjc.NSPropertyListSerialization_loads(comment)
+                if mfobjc.isclass(dict, 'NSDictionary'):
+                    comment = mfobjc.NSDictionary_stringForKey(dict, 'Note') or ""
 
             # Check if this is a pluralizable string
-            if is_pluralizable_string(string_info):
+            if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{key}")):
+                
                 # Get union of all plural variants across requested locales
-                all_variants = get_all_plural_variants_for_string(string_info, requested_locales)
+                all_variants: set[str]
+                if 1:
+                    all_variants = set()
+                    for locale in requested_locales:
+                        all_variants.update(mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys())
+
+                    # Sort variants by 'canonical' order
+                    canonical_order = ['zero', 'one', 'two', 'few', 'many', 'other']
+                    assert all(v in canonical_order for v in all_variants), f"Unexpected plural variants found for key '{key}'. Expected: {canonical_order}, Found: {all_variants}"
+                    all_variants = [v for v in canonical_order if v in all_variants]
 
                 # Create one row per variant
                 for variant in all_variants:
@@ -364,11 +258,11 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
                     # Get values for each locale (including English)
                     for locale in locales:
-                        loc_data = localizations.get(locale, {})
-                        loc_variants = get_plural_variants_for_locale(loc_data)
+                        loc_variants = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural")
 
                         if loc_variants and variant in loc_variants:
-                            string_unit = loc_variants[variant].get('stringUnit', {})
+                            
+                            string_unit = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit")
                             state, value = get_string_unit_data(string_unit)
                         else:
                             state, value = '-', '-'  # This locale doesn't have this variant
@@ -392,8 +286,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
                 # Get values for each locale (including English)
                 for locale in locales:
-                    loc_data = localizations.get(locale, {})
-                    string_unit = loc_data.get('stringUnit', {})
+                    string_unit = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/stringUnit")
                     state, value = get_string_unit_data(string_unit)
 
                     if locale == 'en':
@@ -507,7 +400,7 @@ def print_row_pretty(
     """
     # First column value is the header
     header_val = f"({row_index})"
-    header_val += ' ' + (unescape_value(row_values[0]) if len(row_values) > 0 else '')
+    header_val += ' ' + (unescape_cell(row_values[0]) if len(row_values) > 0 else '')
     header_display = highlight_matches(header_val, grep_pattern)
 
     # Print header
@@ -522,12 +415,12 @@ def print_row_pretty(
             continue
 
         new_val = row_values[i] if i < len(row_values) else ''
-        new_val_display = unescape_value(new_val)
+        new_val_display = unescape_cell(new_val)
 
         if old_row_values is not None:
             # Diff mode
             old_val = old_row_values[i] if i < len(old_row_values) else ''
-            old_val_display = unescape_value(old_val)
+            old_val_display = unescape_cell(old_val)
 
             if old_val != new_val:
                 # Changed column - show diff with highlights
@@ -587,7 +480,7 @@ def cmd_inspect(args):
     locales = xcstrings_locales(list(xcstrings__paths_to_objs.values()))
     all_columns = available_columns_for_locales(locales)
 
-    def print_help_and_exit(err):
+    def print_help_and_exit(err): # TODO: Unify the way we print help / input errors [Jan 2026]
         print(
             f"Invalid args passed to 'mfstrings inspect' command:"
             f"\n"
@@ -766,91 +659,106 @@ def cmd_edit(args):
         exit(1)
 
     # Parse the path
-    try:
-        fileid, key, locale = parse_string_path(args.path)
-    except ValueError as e:
-        print(f"Error: {e}")
+    parts = args.path.split('/')
+    if len(parts) != 3:
+        print(f"Error: Invalid path format: '{args.path}'. Expected 'fileid/key/locale'.")
         exit(1)
+    fileid, key, locale = parts
 
     # Find the xcstrings file
-    file_path = get_xcstrings_path_by_fileid(fileid)
+    file_path = find_xcstrings__ids_to_paths().get(fileid, None)
     if not file_path:
         print(f"Error: No .xcstrings file found with fileid '{fileid}'")
         print("Use './run mfstrings list-files' to see available fileids.")
         exit(1)
 
-    # Parse the key (handle >variant suffix)
-    base_key, variant = parse_key_with_variant(key)
+    # Parse the key (handle >variant suffix for pluralizable keys. Example: some.key>other)
+    base_key, variant = '', ''
+    if '>' in key: base_key, variant = key.rsplit('>', 1)
+    else:          base_key, variant = key, None
 
     # Load the xcstrings file
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = json.load(f)
+    xcstrings_obj = json.loads(Path(file_path).read_text())
 
     # Find the string
-    strings = content.get('strings', {})
-    if base_key not in strings:
+    if base_key not in mfkeypath(xcstrings_obj, f"strings"):
         print(f"Error: Key '{base_key}' not found in {fileid}")
         exit(1)
-
-    string_info = strings[base_key]
-    localizations = string_info.setdefault('localizations', {})
-    loc_data = localizations.setdefault(locale, {})
-
     # Handle pluralizable vs regular strings
-    if variant:
-        # Pluralizable string - edit a specific variant
+    if not variant: # Regular (non-pluralizable) string
+        
+        if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings")):
+            print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}>one', '{base_key}>other', etc.")
+            exit(1)
+
+        # Apply edits 
+        if args.value is not None:
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/stringUnit/value", 
+                set_to=unescape_cell(args.value),  # (unescape \n, \t, \r to match inspect output format)
+                create_intermediates=True
+            )
+            
+        if args.state:
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/stringUnit/state",
+                set_to=args.state,
+                create_intermediates=True
+            )
+
+        print(f"Updated {fileid}/{base_key} [{locale}]")
+
+    else: # Pluralizable string - edit a specific variant
+        
         # Check if this string is actually pluralizable
-        if not is_pluralizable_string(string_info):
+        if not is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
             print(f"Error: Key '{base_key}' is not a pluralizable string, but variant '{variant}' was specified.")
             exit(1)
 
         # Ensure the structure exists for this locale
         # Structure: localizations/<locale>/substitutions/pluralizable/variations/plural/<variant>/stringUnit
-        loc_data.setdefault('stringUnit', {'state': 'translated', 'value': '%#@pluralizable@'})
-        substitutions = loc_data.setdefault('substitutions', {})
-        pluralizable = substitutions.setdefault('pluralizable', {'formatSpecifier': 'd', 'variations': {'plural': {}}})
-        variations = pluralizable.setdefault('variations', {})
-        plural = variations.setdefault('plural', {})
-        variant_data = plural.setdefault(variant, {'stringUnit': {}})
-        string_unit = variant_data.setdefault('stringUnit', {})
+        
+        mfkeypath(
+            xcstrings_obj, 
+            f"strings/{base_key}/localizations/{locale}/stringUnit", 
+            set_to={'state': 'translated', 'value': '%#@pluralizable@'}, 
+            create_intermediates=True
+        )
+        mfkeypath(
+            xcstrings_obj, 
+            f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable",
+            set_to={'formatSpecifier': 'd', 'variations': {'plural': {}}},
+            create_intermediates=True
+        )
 
-        # Apply edits (unescape \n, \t, \r to match inspect output format)
         if args.value is not None:
-            string_unit['value'] = unescape_value(args.value)
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/value",
+                set_to=unescape_cell(args.value), # (unescape \n, \t, \r to match inspect output format)
+                create_intermediates=True
+            )
         if args.state:
-            string_unit['state'] = args.state
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/state",
+                set_to=args.state,
+                create_intermediates=True
+            )
 
         print(f"Updated {fileid}/{base_key}>{variant} [{locale}]")
 
-    else:
-        # Regular (non-pluralizable) string
-        if is_pluralizable_string(string_info):
-            print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}>one', '{base_key}>other', etc.")
-            exit(1)
-
-        # Ensure stringUnit exists
-        string_unit = loc_data.setdefault('stringUnit', {})
-
-        # Apply edits (unescape \n, \t, \r to match inspect output format)
-        if args.value is not None:
-            string_unit['value'] = unescape_value(args.value)
-        if args.state:
-            string_unit['state'] = args.state
-
-        print(f"Updated {fileid}/{base_key} [{locale}]")
 
     # Write the file back (using mfutils to match Xcode's JSON formatting)
-    mfutils.write_xcstrings_file(file_path, content)
+    mfutils.write_xcstrings_file(file_path, xcstrings_obj)
 
     # Print what was changed (show escaped form for consistency with inspect)
     if args.value is not None:
-        print(f"  value: {escape_cell(unescape_value(args.value))}")
+        print(f"  value: {escape_cell(unescape_cell(args.value))}")
     if args.state:
         print(f"  state: {args.state}")
-
-def file_is_dirty(path: str) -> bool:
-    repo_root = repo_root_for_path(path)
-    return mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root) # Check if file has changes (staged or unstaged)
 
 def cmd_list_files(_args):
     
@@ -867,11 +775,11 @@ def cmd_list_files(_args):
         xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
         for fileid in xcstrings__ids_to_paths:
             xcstrings_obj = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
-            for key in mfutils.mfkeypath(xcstrings_obj, 'strings'):
-                if mfutils.mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False: continue
+            for key in mfkeypath(xcstrings_obj, 'strings'):
+                if mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False: continue
                 xcstrings__ids_to_counts[fileid] = xcstrings__ids_to_counts.get(fileid, 0) + 1
         
-        xcstrings__ids_to_countstrs = {fileid: f"{mfutils.mfkeypath(xcstrings__ids_to_counts, fileid)} strings" for fileid in xcstrings__ids_to_counts.keys()}
+        xcstrings__ids_to_countstrs = {fileid: f"{mfkeypath(xcstrings__ids_to_counts, fileid)} strings" for fileid in xcstrings__ids_to_counts.keys()}
 
 
     # Get ljust args
@@ -906,7 +814,14 @@ def cmd_delete_locale(args):
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
 
     # Safety check: abort if any .xcstrings files have uncommitted changes
-    dirty_files = [f[1] for f in xcstrings__ids_to_paths if file_is_dirty(f[1])]
+    
+    repo_root = repo_root_for_path(path)
+    
+    dirty_files = []
+    for id in xcstrings__ids_to_paths:
+        is_dirty = mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root) # Check if file has changes (staged or unstaged)
+        if is_dirty: dirty_files.append(xcstrings__ids_to_paths[id])
+    
     if dirty_files:
         print("Error: Cannot delete locale while .xcstrings files have uncommitted changes.")
         print(f"Dirty files: [\n    {'\n    '.join([os.path.normpath(p) for p in dirty_files])}\n]")

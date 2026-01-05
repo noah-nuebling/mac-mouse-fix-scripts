@@ -26,18 +26,39 @@ from pathlib import Path
 from typing import Callable
 
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List, Union, Any
 
 #
 # MARK: Other 
 # General utility functions that don't belong together
-#
+#-
 
-def mfkeypath(dict, kp): # Query a dict with/a/keypath [Jan 2026]
-    result = dict
-    for key in kp.split('/'):
-        result = result.get(key, {})
-    return result
+MFKEYPATH_NONE = object()
+def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, create_intermediates=False) -> Any: 
+    """
+    Read from a dict with/a/keypath [Jan 2026]
+    Use set_to=<newValue>, to write to the keypath instead of reading
+    Use create_intermediates=True to create missing dicts on the path (Only works with set_to)
+    """
+
+    # Footgun protection
+    assert not kp.startswith('/'), f"Keypaths shouldn't start with /"
+
+    keys = kp.split('/')
+    current = dict
+
+    if set_to is MFKEYPATH_NONE: # get
+        assert create_intermediates == False, f"create_intermediates currently only works in combination with set_to. [Jan 2026]"
+        for key in keys:
+            current = current.get(key, {}) # If the keypath doesn't exist we just return a disconnected {} (Bit sloppy. TODO: Improve [Jan 2026])
+        return current
+    else: # set
+        for key in keys[:-1]:
+            if create_intermediates:
+                if key not in current: current[key] = {} # Create dicts on the path.
+            current = current[key]                       # Walk up to the second-to-last key
+        current[keys[-1]] = set_to                       # Store at the last key
+
 
 def exc_desc(e: Exception) -> str:
     return f"{type(e).__name__}({e})"
