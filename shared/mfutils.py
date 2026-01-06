@@ -41,10 +41,10 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_in
     Modes:
         mfkeypath(d, 'a/b')              -> Returns d['a']['b'], or {} if path doesn't exist
         mfkeypath(d, 'a/b', set_to=X)    -> Sets d['a']['b'] = X (crashes if 'a' doesn't exist)
-        mfkeypath(d, 'a/b', default=X)   -> Returns d['a']['b'] if exists, else sets d['a']['b'] = X and returns X
+        mfkeypath(d, 'a/b', default=X)   -> Returns d['a']['b'] if exists, else sets to X and returns X
 
     Args:
-        create_intermediates: When True, creates missing intermediate dicts for set_to/default modes
+        create_intermediates: When True, creates missing intermediate dicts (for set_to/default modes)
     """
 
     # Parse args
@@ -52,7 +52,7 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_in
     keys = kp.split('/') 
 
     # Footgun protection
-    assert not ((set_to is not MFKEYPATH_NONE) and (default is not MFKEYPATH_NONE)), f"Either set_to= or default= can be used, not both."
+    assert (set_to is MFKEYPATH_NONE) or (default is MFKEYPATH_NONE), f"Either set_to= or default= can be used, not both."
     if mode == 'get': assert create_intermediates == False, f"create_intermediates only works when set_to= or default= is present."
     assert not kp.startswith('/'), f"Keypaths shouldn't start with /"
     assert not kp.endswith('/'), f"Keypaths shouldn't end with with /"
@@ -62,7 +62,7 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_in
     current = dict
     if mode == 'get':
         for key in keys:
-            current = current.get(key, {})             # Simply return {} if the keypath doesn't exist. || Note that we can't differentiate between a missing path and an actual {} value stored in the dict. || Note: We also tried returning None but that's more annoying since it crashes when you try to do anything with it so you always need to check for it. This is more like objc. Not sure if wise. [Jan 2026]
+            current = current.get(key, {})             # Simply return {} if the keypath doesn't exist. || Note that we can't differentiate between a missing path and an actual {} value stored in the dict. || Note: We also tried returning None but that's more annoying since it crashes when you try to do anything with it so you always need to check for it. This is more like objc nil. Not sure if wise. [Jan 2026]
         return current
     else:
 
