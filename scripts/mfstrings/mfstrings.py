@@ -150,6 +150,7 @@ def unescape_cell(value: str) -> str:
 
 def is_pluralizable_string(string_info: dict) -> bool:
     """Check if a string is pluralizable by looking at the English version."""
+    assert string_info
     return bool(mfkeypath(string_info, f"localizations/en/substitutions/pluralizable"))
 
 def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
@@ -670,31 +671,16 @@ def cmd_edit(args):
     if base_key not in mfkeypath(xcstrings_obj, f"strings"):
         print(f"Error: Key '{base_key}' not found in {fileid}")
         exit(1)
-    # Handle pluralizable vs regular strings
+    
+    # Find/create stringUnit to edit
+    stringUnit = {}
     if not variant: # Regular (non-pluralizable) string
         
-        if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings")):
+        if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
             print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}|==|one', '{base_key}|==|other', etc.")
             exit(1)
 
-        # Apply edits 
-        if args.value is not None:
-            mfkeypath(
-                xcstrings_obj, 
-                f"strings/{base_key}/localizations/{locale}/stringUnit/value", 
-                set_to=unescape_cell(args.value),  # (unescape \n, \t, \r to match inspect output format)
-                create_intermediates=True
-            )
-            
-        if args.state:
-            mfkeypath(
-                xcstrings_obj, 
-                f"strings/{base_key}/localizations/{locale}/stringUnit/state",
-                set_to=args.state,
-                create_intermediates=True
-            )
-
-        print(f"Updated {fileid}/{base_key} [{locale}]")
+        stringUnit = mfkeypath(xcstrings_obj, f"strings/{base_key}/localizations/{locale}/stringUnit", default={}, create_intermediates=True)
 
     else: # Pluralizable string - edit a specific variant
         
@@ -704,38 +690,32 @@ def cmd_edit(args):
             exit(1)
 
         # Ensure the structure exists for this locale
-        # Structure: localizations/<locale>/substitutions/pluralizable/variations/plural/<variant>/stringUnit
-        
         mfkeypath(
             xcstrings_obj, 
             f"strings/{base_key}/localizations/{locale}/stringUnit", 
-            set_to={'state': 'translated', 'value': '%#@pluralizable@'}, 
+            default={'state': 'translated', 'value': '%#@pluralizable@'},       # Using %#@pluralizable@ everywhere and not having the pluralizable base-strings be editable is an MMF-specific convention. [Jan 2026] The mf-xcloc-editor Readme.md explains why this is a good choice. Maybe wrote about this in other places too [Jan 2026]
             create_intermediates=True
         )
         mfkeypath(
             xcstrings_obj, 
             f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable",
-            set_to={'formatSpecifier': 'd', 'variations': {'plural': {}}},
+            default={'formatSpecifier': 'd'},
             create_intermediates=True
         )
 
-        if args.value is not None:
-            mfkeypath(
-                xcstrings_obj, 
-                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/value",
-                set_to=unescape_cell(args.value), # (unescape \n, \t, \r to match inspect output format)
-                create_intermediates=True
-            )
-        if args.state:
-            mfkeypath(
-                xcstrings_obj, 
-                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/state",
-                set_to=args.state,
-                create_intermediates=True
-            )
+        # Get the stringUnit
+        stringUnit = mfkeypath(
+            xcstrings_obj,
+            f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit",
+            default={},
+            create_intermediates=True
+        )
 
-        print(f"Updated {fileid}/{base_key}|==|{variant} [{locale}]")
+    # Init/edit the stringUnit
+    stringUnit['value'] = unescape_cell(args.value) or stringUnit.get('value', '')
+    stringUnit['state'] = args.state                or stringUnit.get('state', 'new')
 
+    print(f"Updated {key} [{locale}]")
 
     # Write the file back (using mfutils to match Xcode's JSON formatting)
     mfutils.write_xcstrings_file(file_path, xcstrings_obj)
