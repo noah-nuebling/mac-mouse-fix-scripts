@@ -712,8 +712,8 @@ def cmd_edit(args):
         )
 
     # Init/edit the stringUnit
-    stringUnit['value'] = unescape_cell(args.value) or stringUnit.get('value', '')
     stringUnit['state'] = args.state                or stringUnit.get('state', 'new')
+    stringUnit['value'] = unescape_cell(args.value) or stringUnit.get('value', '')
 
     print(f"Updated {key} [{locale}]")
 

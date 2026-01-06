@@ -39,7 +39,7 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_in
     Access nested dicts using slash-separated keypaths like 'a/b/c'.
 
     Modes:
-        mfkeypath(d, 'a/b')              -> Returns d['a']['b'], or None if path doesn't exist
+        mfkeypath(d, 'a/b')              -> Returns d['a']['b'], or {} if path doesn't exist
         mfkeypath(d, 'a/b', set_to=X)    -> Sets d['a']['b'] = X (crashes if 'a' doesn't exist)
         mfkeypath(d, 'a/b', default=X)   -> Returns d['a']['b'] if exists, else sets d['a']['b'] = X and returns X
 
@@ -62,15 +62,16 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_in
     current = dict
     if mode == 'get':
         for key in keys:
-            current = None if current is None else current.get(key)             # Simply return None if the keypath doesn't exist. || Note that we can't differentiate between a missing path and an actual None value stored in the dict.
+            current = current.get(key, {})             # Simply return {} if the keypath doesn't exist. || Note that we can't differentiate between a missing path and an actual {} value stored in the dict. || Note: We also tried returning None but that's more annoying since it crashes when you try to do anything with it so you always need to check for it. This is more like objc. Not sure if wise. [Jan 2026]
         return current
     else:
+
         for key in keys[:-1]:                                                   # Walk up to the second-to-last key
             if create_intermediates: current = current.setdefault(key, {})      # Create dicts on the path.
             else:                    current = current[key]                     # Crashes if the keypath doesn't exist, except when create_intermediates= is used. 
         
-            if mode == 'set':       current[keys[-1]] = set_to                  # Modify at the last key
-            elif mode == 'default': return current.setdefault(keys[-1], default)
+        if mode == 'set':       current[keys[-1]] = set_to                  # Modify at the last key
+        elif mode == 'default': return current.setdefault(keys[-1], default)
 
 def exc_desc(e: Exception) -> str:
     return f"{type(e).__name__}({e})"
