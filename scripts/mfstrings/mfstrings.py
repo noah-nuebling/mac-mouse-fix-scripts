@@ -42,6 +42,7 @@ DIM = '\033[2m'
 def find_xcstrings__ids_to_paths() -> dict[str, str]:
     """
     Returns {fileid -> path} map
+    Note for Claudes: DO NOT SORT the return value unless there is a specific reason to. This returns the 'canonical' order of the the files which groups them into different categories based on their origin.
     """
 
     # Get all .xcstrings file paths from both mac-mouse-fix and mac-mouse-fix-website repos.
@@ -693,7 +694,7 @@ def cmd_edit(args):
         mfkeypath(
             xcstrings_obj, 
             f"strings/{base_key}/localizations/{locale}/stringUnit", 
-            default={'state': 'translated', 'value': '%#@pluralizable@'},       # Using %#@pluralizable@ everywhere and not having the pluralizable base-strings be editable is an MMF-specific convention. [Jan 2026] The mf-xcloc-editor Readme.md explains why this is a good choice. Maybe wrote about this in other places too [Jan 2026]
+            default={'state': 'translated', 'value': '%#@pluralizable@'},       # Using %#@pluralizable@ everywhere and not having the pluralizable base-strings be editable is an MMF-specific convention. [Jan 2026] The mf-xcloc-editor Readme.md explains why I think this is a good choice. Maybe wrote about this in other places too [Jan 2026]
             create_intermediates=True
         )
         mfkeypath(
@@ -836,7 +837,7 @@ def cmd_progress(args):
         invalid_locales = [l for l in requested_locales if l not in translation_locales]
         if invalid_locales:
             print(f"Error: Unknown locale(s): {', '.join(invalid_locales)}")
-            print(f"Available locales: {', '.join(sorted(translation_locales))}")
+            print(f"Available locales: {', '.join(translation_locales)}")  # Note for Claudes: DO NOT SORT the output of mflocales functions. Assume they return the 'canonical' order of things.
             exit(1)
         translation_locales = requested_locales
 
@@ -846,7 +847,7 @@ def cmd_progress(args):
         invalid_files = [f for f in requested_files if f not in xcstrings__ids_to_paths]
         if invalid_files:
             print(f"Error: Unknown file ID(s): {', '.join(invalid_files)}")
-            print(f"Available file IDs: {', '.join(sorted(xcstrings__ids_to_paths.keys()))}")
+            print(f"Available file IDs: {', '.join(xcstrings__ids_to_paths.keys())}")
             exit(1)
         xcstrings__ids_to_paths = {f: xcstrings__ids_to_paths[f] for f in requested_files}
 
@@ -868,7 +869,7 @@ def cmd_progress(args):
         else:
             return str(diff)
 
-    sorted_fileids = sorted(data.per_file_locale.keys())
+    sorted_fileids = data.per_file_locale.keys()
     total_strings = sum(data.string_counts.values())
     columns = ['fileid', 'strings'] + translation_locales + ['total']
 
@@ -1040,7 +1041,7 @@ def cmd_delete_locale(args):
     
     if locale not in locales:
         print(f"Error: Locale '{locale}' not found in any .xcstrings file.")
-        print(f"Available locales: {', '.join(sorted(locales))}")
+        print(f"Available locales: {', '.join(locales)}")
         exit(1)
 
     if locale == 'en':
