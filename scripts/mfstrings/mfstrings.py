@@ -150,7 +150,7 @@ def unescape_cell(value: str) -> str:
 
 def is_pluralizable_string(string_info: dict) -> bool:
     """Check if a string is pluralizable by looking at the English version."""
-    return bool(mfkeypath(string_info, f"localizations/en/substitutions/pluralizable/"))
+    return bool(mfkeypath(string_info, f"localizations/en/substitutions/pluralizable"))
 
 def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     """
@@ -204,7 +204,6 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
         for key in mfkeypath(xcstrings_obj, f"strings"):
             
-
             # Skip strings marked as "don't translate"
             if mfkeypath(xcstrings_obj, f"strings/{key}/shouldTranslate") == False:
                 continue
@@ -229,18 +228,13 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
             # Check if this is a pluralizable string
             if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{key}")):
-                
-                # Get union of all plural variants across requested locales
-                all_variants: set[str]
-                if 1:
-                    all_variants = set()
-                    for locale in requested_locales:
-                        all_variants.update(mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys())
 
-                    # Sort variants by 'canonical' order
-                    canonical_order = ['zero', 'one', 'two', 'few', 'many', 'other']
-                    assert all(v in canonical_order for v in all_variants), f"Unexpected plural variants found for key '{key}'. Expected: {canonical_order}, Found: {all_variants}"
-                    all_variants = [v for v in canonical_order if v in all_variants]
+                # Get union of all plural variants across requested locales
+                all_variants: set[str] = set()
+                for locale in requested_locales:
+                    variants_for_locale = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys()
+                    assert all(x in mflocales.locales_to_plural_variants[locale] for x in variants_for_locale), f"Unexpected plural variants for {locales}:{key}. Expected: {mflocales.locales_to_plural_variants[locale]}. Found: {variants_for_locale}."
+                    all_variants.update(variants_for_locale)
 
                 # Create one row per variant
                 for variant in all_variants:
@@ -252,14 +246,12 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
                     # Get values for each locale (including English)
                     for locale in locales:
-                        loc_variants = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural")
-
-                        if loc_variants and variant in loc_variants:
-                            
+                        
+                        if variant not in mflocales.locales_to_plural_variants[locale]: # This locale doesn't have this variant
+                            state, value = 'N/A', 'N/A'
+                        else:
                             string_unit = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit")
                             state, value = get_string_unit_data(string_unit)
-                        else:
-                            state, value = '-', '-'  # This locale doesn't have this variant
 
                         if locale == 'en':
                             row_data['en'] = value
@@ -294,7 +286,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                 rows.append(filtered_row_data)
 
     # Sort
-    def mfcmp(a, b):
+    def mfcmp(a, b):                # Note: Could use mflocales.ordered_plural_variants() to 'properly' sort the plural variants, but doesn't really matter. [Jan 2026]
         # Primary sort by --sortcol
         if (x := mfobjc.NSString_localizedStandardCompare(a[sortcol], b[sortcol])): return x
         # Secondary sort by remaining columns in order

@@ -123,53 +123,59 @@ language_name_override_map = {
     }
 }
 
-locale_to_plural_categories: dict[str, list[str]] = {
-    
+"""
+# CLDR plural categories per locale
+#   Source: https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html
+#   Used by mfstrings.py to determine which plural variants to show for each locale. [Jan 2026]
+#
+#   Notes:
+#   - 'other' is always required and serves as the default/fallback
+#   - Languages like Chinese, Japanese, Korean, Turkish, Vietnamese only use 'other' (no plural distinctions)
+#   - Slavic languages (Czech, Russian, Polish) have complex systems with 'one', 'few', 'many', 'other'
+#   - Arabic has the most categories: 'zero', 'one', 'two', 'few', 'many', 'other'
+#
+#   - We use the term 'variant' because out code already uses that a lot. 'category' is used by unicode [Jan 2026]
+"""
+locales_to_plural_variants: dict[str, list[str]] = (
     # (By Claude))
-    # TODO: Try to find the API that Xcode uses instead of hardcoding.
+    #   Note: The order matters - we use this order when displaying plural forms
+    #   TODO: Try to find the API that Xcode uses instead of hardcoding.
+    #   TODO: Keep in-sync with mflocales.find_xcode_project_locales() [Jan 2026]
     
-    """
-    # CLDR plural categories per locale
-    #   Source: https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html
-    #   Used by mfstrings.py to determine which plural forms to show for each locale. [Jan 2026]
-    #
-    #   Notes:
-    #   - 'other' is always required and serves as the default/fallback
-    #   - Languages like Chinese, Japanese, Korean, Turkish, Vietnamese only use 'other' (no plural distinctions)
-    #   - Slavic languages (Czech, Russian, Polish) have complex systems with 'one', 'few', 'many', 'other'
-    #   - Arabic has the most categories: 'zero', 'one', 'two', 'few', 'many', 'other'
-    """
-
-    # Note: The order matters - we use this order when displaying plural forms
-    'en':       ['one', 'other'],
-    'de':       ['one', 'other'],
-    'fr':       ['one', 'many', 'other'],
-    'es':       ['one', 'many', 'other'],
-    'pt':       ['one', 'many', 'other'],
-    'pt-BR':    ['one', 'many', 'other'],
-    'it':       ['one', 'many', 'other'],
-    'tr':       ['other'],
-    'vi':       ['other'],
-    'ko':       ['other'],
-    'ja':       ['other'],
-    'zh':       ['other'],
-    'zh-Hans':  ['other'],
-    'zh-Hant':  ['other'],
-    'zh-HK':    ['other'],
-    'cs':       ['one', 'few', 'many', 'other'],
-    'pl':       ['one', 'few', 'many', 'other'],
-    'ru':       ['one', 'few', 'many', 'other'],
-    'uk':       ['one', 'few', 'many', 'other'],
-    'ar':       ['zero', 'one', 'two', 'few', 'many', 'other'],
-    'he':       ['one', 'two', 'many', 'other'],
+{
+    "en"         : ['one', 'other'],
+    "de"         : ['one', 'other'],
+    "zh-Hant"    : ['other'],
+    "zh-HK"      : ['other'],
+    "zh-Hans"    : ['other'],
+    "ko"         : ['other'],
+    "vi"         : ['other'],
+    "ar"         : ['zero', 'one', 'two', 'few', 'many', 'other'],
+    "ca"         : ['one', 'many', 'other'],
+    "cs"         : ['one', 'few', 'many', 'other'],
+    "nl"         : ['one', 'other'],
+    "fr"         : ['one', 'many', 'other'],
+    "el"         : ['one', 'other'],
+    "he"         : ['one', 'two', 'other'],
+    "hu"         : ['one', 'other'],
+    "it"         : ['one', 'many', 'other'],
+    "ja"         : ['other'],
+    "pl"         : ['one', 'few', 'many', 'other'],
+    "pt-BR"      : ['one', 'many', 'other'],
+    "pt-PT"      : ['one', 'many', 'other'],
+    "ro"         : ['one', 'few', 'other'],
+    "ru"         : ['one', 'few', 'many', 'other'],
+    "es"         : ['one', 'many', 'other'],
+    "sv"         : ['one', 'other'],
+    "tr"         : ['one', 'other'],
+    "uk"         : ['one', 'few', 'many', 'other'],
+    "th"         : ['other'],
+    "id"         : ['other'],
+    "hi"         : ['one', 'other'],
 }
+)
+ordered_plural_variants = ['zero', 'one', 'two', 'few', 'many', 'other'] # Unused  [Jan 2026]
 
-def get_plural_categories(locale: str) -> list[str]:
-    """
-    Get the CLDR plural categories for a locale.
-    """
-    assert locale in locale_to_plural_categories
-    return locale_to_plural_categories[locale]
 
 # project_locales = ['en', 'de', 'zh-HK', 'zh-Hans', 'zh-Hant', 'vi', 'ko']   # This is used to check if the locales of the website and the main app are in-sync. Update: Now validating locales inside uploadstrings.py instead.
 

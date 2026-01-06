@@ -41,12 +41,16 @@ def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, create_intermediates=False) -> An
     Use create_intermediates=True to create missing dicts on the path (Only works with set_to)
     """
 
-    # Footgun protection
-    assert not kp.startswith('/'), f"Keypaths shouldn't start with /"
-
-    keys = kp.split('/')
     current = dict
+    keys = kp.split('/') 
 
+    # Footgun protection 1
+    assert not kp.startswith('/'), f"Keypaths shouldn't start with /"
+    assert not kp.endswith('/'), f"Keypaths shouldn't end with with /"
+
+    # Footgun protection 2
+    keys = [key for key in keys if len(key)] # Filter out empty keys that could appear due to: double slash //, slash at the start/end of the path, empty path. (Maybe more I can't think of)
+    
     if set_to is MFKEYPATH_NONE: # get
         assert create_intermediates == False, f"create_intermediates currently only works in combination with set_to. [Jan 2026]"
         for key in keys:
