@@ -228,7 +228,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
             # Check if this is a pluralizable string
             if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{key}")):
-
+                
                 # Get union of all plural variants across requested locales
                 all_variants: set[str] = set()
                 for locale in requested_locales:
@@ -240,7 +240,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                 for variant in all_variants:
                     row_data: dict[str, str] = {
                         'fileid': fileid,
-                        'key': f'{key}>{variant}',
+                        'key': f'{key}|==|{variant}',
                         'comment': comment,
                     }
 
@@ -658,9 +658,9 @@ def cmd_edit(args):
         print("Use './run mfstrings list-files' to see available fileids.")
         exit(1)
 
-    # Parse the key (handle >variant suffix for pluralizable keys. Example: some.key>other)
+    # Parse the key (handle |==|variant suffix for pluralizable keys. Example: some.key|==|other)
     base_key, variant = '', ''
-    if '>' in key: base_key, variant = key.rsplit('>', 1)
+    if '|==|' in key: base_key, variant = key.rsplit('|==|', 1)
     else:          base_key, variant = key, None
 
     # Load the xcstrings file
@@ -674,7 +674,7 @@ def cmd_edit(args):
     if not variant: # Regular (non-pluralizable) string
         
         if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings")):
-            print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}>one', '{base_key}>other', etc.")
+            print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}|==|one', '{base_key}|==|other', etc.")
             exit(1)
 
         # Apply edits 
@@ -734,7 +734,7 @@ def cmd_edit(args):
                 create_intermediates=True
             )
 
-        print(f"Updated {fileid}/{base_key}>{variant} [{locale}]")
+        print(f"Updated {fileid}/{base_key}|==|{variant} [{locale}]")
 
 
     # Write the file back (using mfutils to match Xcode's JSON formatting)
@@ -1093,6 +1093,11 @@ def cmd_delete_locale(args):
 
 def main():
 
+    r"""
+    Discussions:
+        - On |==|: [Jan 2026] It's is ugly but greppable (--grep "\|==\|"). It is also used in .xcloc files – Chose it out of familiarity – See mf-xcloc-editor.
+    """
+
     # Validate cwd
     #   (Similar validation in uploadstrings.py > main())
     repo_name = os.path.basename(os.getcwd())
@@ -1127,7 +1132,7 @@ def main():
 
             # edit command
             edit_parser = subparsers.add_parser('edit', help='Edit a translation value and/or state')
-            edit_parser.add_argument('--path', type=str, required=True, help='Path to the string: "fileid/key/locale". For pluralizable strings, use "fileid/key>variant/locale" (e.g., "Localizable/some.key>one/tr")')
+            edit_parser.add_argument('--path', type=str, required=True, help='Path to the string: "fileid/key/locale". For pluralizable strings, use "fileid/key|==|variant/locale" (e.g., "Localizable/some.key|==|one/tr")')
             edit_parser.add_argument('--value', type=str, help='The new translation value')
             edit_parser.add_argument('--state', type=str, help='The new state: "translated" or "needs_review"')
             edit_parser.set_defaults(func=cmd_edit)
