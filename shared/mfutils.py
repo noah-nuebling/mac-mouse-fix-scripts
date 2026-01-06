@@ -34,35 +34,43 @@ from typing import List, Union, Any
 #-
 
 MFKEYPATH_NONE = object()
-def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, create_intermediates=False) -> Any: 
+def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_intermediates=False) -> Any:
     """
-    Read from a dict with/a/keypath [Jan 2026]
-    Use set_to=<newValue>, to write to the keypath instead of reading
-    Use create_intermediates=True to create missing dicts on the path (Only works with set_to)
+    Access nested dicts using slash-separated keypaths like 'a/b/c'.
+
+    Modes:
+        mfkeypath(d, 'a/b')              -> Returns d['a']['b'], or None if path doesn't exist
+        mfkeypath(d, 'a/b', set_to=X)    -> Sets d['a']['b'] = X (crashes if 'a' doesn't exist)
+        mfkeypath(d, 'a/b', default=X)   -> Returns d['a']['b'] if exists, else sets d['a']['b'] = X and returns X
+
+    Args:
+        create_intermediates: When True, creates missing intermediate dicts for set_to/default modes
     """
 
-    current = dict
+    # Parse args
+    mode = ('set' if set_to is not MFKEYPATH_NONE else 'default' if default is not MFKEYPATH_NONE else 'get')
     keys = kp.split('/') 
 
-    # Footgun protection 1
+    # Footgun protection
+    assert not ((set_to is not MFKEYPATH_NONE) and (default is not MFKEYPATH_NONE)), f"Either set_to= or default= can be used, not both."
+    if mode == 'get': assert create_intermediates == False, f"create_intermediates only works when set_to= or default= is present."
     assert not kp.startswith('/'), f"Keypaths shouldn't start with /"
     assert not kp.endswith('/'), f"Keypaths shouldn't end with with /"
-
-    # Footgun protection 2
     keys = [key for key in keys if len(key)] # Filter out empty keys that could appear due to: double slash //, slash at the start/end of the path, empty path. (Maybe more I can't think of)
-    
-    if set_to is MFKEYPATH_NONE: # get
-        assert create_intermediates == False, f"create_intermediates currently only works in combination with set_to. [Jan 2026]"
-        for key in keys:
-            current = current.get(key, {}) # If the keypath doesn't exist we just return a disconnected {} (Bit sloppy. TODO: Improve [Jan 2026])
-        return current
-    else: # set
-        for key in keys[:-1]:
-            if create_intermediates:
-                if key not in current: current[key] = {} # Create dicts on the path.
-            current = current[key]                       # Walk up to the second-to-last key
-        current[keys[-1]] = set_to                       # Store at the last key
 
+    # Walk/modify the dict
+    current = dict
+    if mode == 'get':
+        for key in keys:
+            current = None if current is None else current.get(key)             # Simply return None if the keypath doesn't exist. || Note that we can't differentiate between a missing path and an actual None value stored in the dict.
+        return current
+    else:
+        for key in keys[:-1]:                                                   # Walk up to the second-to-last key
+            if create_intermediates: current = current.setdefault(key, {})      # Create dicts on the path.
+            else:                    current = current[key]                     # Crashes if the keypath doesn't exist, except when create_intermediates= is used. 
+        
+            if mode == 'set':       current[keys[-1]] = set_to                  # Modify at the last key
+            elif mode == 'default': return current.setdefault(keys[-1], default)
 
 def exc_desc(e: Exception) -> str:
     return f"{type(e).__name__}({e})"
