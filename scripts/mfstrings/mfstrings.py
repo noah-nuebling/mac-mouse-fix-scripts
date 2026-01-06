@@ -539,7 +539,7 @@ def cmd_inspect(args):
             print(output)
         else: 
             lines = output.split('\n')
-            row_counter = 0
+            row_counter = 1
             for line in lines[1:]:  # Skip header
                 # Filter by grep pattern if provided
                 if grep_pattern and not grep_pattern.search(line):
@@ -583,11 +583,12 @@ def cmd_inspect(args):
             worktree_map[get_lineid(line)] = line
 
         # Find changes
-        all_lineids = set(head_map.keys()) | set(worktree_map.keys())
+        all_lineids = list(worktree_map.keys()) + list((set(head_map.keys()) - set(worktree_map.keys())))   # Don't union directly to preserve sorting [Jan 2026]
+        
         worktree_has_changes = False
 
-        row_counter = 0
-        for fk in sorted(all_lineids):
+        row_counter = 1
+        for fk in worktree_map.keys():
             old_line = head_map.get(fk)
             new_line = worktree_map.get(fk)
 
