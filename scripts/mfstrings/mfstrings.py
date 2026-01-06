@@ -228,13 +228,13 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
 
             # Check if this is a pluralizable string
             if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{key}")):
-                
+
                 # Get union of all plural variants across requested locales
                 all_variants: set[str] = set()
                 for locale in requested_locales:
                     variants_for_locale = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys()
                     assert all(x in mflocales.locales_to_plural_variants[locale] for x in variants_for_locale), f"Unexpected plural variants for {locales}:{key}. Expected: {mflocales.locales_to_plural_variants[locale]}. Found: {variants_for_locale}."
-                    all_variants.update(variants_for_locale)
+                    all_variants.update(mflocales.locales_to_plural_variants[locale])
 
                 # Create one row per variant
                 for variant in all_variants:
