@@ -151,7 +151,6 @@ def unescape_cell(value: str) -> str:
 
 def is_pluralizable_string(string_info: dict) -> bool:
     """Check if a string is pluralizable by looking at the English version."""
-    assert string_info
     return bool(mfkeypath(string_info, f"localizations/en/substitutions/pluralizable"))
 
 def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
@@ -1152,6 +1151,13 @@ def main():
             progress_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
             progress_parser.add_argument('--pretty', action='store_true', help='Human-readable output (default is TSV)')
             progress_parser.set_defaults(func=cmd_progress)
+
+            # bulk-edit command
+            bulk_edit_parser = subparsers.add_parser('bulk-edit', help='Bulk edit translations for a specific locale across all .xcstrings files. To be used by human in "translation context debugging" workflow.')
+            bulk_edit_parser.add_argument('action', type=str, choices=['delete', 'sync-state-with-diff'], help='Action to perform: "delete" removes all translations for the locale, "sync-state-with-diff" sets state to needs_review for changed values')
+            bulk_edit_parser.add_argument('--locale', type=str, required=True, help='The locale to edit (e.g., "tr", "de")')
+            bulk_edit_parser.add_argument('--force', action='store_true', help='Skip the check for uncommitted changes in .xcstrings files')
+            bulk_edit_parser.set_defaults(func=cmd_bulk_edit)
 
         # Parse and execute
         args = parser.parse_args()
