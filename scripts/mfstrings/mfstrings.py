@@ -165,13 +165,14 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None, row_filters: list[tuple[str, list[str]]] | None = None) -> str:
     """
     Generate inspect output as TSV string.
 
     Args:
         fileid_filter: File ID to inspect. Use "all" to inspect all files.
         git_ref: If provided, loads file contents from that git ref instead of the working directory.
+        row_filters: List of (column, values) tuples. Rows must match all filters (AND). Each filter matches if the row's column value is in the values list (OR).
     """
     # Load data
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
@@ -260,6 +261,11 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                             row_data[f'state:{locale}'] = state
                             row_data[locale] = value
 
+                    # Apply row filters (on full row_data, before column filtering)
+                    if row_filters:
+                        if not all(row_data.get(col, '') in vals for col, vals in row_filters):
+                            continue
+
                     # Store row data (filter to requested columns)
                     filtered_row_data = {col: row_data.get(col, '') for col in columns}
                     rows.append(filtered_row_data)
@@ -281,6 +287,11 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                     else:
                         row_data[f'state:{locale}'] = state
                         row_data[locale] = value
+
+                # Apply row filters (on full row_data, before column filtering)
+                if row_filters:
+                    if not all(row_data.get(col, '') in vals for col, vals in row_filters):
+                        continue
 
                 # Store row data (filter to requested columns)
                 filtered_row_data = {col: row_data.get(col, '') for col in columns}
@@ -496,6 +507,10 @@ def cmd_inspect(args):
     if not xcstrings__paths_to_objs:
         print_help_and_exit("No .xcstrings files found.")
 
+    # Default --fileid to 'all' if not provided
+    if args.fileid is None:
+        args.fileid = 'all'
+
     # Validate --fileid
     if args.fileid != 'all' and args.fileid not in xcstrings__ids_to_paths:
         print_help_and_exit(f"Unknown fileid: '{args.fileid}'")
@@ -525,14 +540,30 @@ def cmd_inspect(args):
         try:
             grep_pattern = re.compile(args.grep, re.IGNORECASE)
         except re.error as e:
-            print(f"Error: Invalid regex pattern '{args.grep}': {e}") 
+            print(f"Error: Invalid regex pattern '{args.grep}': {e}")
             exit(1)
+
+    # Parse and validate --filter
+    row_filters: list[tuple[str, list[str]]] = []
+    if args.filters:
+        for filter_str in args.filters:
+            if '=' not in filter_str:
+                print_help_and_exit(f"Invalid filter format: '{filter_str}'. Expected 'COLUMN=VALUE' or 'COLUMN=VAL1,VAL2'.")
+            col, values_str = filter_str.split('=', 1)
+            if col not in all_columns:
+                print_help_and_exit(f"Unknown column in filter: '{col}'")
+            values = values_str.split(',')
+            row_filters.append((col, values))
+
+    # Validate --show-unchanged
+    if args.show_unchanged and not args.diff:
+        print_help_and_exit("--show-unchanged requires --diff")
 
     # Print the output
 
     if not args.diff: # Normal (non-diff) output
 
-        output = inspect_output_tsv(columns, args.sortcol, args.fileid)
+        output = inspect_output_tsv(columns, args.sortcol, args.fileid, row_filters=row_filters)
         
         if not args.pretty: 
             print(output)
@@ -558,8 +589,8 @@ def cmd_inspect(args):
                 exit(1)
 
         # Generate output for HEAD and worktree
-        output_head     = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref='HEAD')
-        output_worktree = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None)
+        output_head     = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref='HEAD', row_filters=row_filters)
+        output_worktree = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None, row_filters=row_filters)
 
         lines_head     = output_head.split('\n')
         lines_worktree = output_worktree.split('\n')
@@ -591,8 +622,9 @@ def cmd_inspect(args):
             old_line = head_map.get(fk)
             new_line = worktree_map.get(fk)
 
-            if old_line == new_line:
-                continue  # No change
+            is_unchanged = (old_line == new_line)
+            if is_unchanged and not args.show_unchanged:
+                continue
 
             # Filter by grep pattern if provided
             if grep_pattern:
@@ -602,24 +634,27 @@ def cmd_inspect(args):
                 if not old_matches and not new_matches:
                     continue
 
-            worktree_has_changes = True
+            if not is_unchanged:
+                worktree_has_changes = True
 
             if args.pretty:
                 # Human-readable output with colors
                 new_parts = new_line.split('\t') if new_line else []
                 old_parts = old_line.split('\t') if old_line else []
 
-                if old_line is None:    print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added - show all green
-                elif new_line is None:  print_row_pretty(row_counter, columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed - show all red
-                else:                   print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed - show diff
-                
+                if is_unchanged:        print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{DIM}=")   # Unchanged
+                elif old_line is None:  print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added
+                elif new_line is None:  print_row_pretty(row_counter, columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed
+                else:                   print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed
+
                 row_counter += 1
 
                 print()  # Blank line between entries
             else:
                 # Machine-readable TSV diff output
-                # Format: +/-/~ <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
-                if old_line is None:    print(f"+\t{new_line}")
+                # Format: +/-/~/= <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
+                if is_unchanged:        print(f"=\t{new_line}")
+                elif old_line is None:  print(f"+\t{new_line}")
                 elif new_line is None:  print(f"-\t{old_line}")
                 else:
                     print(f"-\t{old_line}")
@@ -1129,12 +1164,14 @@ def main():
 
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect string units from .xcstrings files (TSV output)')
-            inspect_parser.add_argument('--fileid', type=str, required=True, help='File ID to inspect (e.g., "Localizable", "Main"). Use "all" to inspect all files. Run "./run mfstrings list-files" to see available file IDs.')
+            inspect_parser.add_argument('--fileid', type=str, required=False, help='File ID to inspect (e.g., "Localizable", "Main"). Defaults to "all". Run "./run mfstrings list-files" to see available file IDs.')  # TODO: Migrate to --filter fileid=... (and update .claude/skills when that happens)
             inspect_parser.add_argument('--cols', type=str, required=True, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Cells in the state:LOCALE columns are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, required=True, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
+            inspect_parser.add_argument('--show-unchanged', action='store_true', help='With --diff: also show rows that have not changed')
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
+            inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.')
             inspect_parser.set_defaults(func=cmd_inspect)
 
             # edit command
