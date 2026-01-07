@@ -1012,63 +1012,89 @@ def cmd_progress(args):
         print(f"Overall: {data.grand_translated}/{data.grand_to_translate} strings translated ({fmt_pct(data.grand_percentage)})")
 
 
-def cmd_delete_locale(args):
-    """Delete all translations for a specific locale from all .xcstrings files."""
+def cmd_bulk_edit(args):
+    """Bulk edit translations for a specific locale across all .xcstrings files."""
 
     locale = args.locale
+    action = args.action
 
     # Get all files first (needed for both safety check and processing)
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
 
     # Safety check: abort if any .xcstrings files have uncommitted changes
-    
-    repo_root = repo_root_for_path(path)
-    
     dirty_files = []
-    for id in xcstrings__ids_to_paths:
-        is_dirty = mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root) # Check if file has changes (staged or unstaged)
-        if is_dirty: dirty_files.append(xcstrings__ids_to_paths[id])
-    
-    if dirty_files:
-        print("Error: Cannot delete locale while .xcstrings files have uncommitted changes.")
+    for fileid, path in xcstrings__ids_to_paths.items():
+        repo_root = repo_root_for_path(path)
+        is_dirty = mfutils.runclt(f'git diff HEAD --name-only -- "{os.path.relpath(path, repo_root)}"', cwd=repo_root)
+        if is_dirty:
+            dirty_files.append(path)
+
+    if dirty_files and not args.force:
+        print(f"Error: Cannot run bulk-edit while .xcstrings files have uncommitted changes.")
         print(f"Dirty files: [\n    {'\n    '.join([os.path.normpath(p) for p in dirty_files])}\n]")
-        print("\nCommit or stash your changes first.")
+        print("\nCommit or stash your changes first, or use --force to skip this check.")
         exit(1)
 
+    # Load file contents
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
+    xcstrings__paths_to_head_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref='HEAD') if action == 'sync-state-with-diff' else None
+
     # Validate locale exists
-    xcstrings__ids_to_paths     = find_xcstrings__ids_to_paths()
-    xcstrings__paths_to_objs    = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
-    locales                     = project_locales()
-    
+    locales = project_locales()
+
     if locale not in locales:
-        print(f"Error: Locale '{locale}' not found in any .xcstrings file.")
+        print(f"Error: Locale '{locale}' not found in project.")
         print(f"Available locales: {', '.join(locales)}")
         exit(1)
 
     if locale == 'en':
-        print("Error: Cannot delete the source locale 'en'.")
+        print("Error: Cannot bulk-edit the source locale 'en'.")
         exit(1)
-    total_deleted = 0
+
+    total_modified = 0
 
     for fileid, path in xcstrings__ids_to_paths.items():
         content = xcstrings__paths_to_objs[path]
+        file_modified = 0
 
-        strings = content.get('strings', {})
-        file_deleted = 0
+        for key in mfkeypath(content, 'strings'):
+            localizations = mfkeypath(content, f'strings/{key}/localizations')
 
-        for key, string_info in strings.items():
-            localizations = string_info.get('localizations', {})
-            if locale in localizations:
+            if locale not in localizations:
+                continue
+
+            if action == 'delete':
                 del localizations[locale]
-                file_deleted += 1
+                file_modified += 1
 
-        if file_deleted > 0:
+            elif action == 'sync-state-with-diff':
+                head_content = xcstrings__paths_to_head_objs[path]
+
+                # Regular strings
+                head_value = mfkeypath(head_content, f'strings/{key}/localizations/{locale}/stringUnit/value')
+                worktree_value = mfkeypath(content, f'strings/{key}/localizations/{locale}/stringUnit/value')
+                if worktree_value:
+                    new_state = 'needs_review' if worktree_value != head_value else 'translated'
+                    mfkeypath(content, f'strings/{key}/localizations/{locale}/stringUnit')['state'] = new_state
+                    file_modified += 1
+
+                # Pluralizable strings
+                for variant in mfkeypath(content, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural'):
+                    head_variant_value     = mfkeypath(head_content, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/value')
+                    worktree_variant_value = mfkeypath(content,      f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit/value')
+                    if worktree_variant_value:
+                        new_state = 'needs_review' if worktree_variant_value != head_variant_value else 'translated'
+                        mfkeypath(content, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit')['state'] = new_state
+                        file_modified += 1
+
+        if file_modified > 0:
             mfutils.write_xcstrings_file(path, content)
-            print(f"  {fileid}: deleted {file_deleted} entries")
-            total_deleted += file_deleted
+            print(f"  {fileid}: modified {file_modified} entries")
+            total_modified += file_modified
 
-    if total_deleted > 0:
-        print(f"\nDeleted {total_deleted} '{locale}' entries across {len(xcstrings__ids_to_paths)} files.")
+    action_verb = {'delete': 'deleted', 'sync-state-with-diff': 'synced state for'}[action]
+    if total_modified > 0:
+        print(f"\n{action_verb.capitalize()} {total_modified} '{locale}' entries across {len(xcstrings__ids_to_paths)} files.")
     else:
         print(f"No '{locale}' entries found.")
 
@@ -1118,11 +1144,6 @@ def main():
             edit_parser.add_argument('--value', type=str, help='The new translation value')
             edit_parser.add_argument('--state', type=str, help='The new state: "translated" or "needs_review"')
             edit_parser.set_defaults(func=cmd_edit)
-
-            # delete-locale command
-            delete_locale_parser = subparsers.add_parser('delete-locale', help='Delete all translations for a locale. Won\'t run if any .xcstrings files have uncomitted changes.[Jan 2026]. Created for \'context debugging\' workflow [Jan 2026]')
-            delete_locale_parser.add_argument('locale', type=str, help='The locale code to delete (e.g., "de", "fr", "zh-Hans")')
-            delete_locale_parser.set_defaults(func=cmd_delete_locale)
 
             # progress command
             progress_parser = subparsers.add_parser('progress', help='Show translation progress as a table (files × locales)')
