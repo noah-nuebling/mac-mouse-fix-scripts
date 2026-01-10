@@ -303,7 +303,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                     for locale in locales:
                         
                         if variant not in mflocales.locales_to_plural_variants[locale]: # This locale doesn't have this variant
-                            state, value = 'N/A', 'N/A'
+                            state, value = '(no pluralization)', '(no pluralization)'
                         else:
                             string_unit = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit")
                             state, value = get_string_unit_data(string_unit)
