@@ -236,10 +236,10 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
     locales = project_locales()
 
     # Determine which locales are being requested (for plural variant union)
-    requested_locales = ['en']  # Always include 'en'
+    requested_locales = []
     if 1:
         for col in columns:
-            if col in locales and col != 'en':
+            if col in locales:
                 requested_locales.append(col)
             elif col.startswith('state:'):
                 locale = col[6:]  # Remove 'state:' prefix
@@ -288,7 +288,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
                 all_variants: set[str] = set()
                 for locale in requested_locales:
                     variants_for_locale = mfkeypath(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural").keys()
-                    assert all(x in mflocales.locales_to_plural_variants[locale] for x in variants_for_locale), f"Unexpected plural variants for {locales}:{key}. Expected: {mflocales.locales_to_plural_variants[locale]}. Found: {variants_for_locale}."
+                    assert all(x in mflocales.locales_to_plural_variants[locale] for x in variants_for_locale), f"Unexpected plural variants for {requested_locales}:{key}. Expected: {mflocales.locales_to_plural_variants[locale]}. Found: {variants_for_locale}."
                     all_variants.update(mflocales.locales_to_plural_variants[locale])
 
                 # Create one row per variant
@@ -765,6 +765,11 @@ def cmd_edit(args):
     base_key, variant = '', ''
     if '|==|' in key: base_key, variant = key.rsplit('|==|', 1)
     else:          base_key, variant = key, None
+
+    # Validate the plural variant
+    if variant and variant not in mflocales.locales_to_plural_variants[locale]:
+        print(f"Error: Invalid plural variant '{variant}'. Plural variants for locale '{locale}': {mflocales.locales_to_plural_variants[locale]}")
+        exit(1)
 
     # Load the xcstrings file
     xcstrings_obj = json.loads(Path(file_path).read_text())
