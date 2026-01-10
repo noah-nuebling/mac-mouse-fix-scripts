@@ -113,9 +113,9 @@ def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
             _, returncode, _ = mfutils.runclt(f'git rev-parse --verify {commit}^{{commit}}', cwd=repo_root, manually_handle_errors=True)
             if returncode == 0: found_repos.append(repo_root)
 
-        if len(found_repos) != 0:       fail(f"Error: Commit '{commit}' not found in any repo ({', '.join(all_repo_roots)})")
-        if len (found_repos) > 1:       fail(f"Error: Commit '{commit}' found in multiple repos")
-        if found_repos[0] in result:    fail(f"Error: Multiple commits specified for the same repo '{repo}': '{result[repo]}' and '{commit}'")
+        if len(found_repos) == 0:       fail(f"Error: Commit '{commit}' not found in any repo ({', '.join(all_repo_roots)})")
+        if found_repos[0] in result:    fail(f"Error: Multiple commits specified for the same repo '{found_repos[0]}': '{result[found_repos[0]]}' and '{commit}'")
+        # If the same commit is found in multiple repos (e.g. HEAD, we just ignore that)
 
         result[found_repos[0]] = commit
 
