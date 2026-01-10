@@ -83,6 +83,44 @@ def repo_root_for_path(filepath: str) -> str: # Determine which repo this file b
     else:
         return '.'
 
+all_repo_roots = ['.', '../mac-mouse-fix-website']
+
+def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
+    """
+    Parse a commit spec like "abc123" or "abc123,def456" into a dict mapping repo roots to commits.
+
+    Each commit is auto-detected to determine which repo it belongs to by checking if it exists
+    in each repo. Returns {repo_root: commit} for commits that were found.
+
+    Errors if:
+    - A commit doesn't exist in any repo
+    - Two commits belong to the same repo
+    """
+
+    def fail(msg):
+        print(msg)
+        exit(1)
+
+    if not commit_spec: return {}
+
+    commits = [c.strip() for c in commit_spec.split(',')]
+    result: dict[str, str] = {}
+
+    for commit in commits:
+        # Find which repo(s) this commit exists in
+        found_repos = []
+        for repo_root in all_repo_roots:
+            _, returncode, _ = mfutils.runclt(f'git rev-parse --verify {commit}^{{commit}}', cwd=repo_root, manually_handle_errors=True)
+            if returncode == 0: found_repos.append(repo_root)
+
+        if len(found_repos) != 0:       fail(f"Error: Commit '{commit}' not found in any repo ({', '.join(all_repo_roots)})")
+        if len (found_repos) > 1:       fail(f"Error: Commit '{commit}' found in multiple repos")
+        if found_repos[0] in result:    fail(f"Error: Multiple commits specified for the same repo '{repo}': '{result[repo]}' and '{commit}'")
+
+        result[found_repos[0]] = commit
+
+    return result
+
 def available_columns_for_locales(locales: list[str]):
     
     # Build all available columns [Jan 2026]
@@ -109,11 +147,12 @@ def project_locales():
     development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
     return [development_locale] + translation_locales
 
-def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | None = None, skip_missing: bool = False) -> dict[str, dict]:
+def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_refs: dict[str, str] | None = None, skip_missing: bool = False) -> dict[str, dict]:
     """
     Returns {xcstrings_path: xcstrings_obj}
 
-    If git_ref is provided, loads file contents from that git ref instead of the working directory.
+    If git_refs is provided, loads file contents from git refs instead of the working directory.
+    git_refs is a dict mapping repo roots to commit refs (e.g., {'.': 'abc123', '../mac-mouse-fix-website': 'def456'}).
     If skip_missing is True, silently skip files that don't exist at the given git_ref (useful when
     comparing across repos where a commit only exists in one repo).
     """
@@ -121,8 +160,10 @@ def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | Non
     result: dict[str, dict] = {}
 
     for path in xcstrings_paths:
+        repo_root = repo_root_for_path(path)
+        git_ref = git_refs.get(repo_root) if git_refs else None
+
         if git_ref: # Get file content at a specific git ref using `git show`.
-            repo_root = repo_root_for_path(path)
             content_str, returncode, stderr = mfutils.runclt(f'git show {git_ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root, manually_handle_errors=True)
             # Also skip empty content - git can return 0 with empty output for filenames with special chars like [...slug].xcstrings
             if returncode != 0 or not content_str:
@@ -171,15 +212,16 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None, row_filters: list[tuple[str, list[str]]] | None = None, skip_missing: bool = False) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_refs: dict[str, str] | None = None, row_filters: list[tuple[str, list[str]]] | None = None, skip_missing: bool = False) -> str:
     """
     Generate inspect output as TSV string.
 
     Args:
         fileid_filter: File ID to inspect. Use "all" to inspect all files.
-        git_ref: If provided, loads file contents from that git ref instead of the working directory.
+        git_refs: If provided, loads file contents from git refs instead of the working directory.
+                  Dict mapping repo roots to commit refs (e.g., {'.': 'abc123', '../mac-mouse-fix-website': 'def456'}).
         row_filters: List of (column, values) tuples. Rows must match all filters (AND). Each filter matches if the row's column value is in the values list (OR).
-        skip_missing: If True, skip files that don't exist at the given git_ref (useful for cross-repo diffs).
+        skip_missing: If True, skip files that don't exist at the given git_refs (useful for cross-repo diffs).
     """
     # Load data
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
@@ -190,7 +232,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
             raise ValueError(f"Unknown fileid: '{fileid_filter}'. Run './run mfstrings list-files' to see available file IDs.")
         xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
 
-    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref, skip_missing=skip_missing)
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_refs=git_refs, skip_missing=skip_missing)
     locales = project_locales()
 
     # Determine which locales are being requested (for plural variant union)
@@ -578,9 +620,13 @@ def cmd_inspect(args):
         if args.diff_highlight is None:
             args.diff_highlight = 'HEAD'
 
+    # Parse commit specs into per-repo dicts
+    diff_filter_refs = parse_commit_spec(args.diff_filter)
+    diff_highlight_refs = parse_commit_spec(args.diff_highlight)
+
     # Print the output
 
-    if not args.diff_filter: # Normal (non-diff) output
+    if not diff_filter_refs: # Normal (non-diff) output
 
         output = inspect_output_tsv(columns, args.sortcol, args.fileid, row_filters=row_filters)
 
@@ -607,12 +653,12 @@ def cmd_inspect(args):
             exit(1)
 
         # Generate output for filter ref, highlight ref, and worktree
-        #   - filter_ref: Used to determine which rows changed (rows where filter_ref != worktree are shown)
-        #   - highlight_ref: Used for displaying the "old" values in diff output (optional, defaults to filter_ref)
-        #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., website files won't exist for mac-mouse-fix commits)
-        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=args.diff_filter, row_filters=row_filters, skip_missing=True)
-        output_worktree      = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None, row_filters=row_filters)
-        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=args.diff_highlight, row_filters=row_filters, skip_missing=True) if args.diff_highlight and args.diff_highlight != args.diff_filter else None
+        #   - filter_refs: Used to determine which rows changed (rows where filter_ref != worktree are shown)
+        #   - highlight_refs: Used for displaying the "old" values in diff output (optional, defaults to filter_refs)
+        #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., newly added .xcstrings files)
+        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True)
+        output_worktree      = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=None, row_filters=row_filters)
+        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_highlight_refs, row_filters=row_filters, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None
 
         lines_filter_ref    = output_filter_ref.split('\n')
         lines_worktree      = output_worktree.split('\n')
@@ -825,10 +871,10 @@ def cmd_progress(args):
         def grand_percentage(self) -> float:
             return self.grand_translated / self.grand_to_translate if self.grand_to_translate > 0 else 0.0
     
-    def compute_progress_data(xcstrings__ids_to_paths: dict[str, str], translation_locales: list[str], git_ref: str | None = None) -> ProgressData:
+    def compute_progress_data(xcstrings__ids_to_paths: dict[str, str], translation_locales: list[str], git_refs: dict[str, str] | None = None) -> ProgressData:
         """Compute translation progress for given files and locales."""
 
-        xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref)
+        xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_refs=git_refs)
 
         per_file_locale: dict[str, dict[str, dict]] = {}
         string_counts: dict[str, int] = {}
@@ -930,7 +976,7 @@ def cmd_progress(args):
 
     if args.diff:
         # Diff mode: compare HEAD vs worktree
-        head = compute_progress_data(xcstrings__ids_to_paths, translation_locales, git_ref='HEAD')
+        head = compute_progress_data(xcstrings__ids_to_paths, translation_locales, git_refs=parse_commit_spec('HEAD'))
 
         # Format before→after (with optional color for pretty mode)
         def fmt_change(old: int, new: int, color: bool = False) -> str:
@@ -1091,7 +1137,7 @@ def cmd_bulk_edit(args):
 
     # Load file contents
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()))
-    xcstrings__paths_to_head_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref='HEAD') if action == 'sync-state-with-diff' else None
+    xcstrings__paths_to_head_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_refs=parse_commit_spec('HEAD')) if action == 'sync-state-with-diff' else None
 
     # Validate locale exists
     locales = project_locales()
@@ -1188,11 +1234,11 @@ def main():
             inspect_parser.add_argument('--cols', type=str, required=True, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Cells in the state:LOCALE columns are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, required=True, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree. Shorthand for --diff-filter HEAD --diff-highlight HEAD.')
-            inspect_parser.add_argument('--diff-filter', type=str, metavar='COMMIT', help='Only show strings that changed since COMMIT (compares COMMIT vs worktree to decide which rows to show)')
-            inspect_parser.add_argument('--diff-highlight', type=str, metavar='COMMIT', help='Compare worktree values against COMMIT (shows character-level diffs in --pretty mode)')
+            inspect_parser.add_argument('--diff-filter', type=str, metavar='COMMIT[,COMMIT]', help='Only show strings that changed since COMMIT (compares COMMIT vs worktree to decide which rows to show). Use comma-separated commits for different repos (auto-detected).')
+            inspect_parser.add_argument('--diff-highlight', type=str, metavar='COMMIT[,COMMIT]', help='Compare worktree values against COMMIT (shows character-level diffs in --pretty mode). Use comma-separated commits for different repos (auto-detected).')
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
-            inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.')
+            inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.') # Mostly introduced for 'context debugging' workflow (--filter state:de=translated) but now `--diff-filter HEAD` does the same job but better [Jan 2026]
             inspect_parser.set_defaults(func=cmd_inspect)
 
             # edit command
