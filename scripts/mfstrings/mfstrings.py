@@ -109,19 +109,25 @@ def project_locales():
     development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
     return [development_locale] + translation_locales
 
-def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | None = None) -> dict[str, dict]:
+def load_xcstrings__paths_to_objs(xcstrings_paths: list[str], git_ref: str | None = None, skip_missing: bool = False) -> dict[str, dict]:
     """
     Returns {xcstrings_path: xcstrings_obj}
 
     If git_ref is provided, loads file contents from that git ref instead of the working directory.
+    If skip_missing is True, silently skip files that don't exist at the given git_ref (useful when
+    comparing across repos where a commit only exists in one repo).
     """
-    
+
     result: dict[str, dict] = {}
-    
+
     for path in xcstrings_paths:
         if git_ref: # Get file content at a specific git ref using `git show`.
             repo_root = repo_root_for_path(path)
-            content_str = mfutils.runclt(f'git show {git_ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root)
+            content_str, returncode, stderr = mfutils.runclt(f'git show {git_ref}:{os.path.relpath(path, repo_root)}', cwd=repo_root, manually_handle_errors=True)
+            # Also skip empty content - git can return 0 with empty output for filenames with special chars like [...slug].xcstrings
+            if returncode != 0 or not content_str:
+                if skip_missing: continue
+                raise RuntimeError(f"Failed to load {path} at git ref '{git_ref}': {stderr.strip() if stderr else 'empty content'}")
         else:       content_str = Path(path).read_text()
         result[path] = json.loads(content_str)
 
@@ -165,7 +171,7 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None, row_filters: list[tuple[str, list[str]]] | None = None) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_ref: str | None = None, row_filters: list[tuple[str, list[str]]] | None = None, skip_missing: bool = False) -> str:
     """
     Generate inspect output as TSV string.
 
@@ -173,6 +179,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
         fileid_filter: File ID to inspect. Use "all" to inspect all files.
         git_ref: If provided, loads file contents from that git ref instead of the working directory.
         row_filters: List of (column, values) tuples. Rows must match all filters (AND). Each filter matches if the row's column value is in the values list (OR).
+        skip_missing: If True, skip files that don't exist at the given git_ref (useful for cross-repo diffs).
     """
     # Load data
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
@@ -183,7 +190,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
             raise ValueError(f"Unknown fileid: '{fileid_filter}'. Run './run mfstrings list-files' to see available file IDs.")
         xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
 
-    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref)
+    xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_ref=git_ref, skip_missing=skip_missing)
     locales = project_locales()
 
     # Determine which locales are being requested (for plural variant union)
@@ -201,7 +208,11 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
     rows: list[dict[str, str]] = []
 
     for fileid in xcstrings__ids_to_paths:
-        
+
+        # Skip files that weren't loaded (e.g., skipped due to skip_missing)
+        if xcstrings__ids_to_paths[fileid] not in xcstrings__paths_to_objs:
+            continue
+
         xcstrings_obj = xcstrings__paths_to_objs[xcstrings__ids_to_paths[fileid]]
 
         for key in mfkeypath(xcstrings_obj, f"strings"):
@@ -498,7 +509,12 @@ def cmd_inspect(args):
             f"\n"
             f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
             f"\n"
-            f"\n--diff shows the diff between HEAD and the current worktree"
+            f"\n--diff shows the diff between HEAD and the current worktree (shorthand for --diff-filter HEAD --diff-highlight HEAD)"
+            f"\n"
+            f"\n--diff-filter COMMIT only shows strings that changed since COMMIT"
+            f"\n--diff-highlight COMMIT compares worktree values against COMMIT for display"
+            f"\n  Example: --diff-filter HEAD --diff-highlight abc123"
+            f"\n    Shows only strings changed since HEAD, but compares them against the values from abc123"
             f"\n"
             f"\n state:LOCALE columns contain either 'translated' or 'needs_review'."
         )
@@ -555,19 +571,22 @@ def cmd_inspect(args):
             values = values_str.split(',')
             row_filters.append((col, values))
 
-    # Validate --show-unchanged
-    if args.show_unchanged and not args.diff:
-        print_help_and_exit("--show-unchanged requires --diff")
+    # Normalize diff options: --diff is shorthand for --diff-filter HEAD --diff-highlight HEAD
+    if args.diff:
+        if args.diff_filter is None:
+            args.diff_filter = 'HEAD'
+        if args.diff_highlight is None:
+            args.diff_highlight = 'HEAD'
 
     # Print the output
 
-    if not args.diff: # Normal (non-diff) output
+    if not args.diff_filter: # Normal (non-diff) output
 
         output = inspect_output_tsv(columns, args.sortcol, args.fileid, row_filters=row_filters)
-        
-        if not args.pretty: 
+
+        if not args.pretty:
             print(output)
-        else: 
+        else:
             lines = output.split('\n')
             row_counter = 1
             for line in lines[1:]:  # Skip header
@@ -580,84 +599,85 @@ def cmd_inspect(args):
                 row_counter += 1
                 print()  # Blank line between entries
 
-    else: # --diff output
-        
+    else: # Diff output (--diff, --diff-filter, and/or --diff-highlight)
+
         # Validate --cols
-        if args.diff:
-            if 'key' not in columns or 'fileid' not in columns:
-                print(f"Error: --diff needs key and fileid columns to be present.") # Improvement idea: Could run the diffing logic with 'key' and 'fileid' present and then strip them later if the user doesn't want to see them.
-                exit(1)
+        if 'key' not in columns or 'fileid' not in columns:
+            print(f"Error: Diff mode needs key and fileid columns to be present.") # Improvement idea: Could run the diffing logic with 'key' and 'fileid' present and then strip them later if the user doesn't want to see them.
+            exit(1)
 
-        # Generate output for HEAD and worktree
-        output_head     = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref='HEAD', row_filters=row_filters)
-        output_worktree = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None, row_filters=row_filters)
+        # Generate output for filter ref, highlight ref, and worktree
+        #   - filter_ref: Used to determine which rows changed (rows where filter_ref != worktree are shown)
+        #   - highlight_ref: Used for displaying the "old" values in diff output (optional, defaults to filter_ref)
+        #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., website files won't exist for mac-mouse-fix commits)
+        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=args.diff_filter, row_filters=row_filters, skip_missing=True)
+        output_worktree      = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=None, row_filters=row_filters)
+        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_ref=args.diff_highlight, row_filters=row_filters, skip_missing=True) if args.diff_highlight and args.diff_highlight != args.diff_filter else None
 
-        lines_head     = output_head.split('\n')
-        lines_worktree = output_worktree.split('\n')
+        lines_filter_ref    = output_filter_ref.split('\n')
+        lines_worktree      = output_worktree.split('\n')
+        lines_highlight_ref = output_highlight_ref.split('\n') if output_highlight_ref else None
 
-        def get_lineid(line: str) -> str: # Return tuple of (lineid, line) || lineid tells us which lines to compare for the diff.
-            
+        def get_lineid(line: str) -> str: # lineid tells us which lines to compare for the diff.
             parts = line.split('\t')
-
             assert 'key' in columns and 'fileid' in columns, f"Programmer error. We should be checking this condition above."
-            lineid = parts[columns.index('key')] + parts[columns.index('fileid')] # We need both the file and key to identify a line, sine the keys can be duplicate across .xcstrings files.
-            
+            lineid = parts[columns.index('key')] + parts[columns.index('fileid')] # We need both the file and key to identify a line, since the keys can be duplicate across .xcstrings files.
             return lineid
 
-        head_map = {}
-        for line in lines_head[1:]:  # Skip header
-            head_map[get_lineid(line)] = line
+        filter_ref_map = {}
+        for line in lines_filter_ref[1:]:  # Skip header
+            filter_ref_map[get_lineid(line)] = line
 
         worktree_map = {}
         for line in lines_worktree[1:]:  # Skip header
             worktree_map[get_lineid(line)] = line
 
-        # Find changes
-        all_lineids = list(worktree_map.keys()) + list((set(head_map.keys()) - set(worktree_map.keys())))   # Don't union directly to preserve sorting [Jan 2026]
-        
+        highlight_ref_map = {}
+        if lines_highlight_ref:
+            for line in lines_highlight_ref[1:]:  # Skip header
+                highlight_ref_map[get_lineid(line)] = line
+
         worktree_has_changes = False
 
         row_counter = 1
         for fk in worktree_map.keys():
-            old_line = head_map.get(fk)
+            filter_line = filter_ref_map.get(fk)
             new_line = worktree_map.get(fk)
 
-            is_unchanged = (old_line == new_line)
-            if is_unchanged and not args.show_unchanged:
+            # Use filter_ref to determine if row changed - skip unchanged rows
+            if filter_line == new_line:
                 continue
+
+            # Use highlight_ref for display (falls back to filter_ref if not specified)
+            highlight_line = highlight_ref_map.get(fk) if highlight_ref_map else filter_line
 
             # Filter by grep pattern if provided
             if grep_pattern:
-                # Check if pattern matches either old or new line
-                old_matches = old_line and grep_pattern.search(old_line)
+                highlight_matches = highlight_line and grep_pattern.search(highlight_line)
                 new_matches = new_line and grep_pattern.search(new_line)
-                if not old_matches and not new_matches:
+                if not highlight_matches and not new_matches:
                     continue
 
-            if not is_unchanged:
-                worktree_has_changes = True
+            worktree_has_changes = True
 
             if args.pretty:
                 # Human-readable output with colors
                 new_parts = new_line.split('\t') if new_line else []
-                old_parts = old_line.split('\t') if old_line else []
+                highlight_parts = highlight_line.split('\t') if highlight_line else []
 
-                if is_unchanged:        print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{DIM}=")   # Unchanged
-                elif old_line is None:  print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added
-                elif new_line is None:  print_row_pretty(row_counter, columns, old_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed
-                else:                   print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=old_parts, diff_prefix="~") # Changed
+                if   filter_line is None:   print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added (since filter_ref)
+                elif new_line is None:      print_row_pretty(row_counter, columns, highlight_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed (since filter_ref)
+                else:                       print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=highlight_parts, diff_prefix="~") # Changed
 
                 row_counter += 1
-
                 print()  # Blank line between entries
             else:
                 # Machine-readable TSV diff output
-                # Format: +/-/~/= <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
-                if is_unchanged:        print(f"=\t{new_line}")
-                elif old_line is None:  print(f"+\t{new_line}")
-                elif new_line is None:  print(f"-\t{old_line}")
+                # Format: +/-/~ <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
+                if   filter_line is None:   print(f"+\t{new_line}")
+                elif new_line is None:      print(f"-\t{highlight_line}")
                 else:
-                    print(f"-\t{old_line}")
+                    print(f"-\t{highlight_line}")
                     print(f"+\t{new_line}")
 
         if not worktree_has_changes:
@@ -1167,8 +1187,9 @@ def main():
             inspect_parser.add_argument('--fileid', type=str, required=False, help='File ID to inspect (e.g., "Localizable", "Main"). Defaults to "all". Run "./run mfstrings list-files" to see available file IDs.')  # TODO: Migrate to --filter fileid=... (and update .claude/skills when that happens)
             inspect_parser.add_argument('--cols', type=str, required=True, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Cells in the state:LOCALE columns are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, required=True, help='Column to sort the table by. This column must also be passed to --cols.')
-            inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree')
-            inspect_parser.add_argument('--show-unchanged', action='store_true', help='With --diff: also show rows that have not changed')
+            inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree. Shorthand for --diff-filter HEAD --diff-highlight HEAD.')
+            inspect_parser.add_argument('--diff-filter', type=str, metavar='COMMIT', help='Only show strings that changed since COMMIT (compares COMMIT vs worktree to decide which rows to show)')
+            inspect_parser.add_argument('--diff-highlight', type=str, metavar='COMMIT', help='Compare worktree values against COMMIT (shows character-level diffs in --pretty mode)')
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
             inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.')
