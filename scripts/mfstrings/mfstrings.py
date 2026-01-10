@@ -738,7 +738,7 @@ def cmd_edit(args):
     """Edit a string's translation value and/or state in an .xcstrings file."""
 
     # Validate arguments
-    if not args.value and not args.state:
+    if args.value is None and not args.state: # Caution: Don't use args.value as a boolean – that will silently ignore '' (emptystring) [Jan 2026]
         print("Error: At least one of --value or --state must be provided.")
         exit(1)
 
@@ -819,8 +819,8 @@ def cmd_edit(args):
         )
 
     # Init/edit the stringUnit
-    stringUnit['state'] = args.state                or stringUnit.get('state', 'new')
-    stringUnit['value'] = unescape_cell(args.value) or stringUnit.get('value', '')
+    stringUnit['state'] = args.state if args.state else stringUnit.get('state', 'new')
+    stringUnit['value'] = unescape_cell(args.value) if args.value is not None else stringUnit.get('value', '')
 
     print(f"Updated {key} [{locale}]")
 
