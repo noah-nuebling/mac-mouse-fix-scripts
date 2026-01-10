@@ -125,16 +125,22 @@ language_name_override_map = {
 
 """
 # CLDR plural categories per locale
-#   Source: https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html
+    These match the .xcloc files exported by Xcode [Jan 2025]
+#   Previously (commit 5765abb79 and before) these matched: https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html
+#       Not totally sure why this doesn't match Xcode. 
+#       Differences [Jan 2025]:
+#           - ca, fr, it, pt-BR, pt-PT, es: Xcode omits 'many'. 
+#               - The CLDR 'many' category for these Romance languages
+#                   applies to very large numbers (like 1,000,000) with specific decimal patterns. 
+#                   This probably rarely matters for localization.
+#           - he: Xcode adds 'many'. CLDR doesn't list 'many' for Hebrew cardinals. We're not sure why.
+
 #   Used by mfstrings.py to determine which plural variants to show for each locale. [Jan 2026]
 #
 #   Notes:
 #   - 'other' is always required and serves as the default/fallback
-#   - Languages like Chinese, Japanese, Korean, Turkish, Vietnamese only use 'other' (no plural distinctions)
-#   - Slavic languages (Czech, Russian, Polish) have complex systems with 'one', 'few', 'many', 'other'
-#   - Arabic has the most categories: 'zero', 'one', 'two', 'few', 'many', 'other'
-#
 #   - We use the term 'variant' because out code already uses that a lot. 'category' is used by unicode [Jan 2026]
+#   - It would be nice to call some (private) Apple API to get these, but I couldn't find one. [Jan 2026]
 """
 locales_to_plural_variants: dict[str, list[str]] = (
     # (By Claude))
@@ -151,21 +157,21 @@ locales_to_plural_variants: dict[str, list[str]] = (
     "ko"         : ['other'],
     "vi"         : ['other'],
     "ar"         : ['zero', 'one', 'two', 'few', 'many', 'other'],
-    "ca"         : ['one', 'many', 'other'],
+    "ca"         : ['one', 'other'],
     "cs"         : ['one', 'few', 'many', 'other'],
     "nl"         : ['one', 'other'],
-    "fr"         : ['one', 'many', 'other'],
+    "fr"         : ['one', 'other'],
     "el"         : ['one', 'other'],
-    "he"         : ['one', 'two', 'other'],
+    "he"         : ['one', 'two', 'other', 'many'],
     "hu"         : ['one', 'other'],
-    "it"         : ['one', 'many', 'other'],
+    "it"         : ['one', 'other'],
     "ja"         : ['other'],
     "pl"         : ['one', 'few', 'many', 'other'],
-    "pt-BR"      : ['one', 'many', 'other'],
-    "pt-PT"      : ['one', 'many', 'other'],
+    "pt-BR"      : ['one', 'other'],
+    "pt-PT"      : ['one', 'other'],
     "ro"         : ['one', 'few', 'other'],
     "ru"         : ['one', 'few', 'many', 'other'],
-    "es"         : ['one', 'many', 'other'],
+    "es"         : ['one', 'other'],
     "sv"         : ['one', 'other'],
     "tr"         : ['one', 'other'],
     "uk"         : ['one', 'few', 'many', 'other'],
