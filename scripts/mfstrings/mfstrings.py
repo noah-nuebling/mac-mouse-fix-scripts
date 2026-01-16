@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import cmp_to_key
+import fcntl
 
 from pathlib import Path
 
@@ -761,7 +762,7 @@ def cmd_edit(args):
         print("Use './run mfstrings list-files' to see available fileids.")
         exit(1)
 
-    # Parse the key (handle |==|variant suffix for pluralizable keys. Example: some.key|==|other)
+    # Parse the key (handle |==|VARIANT suffix for pluralizable keys. Example: some.key|==|other)
     base_key, variant = '', ''
     if '|==|' in key: base_key, variant = key.rsplit('|==|', 1)
     else:          base_key, variant = key, None
@@ -771,67 +772,73 @@ def cmd_edit(args):
         print(f"Error: Invalid plural variant '{variant}'. Plural variants for locale '{locale}': {mflocales.locales_to_plural_variants[locale]}")
         exit(1)
 
-    # Load the xcstrings file
-    xcstrings_obj = json.loads(Path(file_path).read_text())
+    with open(file_path, 'r') as fd:
 
-    # Find the string
-    if base_key not in mfkeypath(xcstrings_obj, f"strings"):
-        print(f"Error: Key '{base_key}' not found in {fileid}")
-        exit(1)
-    
-    # Find/create stringUnit to edit
-    stringUnit = {}
-    if not variant: # Regular (non-pluralizable) string
-        
-        if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
-            print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}|==|one', '{base_key}|==|other', etc.")
+        # Lock the xcstrings file
+        #   (Avoids file-corruption when multiple Claudes work on different languages.)
+        fcntl.flock(fd, fcntl.LOCK_EX) # Automatically unlocked when the file is closed (I think) [Jan 2026]
+
+        # Load the xcstrings file
+        xcstrings_obj = json.loads(Path(file_path).read_text())
+
+        # Find the string
+        if base_key not in mfkeypath(xcstrings_obj, f"strings"):
+            print(f"Error: Key '{base_key}' not found in {fileid}")
             exit(1)
-
-        stringUnit = mfkeypath(xcstrings_obj, f"strings/{base_key}/localizations/{locale}/stringUnit", default={}, create_intermediates=True)
-
-    else: # Pluralizable string - edit a specific variant
         
-        # Check if this string is actually pluralizable
-        if not is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
-            print(f"Error: Key '{base_key}' is not a pluralizable string, but variant '{variant}' was specified.")
-            exit(1)
+        # Find/create stringUnit to edit
+        stringUnit = {}
+        if not variant: # Regular (non-pluralizable) string
+            
+            if is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
+                print(f"Error: Key '{base_key}' is a pluralizable string. Please specify a variant using '{base_key}|==|one', '{base_key}|==|other', etc.")
+                exit(1)
 
-        # Ensure the structure exists for this locale
-        mfkeypath(
-            xcstrings_obj, 
-            f"strings/{base_key}/localizations/{locale}/stringUnit", 
-            default={'state': 'translated', 'value': '%#@pluralizable@'},       # Using %#@pluralizable@ everywhere and not having the pluralizable base-strings be editable is an MMF-specific convention. [Jan 2026] The mf-xcloc-editor Readme.md explains why I think this is a good choice. Maybe wrote about this in other places too [Jan 2026]
-            create_intermediates=True
-        )
-        mfkeypath(
-            xcstrings_obj, 
-            f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable",
-            default={'formatSpecifier': 'd'},
-            create_intermediates=True
-        )
+            stringUnit = mfkeypath(xcstrings_obj, f"strings/{base_key}/localizations/{locale}/stringUnit", default={}, create_intermediates=True)
 
-        # Get the stringUnit
-        stringUnit = mfkeypath(
-            xcstrings_obj,
-            f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit",
-            default={},
-            create_intermediates=True
-        )
+        else: # Pluralizable string - edit a specific variant
+            
+            # Check if this string is actually pluralizable
+            if not is_pluralizable_string(mfkeypath(xcstrings_obj, f"strings/{base_key}")):
+                print(f"Error: Key '{base_key}' is not a pluralizable string, but variant '{variant}' was specified.")
+                exit(1)
 
-    # Init/edit the stringUnit
-    stringUnit['state'] = args.state if args.state else stringUnit.get('state', 'new')
-    stringUnit['value'] = unescape_cell(args.value) if args.value is not None else stringUnit.get('value', '')
+            # Ensure the structure exists for this locale
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/stringUnit", 
+                default={'state': 'translated', 'value': '%#@pluralizable@'},       # Using %#@pluralizable@ everywhere and not having the pluralizable base-strings be editable is an MMF-specific convention. [Jan 2026] The mf-xcloc-editor Readme.md explains why I think this is a good choice. Maybe wrote about this in other places too [Jan 2026]
+                create_intermediates=True
+            )
+            mfkeypath(
+                xcstrings_obj, 
+                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable",
+                default={'formatSpecifier': 'd'},
+                create_intermediates=True
+            )
 
-    print(f"Updated {key} [{locale}]")
+            # Get the stringUnit
+            stringUnit = mfkeypath(
+                xcstrings_obj,
+                f"strings/{base_key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{variant}/stringUnit",
+                default={},
+                create_intermediates=True
+            )
 
-    # Write the file back (using mfutils to match Xcode's JSON formatting)
-    mfutils.write_xcstrings_file(file_path, xcstrings_obj)
+        # Init/edit the stringUnit
+        stringUnit['state'] = args.state if args.state else stringUnit.get('state', 'new')
+        stringUnit['value'] = unescape_cell(args.value) if args.value is not None else stringUnit.get('value', '')
 
-    # Print what was changed (show escaped form for consistency with inspect)
-    if args.value is not None:
-        print(f"  value: {escape_cell(unescape_cell(args.value))}")
-    if args.state:
-        print(f"  state: {args.state}")
+        print(f"Updated {key} [{locale}]")
+
+        # Write the file back (using mfutils to match Xcode's JSON formatting)
+        mfutils.write_xcstrings_file(file_path, xcstrings_obj)
+
+        # Print what was changed (show escaped form for consistency with inspect)
+        if args.value is not None:
+            print(f"  value: {escape_cell(unescape_cell(args.value))}")
+        if args.state:
+            print(f"  state: {args.state}")
 
 def cmd_list_files(_args):
 
