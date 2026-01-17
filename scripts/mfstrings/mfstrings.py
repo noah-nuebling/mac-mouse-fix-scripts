@@ -627,7 +627,7 @@ def cmd_inspect(args):
 
     # Print the output
 
-    if not diff_filter_refs: # Normal (non-diff) output
+    if not diff_filter_refs and not diff_highlight_refs: # Normal (non-diff) output
 
         output = inspect_output_tsv(columns, args.sortcol, args.fileid, row_filters=row_filters)
 
@@ -654,14 +654,14 @@ def cmd_inspect(args):
             exit(1)
 
         # Generate output for filter ref, highlight ref, and worktree
-        #   - filter_refs: Used to determine which rows changed (rows where filter_ref != worktree are shown)
+        #   - filter_refs: Used to determine which rows changed (rows where filter_ref != worktree are shown). If empty, all rows are shown.
         #   - highlight_refs: Used for displaying the "old" values in diff output (optional, defaults to filter_refs)
         #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., newly added .xcstrings files)
-        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True)
+        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True) if diff_filter_refs else None
         output_worktree      = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=None, row_filters=row_filters)
-        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_highlight_refs, row_filters=row_filters, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None
+        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_highlight_refs, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None  # No row_filters: highlight ref is for display only, filters apply to worktree
 
-        lines_filter_ref    = output_filter_ref.split('\n')
+        lines_filter_ref    = output_filter_ref.split('\n') if output_filter_ref else None
         lines_worktree      = output_worktree.split('\n')
         lines_highlight_ref = output_highlight_ref.split('\n') if output_highlight_ref else None
 
@@ -672,8 +672,9 @@ def cmd_inspect(args):
             return lineid
 
         filter_ref_map = {}
-        for line in lines_filter_ref[1:]:  # Skip header
-            filter_ref_map[get_lineid(line)] = line
+        if lines_filter_ref:
+            for line in lines_filter_ref[1:]:  # Skip header
+                filter_ref_map[get_lineid(line)] = line
 
         worktree_map = {}
         for line in lines_worktree[1:]:  # Skip header
@@ -688,11 +689,11 @@ def cmd_inspect(args):
 
         row_counter = 1
         for fk in worktree_map.keys():
-            filter_line = filter_ref_map.get(fk)
+            filter_line = filter_ref_map.get(fk) if diff_filter_refs else None  # None means "no filter ref" (show all rows)
             new_line = worktree_map.get(fk)
 
-            # Use filter_ref to determine if row changed - skip unchanged rows
-            if filter_line == new_line:
+            # Use filter_ref to determine if row changed - skip unchanged rows (only when filtering is enabled)
+            if diff_filter_refs and filter_line == new_line:
                 continue
 
             # Use highlight_ref for display (falls back to filter_ref if not specified)
@@ -712,26 +713,30 @@ def cmd_inspect(args):
                 new_parts = new_line.split('\t') if new_line else []
                 highlight_parts = highlight_line.split('\t') if highlight_line else []
 
-                if   filter_line is None:   print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added (since filter_ref)
-                elif new_line is None:      print_row_pretty(row_counter, columns, highlight_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed (since filter_ref)
-                else:                       print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=highlight_parts, diff_prefix="~") # Changed
+                if   diff_filter_refs and filter_line is None:  print_row_pretty(row_counter, columns, new_parts, grep_pattern, diff_prefix=f"{GREEN}+") # Added (since filter_ref)
+                elif diff_filter_refs and new_line is None:     print_row_pretty(row_counter, columns, highlight_parts, grep_pattern, diff_prefix=f"{RED}-")   # Removed (since filter_ref)
+                else:                                           print_row_pretty(row_counter, columns, new_parts, grep_pattern, old_row_values=highlight_parts, diff_prefix="~" if diff_filter_refs else "") # Changed (or just highlighting without filter)
 
                 row_counter += 1
                 print()  # Blank line between entries
             else:
                 # Machine-readable TSV diff output
                 # Format: +/-/~ <TAB> fileid <TAB> key <TAB> col1 <TAB> col2 ...
-                if   filter_line is None:   print(f"+\t{new_line}")
-                elif new_line is None:      print(f"-\t{highlight_line}")
+                if   diff_filter_refs and filter_line is None:  print(f"+\t{new_line}")
+                elif diff_filter_refs and new_line is None:     print(f"-\t{highlight_line}")
                 else:
-                    print(f"-\t{highlight_line}")
-                    print(f"+\t{new_line}")
+                    if diff_filter_refs:
+                        print(f"-\t{highlight_line}")
+                        print(f"+\t{new_line}")
+                    else:
+                        # Highlight-only mode: just show the new line (highlighting is only visible in --pretty)
+                        print(new_line)
 
-        if not worktree_has_changes:
+        if diff_filter_refs and not worktree_has_changes:
             if args.pretty:
                 print("No changes.")
             exit(0)
-        else:
+        elif diff_filter_refs:
             exit(1)
 
 
