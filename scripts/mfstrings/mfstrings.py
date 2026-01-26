@@ -213,12 +213,11 @@ def get_string_unit_data(string_unit: dict) -> tuple[str, str]:
     return state, value
 
 
-def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git_refs: dict[str, str] | None = None, row_filters: list[tuple[str, list[str]]] | None = None, skip_missing: bool = False) -> str:
+def inspect_output_tsv(columns: list[str], sortcol: str, git_refs: dict[str, str] | None = None, row_filters: list[tuple[str, list[str]]] | None = None, skip_missing: bool = False) -> str:
     """
     Generate inspect output as TSV string.
 
     Args:
-        fileid_filter: File ID to inspect. Use "all" to inspect all files.
         git_refs: If provided, loads file contents from git refs instead of the working directory.
                   Dict mapping repo roots to commit refs (e.g., {'.': 'abc123', '../mac-mouse-fix-website': 'def456'}).
         row_filters: List of (column, values) tuples. Rows must match all filters (AND). Each filter matches if the row's column value is in the values list (OR).
@@ -226,13 +225,6 @@ def inspect_output_tsv(columns: list[str], sortcol: str, fileid_filter: str, git
     """
     # Load data
     xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
-
-    # Filter by fileid if not "all"
-    if fileid_filter != 'all':
-        if fileid_filter not in xcstrings__ids_to_paths:
-            raise ValueError(f"Unknown fileid: '{fileid_filter}'. Run './run mfstrings list-files' to see available file IDs.")
-        xcstrings__ids_to_paths = {fileid_filter: xcstrings__ids_to_paths[fileid_filter]}
-
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_refs=git_refs, skip_missing=skip_missing)
     locales = project_locales()
 
@@ -538,17 +530,15 @@ def cmd_inspect(args):
             f"\n"
             f"\n{err}"
             f"\n"
-            f"\nUsage: ./run mfstrings inspect --fileid <fileid> --cols <columns> --sortcol <column> [--pretty] [--diff]"
-            f"\n"
-            f"\nAvailable file IDs: {', '.join(xcstrings__ids_to_paths.keys())}"
+            f"\nUsage: ./run mfstrings inspect --cols <columns> --sortcol <column> [--filter ...] [--pretty] [--diff]"
             f"\n"
             f"\nAvailable columns:"
             f"\n  - {'\n  - '.join(all_columns)}"
             f"\n"
             f"\nExample:"
-            f"\n  ./run mfstrings inspect --fileid all --cols fileid,key,comment,en,state:tr,tr --sortcol key"
-            f"\n  ./run mfstrings inspect --fileid Localizable --cols key,en,tr,state:tr --sortcol key"
-            f"\n  ./run mfstrings inspect --fileid all --cols all --sortcol key"
+            f"\n  ./run mfstrings inspect --cols fileid,key,comment,en,state:tr,tr --sortcol key"
+            f"\n  ./run mfstrings inspect --cols key,en,tr,state:tr --sortcol key --filter fileid=Localizable"
+            f"\n  ./run mfstrings inspect --cols all --sortcol key"
             f"\n"
             f"\n--pretty tries to make the output more human-readable. Without --pretty, the output is a TSV (Tab separated values) table"
             f"\n"
@@ -565,14 +555,6 @@ def cmd_inspect(args):
 
     if not xcstrings__paths_to_objs:
         print_help_and_exit("No .xcstrings files found.")
-
-    # Default --fileid to 'all' if not provided
-    if args.fileid is None:
-        args.fileid = 'all'
-
-    # Validate --fileid
-    if args.fileid != 'all' and args.fileid not in xcstrings__ids_to_paths:
-        print_help_and_exit(f"Unknown fileid: '{args.fileid}'")
 
     # Handle 'all' keyword to include all columns [Jan 2026]
     if args.cols == 'all':
@@ -594,7 +576,7 @@ def cmd_inspect(args):
     if args.grep:
         if not args.pretty:
             print(f"Warning: --grep is only supported with --pretty. For TSV output, pipe to grep instead:", file=sys.stderr) # TODO: Stupid Claude didn't use print_help_and_exit(). (It's right above) There are so many different error reporting / help-printing mechanisms now. Claude 4.5 Opus still kinda stupid sometimes. Still decends into chaos if you let it do its thing for too long I think.
-            print(f"  ./run mfstrings inspect --fileid ... --cols ... | grep '{args.grep}'", file=sys.stderr)
+            print(f"  ./run mfstrings inspect --cols ... --sortcol ... | grep '{args.grep}'", file=sys.stderr)
             exit(1)
         try:
             grep_pattern = re.compile(args.grep, re.IGNORECASE)
@@ -629,7 +611,7 @@ def cmd_inspect(args):
 
     if not diff_filter_refs and not diff_highlight_refs: # Normal (non-diff) output
 
-        output = inspect_output_tsv(columns, args.sortcol, args.fileid, row_filters=row_filters)
+        output = inspect_output_tsv(columns, args.sortcol, row_filters=row_filters)
 
         if not args.pretty:
             print(output)
@@ -657,9 +639,9 @@ def cmd_inspect(args):
         #   - filter_refs: Used to determine which rows changed (rows where filter_ref != worktree are shown). If empty, all rows are shown.
         #   - highlight_refs: Used for displaying the "old" values in diff output (optional, defaults to filter_refs)
         #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., newly added .xcstrings files)
-        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True) if diff_filter_refs else None
-        output_worktree      = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=None, row_filters=row_filters)
-        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, args.fileid, git_refs=diff_highlight_refs, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None  # No row_filters: highlight ref is for display only, filters apply to worktree
+        output_filter_ref    = inspect_output_tsv(columns, args.sortcol, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True) if diff_filter_refs else None
+        output_worktree      = inspect_output_tsv(columns, args.sortcol, row_filters=row_filters)
+        output_highlight_ref = inspect_output_tsv(columns, args.sortcol, git_refs=diff_highlight_refs, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None  # No row_filters: highlight ref is for display only, filters apply to worktree
 
         lines_filter_ref    = output_filter_ref.split('\n') if output_filter_ref else None
         lines_worktree      = output_worktree.split('\n')
@@ -1249,7 +1231,6 @@ def main():
 
             # inspect command
             inspect_parser = subparsers.add_parser('inspect', help='Inspect string units from .xcstrings files (TSV output)')
-            inspect_parser.add_argument('--fileid', type=str, required=False, help='File ID to inspect (e.g., "Localizable", "Main"). Defaults to "all". Run "./run mfstrings list-files" to see available file IDs.')  # TODO: Migrate to --filter fileid=... (and update .claude/skills when that happens)
             inspect_parser.add_argument('--cols', type=str, required=True, help='Comma-separated list of columns to show, in order (e.g., "state:tr,fileid,key,en,tr"). Use "all" to include all available columns. Cells in the state:LOCALE columns are either "translated" or "needs_review".')
             inspect_parser.add_argument('--sortcol', type=str, required=True, help='Column to sort the table by. This column must also be passed to --cols.')
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree. Shorthand for --diff-filter HEAD --diff-highlight HEAD.')
@@ -1257,7 +1238,7 @@ def main():
             inspect_parser.add_argument('--diff-highlight', type=str, metavar='COMMIT[,COMMIT]', help='Compare worktree values against COMMIT (shows character-level diffs in --pretty mode). Use comma-separated commits for different repos (auto-detected).')
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
-            inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.') # Mostly introduced for 'context debugging' workflow (--filter state:de=translated) but now `--diff-filter HEAD` does the same job but better [Jan 2026]
+            inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.') # Mostly introduced for 'context debugging' workflow (--filter state:de=translated) but now `--diff-filter HEAD` does the same job but better [Jan 2026] || Update: --filter is now also useful for Claude so he can do `--filter fileid=Localizable` [Jan 2026]
             inspect_parser.set_defaults(func=cmd_inspect)
 
             # edit command
