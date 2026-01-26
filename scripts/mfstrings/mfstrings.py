@@ -834,16 +834,18 @@ def cmd_edit(args):
         stringUnit['state'] = args.state if args.state else stringUnit.get('state', 'new')
         stringUnit['value'] = unescape_cell(args.value) if args.value is not None else stringUnit.get('value', '')
 
-        print(f"Updated {key} [{locale}]")
-
-        # Write the file back (using mfutils to match Xcode's JSON formatting)
+        # Write the file back
         mfutils.write_xcstrings_file(file_path, xcstrings_obj)
 
-        # Print what was changed (show escaped form for consistency with inspect)
-        if args.value is not None:
-            print(f"  value: {escape_cell(unescape_cell(args.value))}")
-        if args.state:
-            print(f"  state: {args.state}")
+        # Print feedback
+        if (0): # Disabling printing because: - Context pollution (?) - Claude can just use `mfstrings inspect` to check his work.
+            print(f"Updated {key} [{locale}]")
+
+            # Print what was changed (show escaped form for consistency with inspect)
+            if args.value is not None:
+                print(f"  value: {escape_cell(unescape_cell(args.value))}")
+            if args.state:
+                print(f"  state: {args.state}")
 
 def cmd_list_files(_args):
 
