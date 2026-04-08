@@ -455,24 +455,47 @@ xcstrings_blacklist = {
     ],
 }
 
-def find_xcstrings_files(repo_root):
+def find_xcstrings_files(repo_root, git_ref=None):
+    """
+    Find .xcstrings files in a repo.
+
+    Args:
+        repo_root: Path to the repo root
+        git_ref: If provided, find files as they existed at this git ref (commit/branch/tag).
+                 If None, find files in the current worktree.
+    """
 
     repo_name = os.path.basename(os.path.abspath(repo_root))
     assert repo_name in ['mac-mouse-fix', 'mac-mouse-fix-website']
 
-    # [Jan 2026] (By Claude) Use git ls-files instead of glob.glob() as a performance optimization
-    #   This respects .gitignore and only searches tracked files, avoiding slow traversal of
-    #   large ignored directories like node_modules (18k+ files in website repo)
-    import subprocess
-    result = subprocess.run(
-        ['git', 'ls-files', '*.xcstrings', '**/*.xcstrings'],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=True
-    )
+    import subprocess # TODO: Why not use runclt? I think Claude introduced subprocess because it wasn't familiar with the codebase
+
+    if git_ref:
+        # List files from a specific commit using git ls-tree
+        result = subprocess.run(
+            ['git', 'ls-tree', '-r', '--name-only', git_ref],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        # Filter for .xcstrings files
+        paths = [p.strip() for p in result.stdout.splitlines() if p.strip().endswith('.xcstrings')]
+    else:
+        # [Jan 2026] (By Claude) Use git ls-files instead of glob.glob() as a performance optimization
+        #   This respects .gitignore and only searches tracked files, avoiding slow traversal of
+        #   large ignored directories like node_modules (18k+ files in website repo)
+        result = subprocess.run(
+            ['git', 'ls-files', '*.xcstrings', '**/*.xcstrings'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        paths = [p.strip() for p in result.stdout.splitlines() if p.strip()]
+
     # Convert relative paths to absolute paths
-    paths = [os.path.join(repo_root, p.strip()) for p in result.stdout.splitlines() if p.strip()]
+    paths = [os.path.join(repo_root, p) for p in paths]
 
     paths = [p for p in paths if os.path.relpath(p, repo_root) not in xcstrings_blacklist[repo_name]]
     return paths

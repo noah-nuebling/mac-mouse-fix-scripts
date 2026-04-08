@@ -40,17 +40,22 @@ DIM = '\033[2m'
 #
 
 
-def find_xcstrings__ids_to_paths() -> dict[str, str]:
+def find_xcstrings__ids_to_paths(git_refs: dict[str, str] | None = None) -> dict[str, str]:
     """
     Returns {fileid -> path} map
+
+    Args:
+        git_refs: If provided, find files as they existed at these git refs.
+                  Dict mapping repo roots to commit refs (e.g., {'.': 'abc123'}).
+
     Note for Claudes: DO NOT SORT the return value unless there is a specific reason to. This returns the 'canonical' order of the the files which groups them into different categories based on their origin.
     """
 
     # Get all .xcstrings file paths from both mac-mouse-fix and mac-mouse-fix-website repos.
     paths = []
     if 1:
-        main_files = mflocales.find_xcstrings_files('.')
-        website_files = mflocales.find_xcstrings_files(website_repo)
+        main_files = mflocales.find_xcstrings_files('.', git_ref=(git_refs or {}).get('.'))
+        website_files = mflocales.find_xcstrings_files(website_repo, git_ref=(git_refs or {}).get(website_repo))
         paths = main_files + website_files
 
     # Count occurrences of each base name
@@ -224,7 +229,7 @@ def inspect_output_tsv(columns: list[str], sortcol: str, git_refs: dict[str, str
         skip_missing: If True, skip files that don't exist at the given git_refs (useful for cross-repo diffs).
     """
     # Load data
-    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths()
+    xcstrings__ids_to_paths = find_xcstrings__ids_to_paths(git_refs=git_refs)
     xcstrings__paths_to_objs = load_xcstrings__paths_to_objs(list(xcstrings__ids_to_paths.values()), git_refs=git_refs, skip_missing=skip_missing)
     locales = project_locales()
 
@@ -596,6 +601,10 @@ def cmd_inspect(args):
             values = values_str.split(',')
             row_filters.append((col, values))
 
+    # Validate --at is mutually exclusive with --diff options
+    if args.at and (args.diff or args.diff_filter or args.diff_highlight):
+        print_help_and_exit("--at cannot be used with --diff, --diff-filter, or --diff-highlight")
+
     # Normalize diff options: --diff is shorthand for --diff-filter HEAD --diff-highlight HEAD
     if args.diff:
         if args.diff_filter is None:
@@ -604,6 +613,7 @@ def cmd_inspect(args):
             args.diff_highlight = 'HEAD'
 
     # Parse commit specs into per-repo dicts
+    at_refs = parse_commit_spec(args.at)
     diff_filter_refs = parse_commit_spec(args.diff_filter)
     diff_highlight_refs = parse_commit_spec(args.diff_highlight)
 
@@ -611,7 +621,7 @@ def cmd_inspect(args):
 
     if not diff_filter_refs and not diff_highlight_refs: # Normal (non-diff) output
 
-        output = inspect_output_tsv(columns, args.sortcol, row_filters=row_filters)
+        output = inspect_output_tsv(columns, args.sortcol, row_filters=row_filters, git_refs=at_refs)
 
         if not args.pretty:
             print(output)
@@ -639,6 +649,9 @@ def cmd_inspect(args):
         #   - filter_refs: Used to determine which rows changed (rows where filter_ref != worktree are shown). If empty, all rows are shown.
         #   - highlight_refs: Used for displaying the "old" values in diff output (optional, defaults to filter_refs)
         #   - skip_missing=True: Skip files that don't exist at the git ref (e.g., newly added .xcstrings files)
+        # TODO: [Apr 2026] Currently file discovery happens separately for each call (worktree vs git_refs).
+        #   This means deleted files won't show in diff output. To fix, we'd need to form a union of files
+        #   from both worktree and old commits, then pass that unified file list to each inspect_output_tsv call.
         output_filter_ref    = inspect_output_tsv(columns, args.sortcol, git_refs=diff_filter_refs, row_filters=row_filters, skip_missing=True) if diff_filter_refs else None
         output_worktree      = inspect_output_tsv(columns, args.sortcol, row_filters=row_filters)
         output_highlight_ref = inspect_output_tsv(columns, args.sortcol, git_refs=diff_highlight_refs, skip_missing=True) if diff_highlight_refs and diff_highlight_refs != diff_filter_refs else None  # No row_filters: highlight ref is for display only, filters apply to worktree
@@ -1236,6 +1249,7 @@ def main():
             inspect_parser.add_argument('--diff', action='store_true', help='Show diff between HEAD and current worktree. Shorthand for --diff-filter HEAD --diff-highlight HEAD.')
             inspect_parser.add_argument('--diff-filter', type=str, metavar='COMMIT[,COMMIT]', help='Only show strings that changed since COMMIT (compares COMMIT vs worktree to decide which rows to show). Use comma-separated commits for different repos (auto-detected).')
             inspect_parser.add_argument('--diff-highlight', type=str, metavar='COMMIT[,COMMIT]', help='Compare worktree values against COMMIT (shows character-level diffs in --pretty mode). Use comma-separated commits for different repos (auto-detected).')
+            inspect_parser.add_argument('--at', type=str, metavar='COMMIT[,COMMIT]', help='Show strings as they existed at COMMIT (time travel). Mutually exclusive with --diff options. Use comma-separated commits for different repos (auto-detected).') # Usecase for which we created this: Compare zh-HK and zh-Hant at an older commit (human translations) to see if there are any differences.
             inspect_parser.add_argument('--pretty', action='store_true', help='Human-readable output')
             inspect_parser.add_argument('--grep', type=str, help='Filter rows by regex pattern and highlight matches (requires --pretty)')
             inspect_parser.add_argument('--filter', type=str, action='append', dest='filters', metavar='COLUMN=VALUE', help='Filter rows by exact column value. Use COLUMN=VAL1,VAL2 for OR matching. Multiple --filter args use AND logic. With --diff, filters apply to worktree values only.') # Mostly introduced for 'context debugging' workflow (--filter state:de=translated) but now `--diff-filter HEAD` does the same job but better [Jan 2026] || Update: --filter is now also useful for Claude so he can do `--filter fileid=Localizable` [Jan 2026]
