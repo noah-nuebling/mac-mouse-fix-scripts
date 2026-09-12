@@ -69,8 +69,8 @@ def parse_generic(warning: str) -> tuple | None:
     match = re.match(
         r'''(?x)
             ---\ xcodebuild:\ WARNING:\ (.*?):
-            \ (.*?)\ 
-            \(Key:\ \"(.*?)\"\)
+            \ (.*?)
+            (?:\(Key:\ \"(.*?)\"\)|$)
         ''',
         warning
     )
@@ -120,7 +120,7 @@ def main():
     
     does_not_match_warning_count = 0
     generic_warning_count = 0
-    
+
     parsed_warnings: list[str] = []
 
     for warning in warnings:
@@ -142,12 +142,13 @@ def main():
                 old_highlighted, new_highlighted = highlight_diff(xliff_str, project_str)
                 parsed_warning += f"{BOLD}XLIFF:{RESET}\n{old_highlighted}" + "\n"
                 parsed_warning += f"{BOLD}Project:{RESET}\n{new_highlighted}" + "\n"
-        
+
         if not parsed:
             parsed = parse_generic(warning)
             if parsed:
                 generic_warning_count += 1
                 file, msg, key = parsed
+                key = key or "N/A"
 
                 parsed_warning += f"{BOLD}Problem:{RESET}   {msg}" + "\n"
                 parsed_warning += f"{BOLD}Key:{RESET}       {key}" + "\n"
