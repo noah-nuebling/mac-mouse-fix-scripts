@@ -935,10 +935,11 @@ def write_xcstrings_file(xcstrings_path: str, xcstrings_obj: dict):
     #   3. + '\n'                   --> Trailing newline to match how Xcode formats .xcstrings files after you edit them. (Prevents git churn) [Dec 2025]
     #       Update: [Dec 27 2025] Now Xcode doesn't add '\n' anymore? – I removed that code.
     #   4. sort_keys=True           --> Xcode sorts locales alphabetically. `mfstrings edit` just uses insertion order. We sort to match Xcode to prevent git churn [Jan 2026]
+    #       Update [Sep 2026] Disabled, because sorting doesn't match Xcode which causes git churn. Gotta use `NSString_localizedStandardCompare` if we end up re-enabling sorting.
     
     write_file(
         xcstrings_path, 
-        json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : '), sort_keys=True)
+        json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : '), sort_keys=False)
     )
 
 def convert_utf16_file_to_utf8(file_path):
