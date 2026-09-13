@@ -314,7 +314,7 @@ def main():
                     # Log
                     print(f"\nrun.py: Deleting existing venv at ./{venv_path} ...")    
                     # Delete existing venv
-                    subprocess.check_call(f"rm -r ./{venv_path}", text=True, shell=True)
+                    subprocess.check_call(f"rm -rf ./{venv_path}", text=True, shell=True)
 
                 # Log
                 print(f"\nrun.py: Creating venv at ./{venv_path} ...")

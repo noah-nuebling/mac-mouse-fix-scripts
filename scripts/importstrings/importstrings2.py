@@ -189,7 +189,7 @@ if 1:
             else:
                 xcstrings_entry = None
             if 1 and not args.no_key_mismatches:
-                mismatch_warnings.append(f"""KEY mismatch for key Found {RED}{len(xcstrings_entries)}{RESET} entries in xcstrings files for {RED}'{trans_unit.key}'{RESET}\n""")
+                mismatch_warnings.append(f"""KEY mismatch: Found {RED}{len(xcstrings_entries)}{RESET} entries for key {RED}'{trans_unit.key}'{RESET} in the xcstrings files\n""")
 
         if xcstrings_entry != None:
             # Check comment mismatch
