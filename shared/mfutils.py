@@ -403,7 +403,7 @@ def runclt(*command_arg, cwd: str|None = None, print_live_output: bool = False, 
         
         stdout = runclt('git status --short')                                           # returns stdout, raises on error (if returncode != 0 or stderr != '')
 
-        stdout, code, stderr = runclt('git status', manually_handle_errors=True)        # Custom handling of returncode and stderr
+        stdout, retcode, stderr = runclt('git status', manually_handle_errors=True)     # Custom handling of returncode and stderr
 
         runclt('npm install', print_live_output=True)                                   # Stream output as it runs (for long-running subtasks)
 
