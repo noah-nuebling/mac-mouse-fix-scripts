@@ -348,7 +348,7 @@ def main():
                         assert len(xcs) == 1
                         p = xcs[0]
                     if p.endswith('.xcstrings'): pass
-                    else:                        assert False
+                    else:                        assert False, f"Exported path '{p}' doesn't end with '.xcstrings'"
                     exported_paths2.append(p)
                 exported_paths = exported_paths2
 
