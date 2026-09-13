@@ -83,6 +83,7 @@ if 1:
     parser.add_argument('--no-additional-en-screenshots', required=False, action='store_true', help="By default we take/include English screenshots in addition to translated screenshots in the xcloc files [Nov 2025]")
     parser.add_argument('--recycle-screenshots',          required=False, action='store_true', help="Use localization screenshots taken during previous runs of the script. || Formerly --fresh-screenshots")
     parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--skip-download-url-validation', required=False, action='store_true', help="Don't validate the translation file download urls (which it does for all locales - currently failing after adding new locales but not having created all the files, yet, hence adding this option [Sep 2026])")
     parser.add_argument('--only-update-locale',           required=False,                      help="Only update the xcloc files for this particular locale. Omit this to update all locales. Some stuff, like ./run syncstrings will run for all locales either way. [Dec 2025]")
     args = parser.parse_args()
 
@@ -98,7 +99,6 @@ if 1:
             parser.print_help()
             exit(1)
         print(f"Dry run: Running dry due to missing --api-key or --dry-run flag - not uploading/downloading from github.\n")
-
 #
 # Define main
 #
@@ -259,7 +259,7 @@ def main():
     if args.skip_xcloc_file_creation:
         
         # Skip straight to creating the guide
-        download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run))
+        download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run and not args.skip_download_url_validation))
         create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
         return
 
@@ -654,7 +654,7 @@ def main():
     upload_xcloc_files(zip_files, delete_all_existing = (not args.only_update_locale))
     
     # Get xcloc download urls
-    download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run))
+    download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run and not args.skip_download_url_validation))
 
     # Create the guide
     create_translation_guide(download_urls, repo_analysis.all_repos.translation_locales_unfiltered, repo_analysis.all_repos.localization_progress)
