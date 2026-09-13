@@ -177,6 +177,11 @@ if 1:
                 if x: xcstrings_entries.append(x)
                 
 
+        # Sloppy addition
+        def dbg_wrap_in_quotes(s): # Make it more obvious where string starts and ends to debug weird `COMMENT mismatch` errors
+            return s
+            # return "```\n" + s + "\n```"
+
         mismatch_warning = ''
         
         # Extract xcstrings_entry and check key mismatches
@@ -194,10 +199,12 @@ if 1:
         if xcstrings_entry != None:
             # Check comment mismatch
             if 1 and not args.no_comment_mismatches:
-                xcstrings_comment = xcstrings_entry.get('comment', '');
-                if xcstrings_comment != trans_unit.note:
-                    diff_xliff, diff_xcstrings = highlight_diff(trans_unit.note, xcstrings_comment)
-                    mismatch_warnings.append(f"""COMMENT mismatch for key '{trans_unit.key}':\n    XLIFF:\n{textwrap.indent(diff_xliff, '        ')}\n    XCSTRINGS:\n{textwrap.indent(diff_xcstrings, '        ')}\n""")
+                xcstrings_comment = xcstrings_entry.get('comment', '')
+                xcstrings_comment = xcstrings_comment.strip()
+                trans_unit_note = trans_unit.note.strip()
+                if xcstrings_comment != trans_unit_note:
+                    diff_xliff, diff_xcstrings = highlight_diff(trans_unit_note, xcstrings_comment)
+                    mismatch_warnings.append(f"""COMMENT mismatch for key '{trans_unit.key}':\n    XLIFF:\n{textwrap.indent(dbg_wrap_in_quotes(diff_xliff), '        ')}\n    XCSTRINGS:\n{textwrap.indent(dbg_wrap_in_quotes(diff_xcstrings), '        ')}\n""")
 
             # Check source mismatch
             if 1 and not args.no_source_mismatches:
