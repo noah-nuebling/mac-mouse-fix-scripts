@@ -178,6 +178,8 @@ locales_to_plural_variants: dict[str, list[str]] = (
     "th"         : ['other'],
     "id"         : ['other'],
     "hi"         : ['one', 'other'],
+    "bn"         : ['one', 'other'],
+    "nb"         : ['one', 'other'],
 }
 )
 ordered_plural_variants = ['zero', 'one', 'two', 'few', 'many', 'other'] # Unused  [Jan 2026]
