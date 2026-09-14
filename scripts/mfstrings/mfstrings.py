@@ -91,6 +91,8 @@ def repo_root_for_path(filepath: str) -> str: # Determine which repo this file b
 
 all_repo_roots = ['.', '../mac-mouse-fix-website']
 
+import math
+
 def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
     """
     Parse a commit spec like "abc123" or "abc123,def456" into a dict mapping repo roots to commits.
@@ -100,7 +102,7 @@ def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
 
     Errors if:
     - A commit doesn't exist in any repo
-    - Two commits belong to the same repo
+    - Two commits belong to the same repo and have the same specificity (symbolic commits like HEAD can have lower specificity if they are found in both repos)
     """
 
     def fail(msg):
@@ -112,19 +114,32 @@ def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
     commits = [c.strip() for c in commit_spec.split(',')]
     result: dict[str, str] = {}
 
+    commits_to_repos = {}
+    repos_to_commits = {}
     for commit in commits:
         # Find which repo(s) this commit exists in
-        found_repos = []
+
         for repo_root in all_repo_roots:
             _, returncode, _ = mfutils.runclt(f'git rev-parse --verify {commit}^{{commit}}', cwd=repo_root, manually_handle_errors=True)
-            if returncode == 0: found_repos.append(repo_root)
+            if returncode == 0: 
+                commits_to_repos.setdefault(commit, []).append(repo_root)
+                repos_to_commits.setdefault(repo_root, []).append(commit)
+    
+    # Check that each commit occurs in some repo
+    for commit in commits:
+        if not commits_to_repos.get(commit, []):       fail(f"Error: Commit '{commit}' not found in any repo ({', '.join(all_repo_roots)})")
+    # Handle ambiguities (multiple specified commits applying to the same repo) and fill result
+    for repo_root in repos_to_commits:
+        
+        if len(repos_to_commits[repo_root]) > 1: # Ambiguity
+            min_specificity       = min(len(commits_to_repos[commit]) for commit in repos_to_commits[repo_root]) # Try to resolve ambiguity via specificity (the fewer repos the commit occurs in the more specific) (Symbolic commits like 'HEAD' occur in both repos)
+            min_specificity_list  = [commit for commit in repos_to_commits[repo_root] if len(commits_to_repos[commit]) == min_specificity]
+            if len(min_specificity_list) > 1: fail(f"Error: Multiple commits with the same specificity provided for the same repo '{repo_root}': {min_specificity_list}")
+            else:                             result[repo_root] = min_specificity_list[0]
+        else:
+            result[repo_root] = repos_to_commits[repo_root][0]
 
-        if len(found_repos) == 0:       fail(f"Error: Commit '{commit}' not found in any repo ({', '.join(all_repo_roots)})")
-        if found_repos[0] in result:    fail(f"Error: Multiple commits specified for the same repo '{found_repos[0]}': '{result[found_repos[0]]}' and '{commit}'")
-        # If the same commit is found in multiple repos (e.g. HEAD, we just ignore that)
-
-        result[found_repos[0]] = commit
-
+    # Return
     return result
 
 def available_columns_for_locales(locales: list[str]):
