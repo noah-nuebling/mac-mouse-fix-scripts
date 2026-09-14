@@ -132,10 +132,10 @@ def parse_commit_spec(commit_spec: str | None) -> dict[str, str]:
     for repo_root in repos_to_commits:
         
         if len(repos_to_commits[repo_root]) > 1: # Ambiguity
-            min_specificity       = min(len(commits_to_repos[commit]) for commit in repos_to_commits[repo_root]) # Try to resolve ambiguity via specificity (the fewer repos the commit occurs in the more specific) (Symbolic commits like 'HEAD' occur in both repos)
-            min_specificity_list  = [commit for commit in repos_to_commits[repo_root] if len(commits_to_repos[commit]) == min_specificity]
-            if len(min_specificity_list) > 1: fail(f"Error: Multiple commits with the same specificity provided for the same repo '{repo_root}': {min_specificity_list}")
-            else:                             result[repo_root] = min_specificity_list[0]
+            min_specificity       = min(len(commits_to_repos[commit]) for commit in repos_to_commits[repo_root]) # Try to resolve ambiguity via specificity (the fewer repos the commit occurs in the more specific) (Symbolic commits like 'HEAD' can occur in both repos)
+            commits_with_min_specificity  = [commit for commit in repos_to_commits[repo_root] if len(commits_to_repos[commit]) == min_specificity]
+            if len(commits_with_min_specificity) > 1: fail(f"Error: Multiple commits with the same specificity provided for the same repo '{repo_root}': {commits_with_min_specificity}")
+            else:                                     result[repo_root] = commits_with_min_specificity[0]
         else:
             result[repo_root] = repos_to_commits[repo_root][0]
 
