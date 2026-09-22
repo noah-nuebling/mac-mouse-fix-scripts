@@ -474,8 +474,9 @@ def main():
 
                         # Run the screenshot-taker test runner
                         _, returncode, stderr = mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True, manually_handle_errors=True) 
-                        if not (returncode == 0 and stderr == ''):
+                        if returncode or stderr:
                             os.system('afplay /System/Library/Sounds/Sosumi.aiff') # beep_on_failure in case we step away from the computer and the test-runner randomly fails. (Which just happened – I think for the first time) [Jan 2025]
+                            assert not returncode, f"Test-runner failed with returncode {returncode} and stderr:\n{stderr}" # (Even on success Xcode will fill stderr, not sure exactly the logic [Sep 2026])
 
                         # Log
                         print(f"Finished running test-runner")
