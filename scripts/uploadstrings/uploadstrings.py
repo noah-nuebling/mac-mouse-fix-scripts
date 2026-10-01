@@ -64,8 +64,6 @@ xcloc_editor_download_url    = "https://github.com/noah-nuebling/mf-xcloc-editor
 translation_guide_github_issue_id = "1638"
 
 # Screenshots
-xcode_screenshot_taker_output_dir_variable = "MF_LOCALIZATION_SCREENSHOT_OUTPUT_DIR"
-xcode_screenshot_taker_locale_variable     = "MF_LOCALIZATION_SCREENSHOT_LOCALE"
 xcode_screenshot_taker_build_scheme = "Localization Screenshot Taker"
 xcode_screenshot_taker_test_case    = "Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Localization" # [Sep 2025] See: https://stackoverflow.com/a/37971495/10601702 || [Sep 2025] We've added testTakeScreenshots_Documentation() testcase now so we need to specify the test case
 xcloc_screenshots_subdir = "Notes/Screenshots/"    # [Jan 1 2025] Simplify from "Notes/Screenshots/SomeTest/SomeDevice" -> "Notes/Screenshots/". The other subfolders were aping structure that I saw Xcode output IIRC, but simpler is better especially now that this is user-facing (See app_screenshots_link_name) [Jan 2026] || Old notes:  # See `XCLoc Screenshot Structure.md`. If we put spaces here they become %20 for some reason?
@@ -450,33 +448,20 @@ def main():
                         # Create did_build flag
                         if not hasattr(f, 'did_build_test_runner'): f.did_build_test_runner = False
 
-                        # Build xcuitest runner command
+                        # Run the xcode test-runner
                         #   Notes:
-                        #   `test-without-building` Speeds things up a lot, but if we don't build at least once the user experience can be confusing for me, since we always need to remember to build the runner in Xcode first before running this script. 
+                        #   `test_without_building` Speeds things up a lot, but if we don't build at least once the user experience can be confusing for me, since we always need to remember to build the runner in Xcode first before running this script. 
                         #       Maybe it would be ideal to always build the runner but not always build the MMF app? But I don't know how we could separate the two.
-                        action = 'test' if not f.did_build_test_runner else 'test-without-building'
-                        test_runner_invocation = " ".join([
-                            f"xcrun xcodebuild {action}",
-                            f"-scheme '{xcode_screenshot_taker_build_scheme}'",
-                            f"'-only-testing:{xcode_screenshot_taker_test_case}'",
-                        ])
-                                
-                        # Set env vars for the testrunner
-                        #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
-                        envvars = {
-                            'TEST_RUNNER_' + xcode_screenshot_taker_output_dir_variable : xcloc_screenshots_dir,
-                            'TEST_RUNNER_' + xcode_screenshot_taker_locale_variable     : screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
-                        }
-                        os.environ.update(envvars)
-
-                        # Log
-                        print(f"Invoking localization screenshot test-runner with command:\n    {test_runner_invocation}\nenvvars: {envvars}")
-
-                        # Run the screenshot-taker test runner
-                        _, returncode, stderr = mfutils.runclt(test_runner_invocation, cwd=repo_path, print_live_output=True, manually_handle_errors=True) 
-                        if returncode or stderr:
-                            os.system('afplay /System/Library/Sounds/Sosumi.aiff') # beep_on_failure in case we step away from the computer and the test-runner randomly fails. (Which just happened – I think for the first time) [Jan 2025]
-                            assert not returncode, f"Test-runner failed with returncode {returncode} and stderr:\n{stderr}" # (Even on success Xcode will fill stderr, not sure exactly the logic [Sep 2026])
+                        mfutils.run_xcode_test_runner(
+                            xcode_screenshot_taker_build_scheme, 
+                            xcode_screenshot_taker_test_case, 
+                            cwd = repo_path,
+                            test_without_building = f.did_build_test_runner, 
+                            envvars={
+                                "MFENV_SCREENSHOT_OUTPUT_DIR" : xcloc_screenshots_dir,
+                                "MFENV_SCREENSHOT_LOCALES"    : screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
+                            }
+                        )
 
                         # Log
                         print(f"Finished running test-runner")

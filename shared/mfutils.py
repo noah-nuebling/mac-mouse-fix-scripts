@@ -153,6 +153,28 @@ def find_xcode_project_build_schemes(repo_path, project_path):
     # Return
     return result
 
+def run_xcode_test_runner(build_scheme: str, test_case: str, envvars: dict, cwd: str, test_without_building=False):
+    
+    action = 'test-without-building' if test_without_building else 'test'
+    test_runner_invocation = " ".join([
+        f"xcrun xcodebuild {action}",
+        f"-scheme '{build_scheme}'",
+        f"'-only-testing:{test_case}'",
+    ])
+        
+    # Set env vars for the testrunner
+    #   The `TEST_RUNNER_` prefix makes xcodebuild pass the env variable through to the test-runner.
+    envvars = { 'TEST_RUNNER_' + key: envvars[key] for key in envvars }
+    os.environ.update(envvars)
+
+    # Log
+    print(f"Invoking Xcode test-runner with command:\n    {test_runner_invocation}\nenvvars: {envvars}")
+
+    # Run the screenshot-taker test runner
+    _, returncode, stderr = runclt(test_runner_invocation, cwd=cwd, print_live_output=True, manually_handle_errors=True) 
+    if returncode or stderr:
+        os.system('afplay /System/Library/Sounds/Sosumi.aiff') # beep_on_failure in case we step away from the computer and the test-runner randomly fails. (Which just happened – I think for the first time) [Jan 2025]
+        assert not returncode, f"Test-runner failed with returncode {returncode} and stderr:\n{stderr}" # (Even on success Xcode will fill stderr, not sure exactly the logic [Sep 2026])
 
 #
 # MARK: Maths

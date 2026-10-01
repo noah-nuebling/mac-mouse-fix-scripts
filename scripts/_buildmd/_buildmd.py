@@ -84,6 +84,8 @@ def main():
     parser.add_argument("--document"),                                  # We used to get the document through .getenv, too but that can be confusing I think
     parser.add_argument("--no-api", action='store_true')                # no-api option is not as useful anymore now since we have caching to make things fast when testing.
     parser.add_argument("--no-cache-expiration", action='store_true')   # For testing it's annoying to have the cache expire every day [Jul 2025]
+    parser.add_argument("--take-screenshots-for-locales", help="Comma-separated list of locales like de,es,ja. Pass 'all' to take screenshots for all locales. Omit to not take any screenshots. Simply invokes `testTakeScreenshots_Documentation` Xcode test runner [Sep 2026].")
+
     args = parser.parse_args()
 
     document_key_search_pattern   = args.document
@@ -91,6 +93,18 @@ def main():
     no_api              = args.no_api
     no_cache_expiration = args.no_cache_expiration
     
+    # Do subthing - take screenshots for the guides
+    if args.take_screenshots_for_locales:
+        mfutils.run_xcode_test_runner(
+            build_scheme="Localization Screenshot Taker", 
+            test_case="Localization Screenshot Taker/LocalizationScreenshotClass/testTakeScreenshots_Documentation", # -only-testing needs the full Target/Class/method path
+            cwd=None,
+            test_without_building=False, 
+            envvars={
+                "MFENV_SCREENSHOT_LOCALES": '' if args.take_screenshots_for_locales == 'all' else args.take_screenshots_for_locales
+            }
+        )
+
     # Validate --api-key
     if gumroad_api_key == None or len(gumroad_api_key) == 0:
         print("No gumroad api key provided.")
