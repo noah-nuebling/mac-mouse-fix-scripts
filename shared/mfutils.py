@@ -33,6 +33,28 @@ from typing import List, Union, Any
 # General utility functions that don't belong together
 #-
 
+def get_temp_dir_persistent(repo_path):
+    """
+    Temp directory that persists between runs, and is shared by different scripts. [Sep 2026]
+
+    Currently a subfolder of the mac-mouse-fix or mac-mouse-fix-website folder, checked into .gitignore. [Sep 2026]
+    Useful for slow stuff like Xcode derived data and localization screenshots. [Sep 2026]
+    Formerly: [Sep 2026]
+        tempfile.gettempdir() + '/mmf-uploadstrings-persistent'  (in uploadstrings.py)
+        tempfile.gettempdir() + '/mmf-importstrings-persistent'  (in importstrings.py)
+    """
+    
+    assert os.path.basename(repo_path) in ['mac-mouse-fix', 'mac-mouse-fix-website'], \
+        f"Called get_temp_dir_persistent() with unexpected repo_path '{repo_path}'. Expected to be called with '.../mac-mouse-fix/' or '.../mac-mouse-fix-website/'"
+
+    return './mmfscriptscache/'
+
+def mfkeypath2(dict, keypath): # The original mfutils.mfkeypath is too complicated [Sep 2026]
+    for key in keypath.split('/'):
+        if key not in dict: return None
+        dict = dict[key]
+    return dict
+
 MFKEYPATH_NONE = object()
 def mfkeypath(dict, kp, set_to=MFKEYPATH_NONE, default=MFKEYPATH_NONE, create_intermediates=False) -> Any:
     """
@@ -153,12 +175,13 @@ def find_xcode_project_build_schemes(repo_path, project_path):
     # Return
     return result
 
-def run_xcode_test_runner(build_scheme: str, test_case: str, envvars: dict, cwd: str, test_without_building=False):
+def run_xcode_test_runner(build_scheme: str, test_case: str, envvars: dict, cwd: str, derived_data_path: str, test_without_building=False):
     
     action = 'test-without-building' if test_without_building else 'test'
     test_runner_invocation = " ".join([
         f"xcrun xcodebuild {action}",
         f"-scheme '{build_scheme}'",
+        f"-derivedDataPath '{derived_data_path}'",
         f"'-only-testing:{test_case}'",
     ])
         
@@ -963,6 +986,31 @@ def write_xcstrings_file(xcstrings_path: str, xcstrings_obj: dict):
         xcstrings_path, 
         json.dumps(xcstrings_obj, indent=2, ensure_ascii=False, separators=(',', ' : '), sort_keys=False)
     )
+
+def calculate_xcstrings_fingerprint(xcstrings_objs, locale):
+    """
+    Hash that detects changes in any of the strings of a given locale among a list of .xcstrings files. [Sep 2026]
+    
+    Used to invalidate screenshot caches in _buildmd.py and uploadstrings.py [Sep 2026]
+    Improvement idea: If cache invalidates too frequently - Could make more granular (Currently we pass in all .xcstrings at both callsites) [Sep 2026]
+    """
+
+    import zlib
+
+    fingerprint = 0
+
+    def update_hash(key, val): # builtin hash() isn't stable across runs [Sep 2026]
+        nonlocal fingerprint
+        fingerprint ^= zlib.crc32(f"{key}\0{val}".encode("utf-8")) # Pass in key and value so that swapped keys don't go unnoticed or whatever says Claude I guess [Sep 2026]
+
+    for xcstrings_obj in xcstrings_objs:
+        for key in                          mfkeypath2(xcstrings_obj, "strings"):
+            update_hash(key,                mfkeypath2(xcstrings_obj, f"strings/{key}/localizations/{locale}/stringUnit/value"))
+            for subs in                     mfkeypath2(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions") or []:
+                for amount in               mfkeypath2(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/{subs}/variations/plural") or []:
+                    update_hash(key+amount, mfkeypath2(xcstrings_obj, f"strings/{key}/localizations/{locale}/substitutions/{subs}/variations/plural/{amount}/stringUnit/value"))
+
+    return fingerprint
 
 def convert_utf16_file_to_utf8(file_path):
     

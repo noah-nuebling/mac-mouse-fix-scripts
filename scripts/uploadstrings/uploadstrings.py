@@ -79,10 +79,10 @@ if 1:
     parser.add_argument('--dry-run',                      required=False, action='store_true', help="Ignore the API key and don't interact with GitHub. This arg is kind of redundant [Oct 2025]")
     parser.add_argument('--only-en-screenshots',          required=False, action='store_true', help="Only take/include English screenshots in the xcloc files.")
     parser.add_argument('--no-additional-en-screenshots', required=False, action='store_true', help="By default we take/include English screenshots in addition to translated screenshots in the xcloc files [Nov 2025]")
-    parser.add_argument('--recycle-screenshots',          required=False, action='store_true', help="Use localization screenshots taken during previous runs of the script. || Formerly --fresh-screenshots")
-    parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded xcloc files.")
+    parser.add_argument('--recycle-screenshots',          required=False, action='store_true', help="Use localization screenshots taken during previous runs of the script, if the strings haven't changed [Sep 2026] || Formerly --fresh-screenshots")
+    parser.add_argument('--skip-xcloc-file-creation',     required=False, action='store_true', help="Don't create and upload fresh xcloc files. Instead only create the Translation Guide using existing, already uploaded .xcloc files.")
     parser.add_argument('--skip-download-url-validation', required=False, action='store_true', help="Don't validate the translation file download urls (which it does for all locales - currently failing after adding new locales but not having created all the files, yet, hence adding this option [Sep 2026])")
-    parser.add_argument('--only-update-locale',           required=False,                      help="Only update the xcloc files for this particular locale. Omit this to update all locales. Some stuff, like ./run syncstrings will run for all locales either way. [Dec 2025]")
+    parser.add_argument('--only-update-locales',           required=False,                     help="Comma separated list of locales for which to update the xcloc files, like de,hi,ko. Omit this to update all locales. Some stuff, like ./run syncstrings will run for all locales either way. [Dec 2025]")
     args = parser.parse_args()
 
     # Process dry_run arg
@@ -125,11 +125,13 @@ def main():
         
         # Create persistent temp_dir
         #   This temp_dir is intended as a cache that will persist between launches of the script to speed things up.
-        temp_dir_persistent = tempfile.gettempdir() + '/mmf-uploadstrings-persistent'
+        temp_dir_persistent = mfutils.get_temp_dir_persistent(repo_path)
         if not os.path.isdir(temp_dir_persistent): os.mkdir(temp_dir_persistent)
 
     # Update strings
     #   `./run syncstrings` updates the Markdown strings. The Xcode-managed strings are sync automatically by `xcodebuild -exportLocalizations` down below (I believe) [Dec 2025]
+    #       Update: [Sep 2026] `xcodebuild -exportLocalizations` only runs after we load the xcstrings contents, and not on all codepaths [Sep 2026]
+    #           -> make sure to build in Xcode before running this script so all .xcstrings are synced (not `stale`)
     mfutils.runclt("./run syncstrings", print_live_output=True)
 
     # Analyze repos
@@ -141,13 +143,13 @@ def main():
             localization_progress: dict
             development_locale: str
             translation_locales: list[str]
-            translation_locales_unfiltered: list[str] # We filter the translation locales for the sake of `--only-update-locale`. But then when generating the translation_guide, we end up needing the unfiltered locales. (Cause we're regenerating it from scratch, not just updating part of it.) [Dec 2025]
+            translation_locales_unfiltered: list[str] # We filter the translation locales for the sake of `--only-update-locales`. But then when generating the translation_guide, we end up needing the unfiltered locales. (Cause we're regenerating it from scratch, not just updating part of it.) [Dec 2025]
 
         @dataclass
         class SpecificRepo:
             path: str
             xcloc_dir: str
-            xcstrings_paths: list[str]
+            xcstrings_map: dict[str, str] # Map from filepath -> xcstrings_obj
 
         all_repos:  AllRepos
         repo:       dict[str, SpecificRepo] # Map from repo_name -> RepoAnalysis
@@ -163,12 +165,12 @@ def main():
             'mac-mouse-fix': RepoAnalysis.SpecificRepo(
                 path='./',
                 xcloc_dir="",
-                xcstrings_paths=[]
+                xcstrings_map={}
             ),
             'mac-mouse-fix-website': RepoAnalysis.SpecificRepo(
                 path=website_repo,
                 xcloc_dir="",
-                xcstrings_paths=[]
+                xcstrings_map={}
             ),
         }
     )
@@ -231,23 +233,25 @@ def main():
                 
                 # Load the xcstrings
                 xcstrings_paths = mflocales.find_xcstrings_files(repo_path)
-                xcstrings = [json.loads(Path(p).read_text()) for p in xcstrings_paths]
+                xcstrings_map = { p : json.loads(Path(p).read_text()) for p in xcstrings_paths }
                 
                 # Store stuff
-                xcstrings_all_repos += xcstrings
-                repo_analysis.repo[repo_name].xcstrings_paths = xcstrings_paths
-                
+                xcstrings_all_repos += xcstrings_map.values()
+                repo_analysis.repo[repo_name].xcstrings_map = xcstrings_map # The values can be `stale` since we're only running xcodebuild below (and only in some codepaths) [Sep 2026]
+
                 # Log
                 print(f".xcstrings paths: { json.dumps(xcstrings_paths, ensure_ascii=False, indent=2) }\n")
         
-        # Apply args.only_update_locale
-        if args.only_update_locale:
+        # Apply args.only_update_locales
+        if args.only_update_locales:
             
-            assert args.only_update_locale in repo_analysis.all_repos.translation_locales, f"--only-update-locale is set to '{ args.only_update_locale }', but that locale is not found in the repo's translation locales: { repo_analysis.all_repos.translation_locales }"
+            args.only_update_locales = [locale for locale in args.only_update_locales.split(',')]
+            for locale in args.only_update_locales:
+                assert locale in repo_analysis.all_repos.translation_locales, f"--only-update-locales contains '{locale}', but that locale is not found in the repo's translation locales: { repo_analysis.all_repos.translation_locales }"
             
-            repo_analysis.all_repos.translation_locales = [args.only_update_locale] # Note that `repo_analysis.all_repos.translation_locales_unfiltered` stays the same [Dec 2025]
+            repo_analysis.all_repos.translation_locales = args.only_update_locales # Note that `repo_analysis.all_repos.translation_locales_unfiltered` stays the same [Dec 2025]
             
-            print(f"--only-update-locale is set to '{ args.only_update_locale }'. Ignoring all project locales except: { repo_analysis.all_repos.translation_locales + [repo_analysis.all_repos.development_locale] }")
+            print(f"--only-update-locales is set to '{ args.only_update_locales }'. Ignoring all project locales except: { repo_analysis.all_repos.translation_locales + [repo_analysis.all_repos.development_locale] }")
         
         # Get combined localization_progress
         print(f"Getting combined localization progress...")
@@ -330,7 +334,7 @@ def main():
     # Validate the .xcstrings files in the repo against the contents of the .xcloc files that xcodebuild exported [Dec 2025]
     for repo_name in repo_analysis.repo:
         
-        found_paths = repo_analysis.repo[repo_name].xcstrings_paths
+        found_paths = repo_analysis.repo[repo_name].xcstrings_map.keys()
         found_paths = [os.path.relpath(p, repo_analysis.repo[repo_name].path) for p in found_paths] # Make found_paths relative to repo_root so we can compare them to exported_paths [Oct 2025]
 
         exported_paths = []
@@ -360,7 +364,7 @@ def main():
     if 1:
 
         # Get cache dir
-        localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshot-cache/"
+        localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshots/"
         
         # Track caches that we've freshly created during this run of the script.
         #   This contains locale-specific subfolders of localization_screenshot_cache_dir [Dec 2025]
@@ -416,7 +420,6 @@ def main():
                     f: Any = fn
 
                     # Get screenshot_locale
-                    
                     screenshot_locale = locale
                     if 1:
 
@@ -427,20 +430,33 @@ def main():
                                 screenshot_locale = 'en'
                             if repo_analysis.all_repos.localization_progress[locale]['percentage'] == 0:
                                 screenshot_locale = 'en'
+                    
+                    # Decisions
+                    additionally_include_english_screenshots = (not args.no_additional_en_screenshots) and (not screenshot_locale == 'en')
 
-                    # Use cache
+                    # Prep cache stuff
                     cache_dir = localization_screenshot_cache_dir + '/' + screenshot_locale
-                    if 1:
-                        mfutils.runclt(['mkdir', '-p', cache_dir]) # -p creates any intermediate parent folders || Prevents os.listdir() from erroring I think [Dec 2025]
-                        use_cache = (
-                            os.listdir(cache_dir)
-                            and 
-                            (args.recycle_screenshots or (cache_dir in fresh_cache_dirs)) # Use screenshots from previous runs of the script if args.recycle_screenshots is set. But even if it's not set, we still use caches that were 'freshly' created during this run of the script – That's useful when screenshots are reused between different languages (E.g. due to args.only_en_screenshots) [Dec 2025]
-                        )
-                        if use_cache:
-                            shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
-                            print(f"Copied cached screenshots from {cache_dir} to {xcloc_screenshots_dir} (Instead of running another xcuitest to take the screenshots.)\n")
-                            return
+                    fingerprint_path = cache_dir + '.fingerprint.txt' # Store fingerprint next to cache_dir so it doesn't get copied into the .xcloc bundles [Sep 2026]
+                    fingerprint = mfutils.calculate_xcstrings_fingerprint(repo_analysis.repo[repo_name].xcstrings_map.values(), screenshot_locale) # Note: Can be `stale`. See comments above containing `stale` [Sep 2026]
+                    if additionally_include_english_screenshots:
+                        fingerprint ^= mfutils.calculate_xcstrings_fingerprint(repo_analysis.repo[repo_name].xcstrings_map.values(), 'en')
+                    
+                    # Decide whether to use cache
+                    mfutils.runclt(['mkdir', '-p', cache_dir]) # -p creates any intermediate parent folders || Prevents os.listdir() from erroring I think [Dec 2025]
+                    use_cache = False
+                    if (cache_dir in fresh_cache_dirs): use_cache = True # Even if args.recycle_screenshots is not set, we still use caches that were 'freshly' created during this run of the script – That's useful when screenshots are reused between different languages (English screenshots) [Sep 2026]
+                    else:
+                        if os.listdir(cache_dir) and args.recycle_screenshots: use_cache = True # Recycle available screenshots if the user set args.recycle_screenshots [Sep 2026]
+                        if use_cache:                                                           # ... but never recycle outdated screenshots!  [Sep 2026]
+                            stored_fingerprint = int(Path(fingerprint_path).read_text(), 10) if Path(fingerprint_path).exists() else 0
+                            if stored_fingerprint != fingerprint:
+                                use_cache = False
+                    
+                    # Use cache
+                    if use_cache:
+                        shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
+                        print(f"Copied cached screenshots from {cache_dir} to {xcloc_screenshots_dir} (Instead of running another xcuitest to take the screenshots.)\n")
+                        return
                     
                     # Take fresh_screenshots
                     if 1:
@@ -456,6 +472,7 @@ def main():
                             xcode_screenshot_taker_build_scheme, 
                             xcode_screenshot_taker_test_case, 
                             cwd = repo_path,
+                            derived_data_path=mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name='mac-mouse-fix'),
                             test_without_building = f.did_build_test_runner, 
                             envvars={
                                 "MFENV_SCREENSHOT_OUTPUT_DIR" : xcloc_screenshots_dir,
@@ -466,7 +483,8 @@ def main():
                         # Log
                         print(f"Finished running test-runner")
 
-                        if not args.no_additional_en_screenshots and not locale == 'en':
+                        # Copy over additional english screenshots
+                        if additionally_include_english_screenshots:
 
                             # Helper fn
                             def append_locale_suffix_to_screenshot_path(p, locale): # E.g. `Cool Screenshot.jpg` -> `Cool Screenshot (2, en).jpg`
@@ -528,6 +546,9 @@ def main():
                         # Fill cache
                         shutil.rmtree(cache_dir, ignore_errors=True) # Delete all existing cached files for the screenshot_locale || Might make things easier to debug? [Dec 2025]
                         shutil.copytree(src=xcloc_screenshots_dir, dst=cache_dir, dirs_exist_ok=True)
+                        Path(fingerprint_path).write_text(str(fingerprint))
+
+                        # Note cache
                         fresh_cache_dirs.append(cache_dir)
                         
                         # Update did_build flag
@@ -637,7 +658,7 @@ def main():
     
 
     # Upload the xcloc files
-    upload_xcloc_files(zip_files, delete_all_existing = (not args.only_update_locale))
+    upload_xcloc_files(zip_files, delete_all_existing = (not args.only_update_locales))
     
     # Get xcloc download urls
     download_urls = xcloc_download_urls(repo_analysis.all_repos.translation_locales_unfiltered, validate=(not args.dry_run and not args.skip_download_url_validation))

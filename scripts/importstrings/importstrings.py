@@ -12,6 +12,7 @@
 
 import mfutils
 import mflocales
+from mfutils import mfkeypath2
 
 import argparse
 import tempfile
@@ -76,18 +77,6 @@ def mfxml_print(el):
         chchs = [chch for chch in child]
         print(f"tag: {mfxml_tag(child)}, children: {len(chchs)}, attrib: {child.attrib}, text: {child.text}")
 
-#
-# dict helpers
-#
-
-def mfkeypath(dict, keypath: str):
-    # Returns None if the keypath doesn't exist
-    result = dict
-    for key in keypath.split('/'):
-        if key not in result: return None
-        result = result[key]
-    return result
-
 def main(): 
 
     # Parse repo
@@ -106,7 +95,7 @@ def main():
 
     if not args.skip_import:
         # Get temp dir
-        temp_dir_persistent = tempfile.gettempdir() + '/mmf-importstrings-persistent'
+        temp_dir_persistent = mfutils.get_temp_dir_persistent(repo_path)
         if not os.path.isdir(temp_dir_persistent): os.mkdir(temp_dir_persistent)
 
         # Import using Xcode
@@ -114,7 +103,7 @@ def main():
             ' '.join([""
                 ,f"xcrun xcodebuild -importLocalizations" # TODO: Consider setting the build-directory to a temp dir like in `uploadstrings.py`. I think that prevents nuking the build-cache. [Dec 2025]
                 ,f"-scheme '{mflocales.xcodebuild_any_build_scheme(repo_path)}'"
-                ,f"-derivedDataPath '{mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name)}'" # Using separate derivedData should speed up workflow. Same reason as for our `xcodebuild -exportLocalizations` usage inside uploadstrings.py [Dec 2025] || Idea: Could maybe use same temp dir as uploadstrings.py to speed things up in some cases.
+                ,f"-derivedDataPath '{mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name)}'" # Using separate derivedData from normal Xcode builds for xcodebuild should speed up workflow. Same reason as for our `xcodebuild -exportLocalizations` usage inside uploadstrings.py [Dec 2025] || Through get_temp_dir_persistent, we're sharing derived data with uploadstrings.py, which should speed things up further. [Sep 2026]
                 ,f"-localizationPath '{args.xcloc_path}'"
             ]),
             print_live_output=True,
@@ -247,11 +236,11 @@ def main():
                 
                 # Get relevant string units in xcstrings file
                 stringunit_en = None
-                if sub_keypath: stringunit_en = mfkeypath(xcstrings_entry, f"localizations/en/{sub_keypath}/stringUnit")
-                else:           stringunit_en = mfkeypath(xcstrings_entry, "localizations/en/stringUnit")
+                if sub_keypath: stringunit_en = mfkeypath2(xcstrings_entry, f"localizations/en/{sub_keypath}/stringUnit")
+                else:           stringunit_en = mfkeypath2(xcstrings_entry, "localizations/en/stringUnit")
                 stringunit_translation = None
-                if sub_keypath: stringunit_translation = mfkeypath(xcstrings_entry, f"localizations/{trans_unit.targetlocale}/{sub_keypath}/stringUnit")
-                else:           stringunit_translation = mfkeypath(xcstrings_entry, f"localizations/{trans_unit.targetlocale}/stringUnit")
+                if sub_keypath: stringunit_translation = mfkeypath2(xcstrings_entry, f"localizations/{trans_unit.targetlocale}/{sub_keypath}/stringUnit")
+                else:           stringunit_translation = mfkeypath2(xcstrings_entry, f"localizations/{trans_unit.targetlocale}/stringUnit")
 
                 
                 # Check comment mismatch
@@ -274,17 +263,17 @@ def main():
         
         # Update the state of plural parents to match their children (mf-xcloc-editor only shows the children's state) [Sep 2026]
         for filepath, xcstrings_obj in xcstrings_objs.items():
-            for key in mfkeypath(xcstrings_obj, 'strings'):
-                for locale in mfkeypath(xcstrings_obj, f'strings/{key}/localizations') or []:
+            for key in mfkeypath2(xcstrings_obj, 'strings'):
+                for locale in mfkeypath2(xcstrings_obj, f'strings/{key}/localizations') or []:
                     alltranslated = True
                     isplural = False
-                    for amount in mfkeypath(xcstrings_obj, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural') or []: # Assumes all pluralizable strings use `@pluralizable` as the substitutible which is the case for MMF [Sep 2026]
-                        childstate = mfkeypath(xcstrings_obj, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{amount}/stringUnit/state')
+                    for amount in mfkeypath2(xcstrings_obj, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural') or []: # Assumes all pluralizable strings use `@pluralizable` as the substitutible which is the case for MMF [Sep 2026]
+                        childstate = mfkeypath2(xcstrings_obj, f'strings/{key}/localizations/{locale}/substitutions/pluralizable/variations/plural/{amount}/stringUnit/state')
                         if childstate: isplural = True
                         if childstate != 'translated':
                             alltranslated = False
                             break
-                    if isplural: mfkeypath(xcstrings_obj, f'strings/{key}/localizations/{locale}/stringUnit')['state'] = 'translated' if alltranslated else 'needs_review'
+                    if isplural: mfkeypath2(xcstrings_obj, f'strings/{key}/localizations/{locale}/stringUnit')['state'] = 'translated' if alltranslated else 'needs_review'
         print(f"(Made plural parent state match children.)")
         print("")
 
