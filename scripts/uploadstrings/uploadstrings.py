@@ -363,6 +363,9 @@ def main():
     # Take localization screenshots (By running our XCUI test) and copy the screenshots into the xcloc files
     if 1:
 
+        # Cache flag
+        did_build_test_runner = False
+
         # Get cache dir
         localization_screenshot_cache_dir = temp_dir_persistent + "/localization-screenshots/"
         
@@ -415,9 +418,7 @@ def main():
                 xcloc_screenshots_dir = get_xcloc_screenshots_dir(locale, create=True)
                 
                 # Write localization screenshots
-                def fn():
-
-                    f: Any = fn
+                if 1:
 
                     # Get screenshot_locale
                     screenshot_locale = locale
@@ -456,13 +457,10 @@ def main():
                     if use_cache:
                         shutil.copytree(src=cache_dir, dst=xcloc_screenshots_dir, dirs_exist_ok=True) # Copy cached screenshots over to output dir
                         print(f"Copied cached screenshots from {cache_dir} to {xcloc_screenshots_dir} (Instead of running another xcuitest to take the screenshots.)\n")
-                        return
+                        
                     
                     # Take fresh_screenshots
-                    if 1:
-                        
-                        # Create did_build flag
-                        if not hasattr(f, 'did_build_test_runner'): f.did_build_test_runner = False
+                    else:
 
                         # Run the xcode test-runner
                         #   Notes:
@@ -473,12 +471,13 @@ def main():
                             xcode_screenshot_taker_test_case, 
                             cwd = repo_path,
                             derived_data_path=mflocales.xcodebuild_derived_data_path(temp_dir_persistent, repo_name='mac-mouse-fix'),
-                            test_without_building = f.did_build_test_runner, 
+                            test_without_building = did_build_test_runner, 
                             envvars={
                                 "MFENV_SCREENSHOT_OUTPUT_DIR" : xcloc_screenshots_dir,
                                 "MFENV_SCREENSHOT_LOCALES"    : screenshot_locale # xcodebuild also has -testLanguage arg but not sure how that works [Oct 2025]
                             }
                         )
+                        did_build_test_runner = True
 
                         # Log
                         print(f"Finished running test-runner")
@@ -550,10 +549,6 @@ def main():
 
                         # Note cache
                         fresh_cache_dirs.append(cache_dir)
-                        
-                        # Update did_build flag
-                        f.did_build_test_runner = True
-                fn()
         
     # Rename .xcloc files and put them in subfolders
     #   With one subfolder per locale
