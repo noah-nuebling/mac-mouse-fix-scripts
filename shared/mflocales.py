@@ -134,8 +134,9 @@ language_name_override_map = {
 #                   applies to very large numbers (like 1,000,000) with specific decimal patterns. 
 #                   This probably rarely matters for localization.
 #           - he: Xcode adds 'many'. CLDR doesn't list 'many' for Hebrew cardinals. We're not sure why.
-
-#   Used by mfstrings.py to determine which plural variants to show for each locale. [Jan 2026]
+#
+#   Used (only) by mfstrings.py to determine which plural variants to show for each locale. [Oct 2026]
+#       
 #
 #   Notes:
 #   - 'other' is always required and serves as the default/fallback
