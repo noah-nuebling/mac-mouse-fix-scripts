@@ -568,7 +568,7 @@ def insert_capture_guide_screenshots(template, destination_path: str, preferred_
 
     # Validate image paths
     for src in [src0, src1, src2]:
-        assert Path(destination_path + src).exists, f"Inserting image with path '{src}' into '{destination_path}', but the image doesn't exist."
+        assert Path(destination_path + src).exists(), f"Inserting image with path '{src}' into '{destination_path}', but the image doesn't exist."
 
     # Insert into template
     template = template.replace('{screenshot_0}', f'<img height=200 src="{src0}"')
