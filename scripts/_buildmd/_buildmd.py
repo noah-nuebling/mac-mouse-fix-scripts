@@ -63,6 +63,19 @@ nbsp = '&nbsp;'  # Non-breaking space. &nbsp; doesn't seem to work on GitHub. (E
 
 repo_name = 'mac-mouse-fix'
 
+
+#
+# Helper
+#
+def _negotiate_screenshot_locale(preferred_locale, development_locale, translation_progress):
+    # Negotiate locale
+    #   - Keep in-sync with `testTakeScreenshots_Documentation()`, which generates these screenshots  [Dec 2025]
+    #       (There we just use `-[NSBundle localizations]`)
+    #   - Also see usage of `babel.negotiate_locale()` [Dec 2025]
+    return (preferred_locale  if 
+            ((preferred_locale == development_locale) or (translation_progress[preferred_locale]['percentage'] > 0)) else 
+                development_locale)
+
 #
 # Main
 #
@@ -94,14 +107,16 @@ def main():
     gumroad_api_key     = args.api_key
     no_api              = args.no_api
     no_cache_expiration = args.no_cache_expiration
-    
+
     # Do subthing - take screenshots for the guides
+    #   Note this will take screenshots even for translated docs which will end linking to `development_locale` screenshots anyways (because the doc has zero translation progress) [Oct 2026] See `_negotiate_screenshot_locale` usage below. 
+    #       I think this is the right factoring, since the `_negotiate_screenshot_locale` decision (below) is made per-document, but the `testTakeScreenshots_Documentation` generates screenshots for *all* docs. (Theoretically, currently it only takes screenshots for `Support/Guides/CapturedButtonsMMF3.md` [Oct 2026]
     if args.take_screenshots_for_locales:
         
         temp_dir_persistent = mfutils.get_temp_dir_persistent(repo_path=repo_path)
 
         screenshot_locales = args.take_screenshots_for_locales.split(',')
-        if screenshot_locales == ['all']:
+        if screenshot_locales == ['all']: 
             development_locale, translation_locales = mflocales.find_xcode_project_locales(mflocales.path_to_xcodeproj['mac-mouse-fix'])
             screenshot_locales = [development_locale] + translation_locales
 
@@ -189,7 +204,7 @@ def main():
     if len(document_keys) == 0:
         print(f"\nError: Document search pattern '{document_key_search_pattern}' didn't match any of the known document keys: {document_keys_helpstr}")
         sys.exit(1)
-    
+
     # Log
     print(f"Will generate documents with {len(document_keys)} keys:\n{json.dumps(document_keys, indent=4)}\n\n")
 
@@ -340,7 +355,8 @@ def main():
             elif document_key == "Acknowledgements.md":
                 template = insert_acknowledgements(template, locale, gumroad_api_key, gumroad_sales_cache_file, gumroad_sales_cache_shelf_life, no_api)
             elif document_key == "Support/Guides/CapturedButtonsMMF3.md": 
-                template = insert_capture_guide_screenshots(template, destination_path, locale, development_locale, translation_progress)
+                screenshot_locale = _negotiate_screenshot_locale(preferred_locale = locale, development_locale = development_locale, translation_progress = translation_progress)
+                template = insert_capture_guide_screenshots(template, destination_path, screenshot_locale)
             else:
                 print(f"Inserting into not-explicitly-handled document template with key '{document_key}'")
             
@@ -591,20 +607,7 @@ def insert_acknowledgements(template, locale_str, gumroad_api_key, cache_file, c
     # Return
     return template
 
-def insert_capture_guide_screenshots(template, destination_path: str, preferred_locale: str, source_locale: str, translation_progress: dict):
-
-    # Negotiate locale
-    #   - Keep in-sync with `testTakeScreenshots_Documentation()`, which generates these screenshots  [Dec 2025]
-    #       (There we just use `-[NSBundle localizations]`)
-    #   - Also see usage of `babel.negotiate_locale()` [Dec 2025]
-    locale = (
-        preferred_locale 
-        if (
-            (preferred_locale == source_locale) or
-            (translation_progress[preferred_locale]['percentage'] > 0)
-        ) 
-        else source_locale
-    )
+def insert_capture_guide_screenshots(template, destination_path: str, locale):
 
     # Construct image paths
     repo_root = mflocales.mainmdp_path_to_repo_root(destination_path)
