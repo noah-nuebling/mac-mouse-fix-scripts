@@ -109,7 +109,7 @@ def main():
     no_cache_expiration = args.no_cache_expiration
 
     # Do subthing - take screenshots for the guides
-    #   Note this will take screenshots even for translated docs which will end linking to `development_locale` screenshots anyways (because the doc has zero translation progress) [Oct 2026] See `_negotiate_screenshot_locale` usage below. 
+    #   Note this will take screenshots even for untranslated docs which will end linking to `development_locale` screenshots anyways (because the doc has zero translation progress) [Oct 2026] See `_negotiate_screenshot_locale` usage below. 
     #       I think this is the right factoring, since the `_negotiate_screenshot_locale` decision (below) is made per-document, but the `testTakeScreenshots_Documentation` generates screenshots for *all* docs. (Theoretically, currently it only takes screenshots for `Support/Guides/CapturedButtonsMMF3.md` [Oct 2026]
     if args.take_screenshots_for_locales:
         
@@ -618,7 +618,7 @@ def insert_capture_guide_screenshots(template, destination_path: str, locale):
     # Validate image paths
     for src in [src0, src1, src2]:
         abspath = (Path(destination_path) / '..' / src).resolve() # Markdown links are relative to enclosing folder, not the file itself, so we insert extra '..' [Oct 2026]
-        assert abspath.exists(), f"Inserting image with path '{src}' into '{destination_path}', but the image doesn't exist at abspath '{abspath}'"
+        assert abspath.exists(), f"Inserting image with path '{src}' into '{destination_path}', but the image doesn't exist at abspath '{abspath}'. (Run again with `[--recycle-screenshots] --take-screenshots-for-locales ...` [Oct 2026])"
 
     # Insert into template
     template = template.replace('{screenshot_0}', f'<img height=200 src="{src0}">')
